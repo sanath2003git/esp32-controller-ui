@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Robot Control</title>
+
+
+  <style>
+
+    /* ========================================
+       RESET
+    ======================================== */
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+
+    /* ========================================
+       BODY
+    ======================================== */
+
+    body {
+
+      min-height: 100vh;
+
+      font-family:
+        Arial,
+        Helvetica,
+        sans-serif;
+
+      background:
+        linear-gradient(
+          135deg,
+          #0f172a,
+          #111827
+        );
+
+      color: #f8fafc;
+
+      padding: 30px;
+    }
+
+
+    /* ========================================
+       MAIN CONTAINER
+    ======================================== */
+
+    .container {
+
+      width: 100%;
+
+      max-width: 900px;
+
+      margin: 0 auto;
+    }
+
+
+    /* ========================================
+       HEADER
+    ======================================== */
+
+    .header {
+
+      display: flex;
+
+      justify-content: space-between;
+
+      align-items: center;
+
+      margin-bottom: 30px;
+
+      gap: 20px;
+    }
+
+
+    .brand {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 15px;
+    }
+
+
+    .robot-icon {
+
+      width: 55px;
+
+      height: 55px;
+
+      display: flex;
+
+      align-items: center;
+
+      justify-content: center;
+
+      font-size: 28px;
+
+      background: #1e293b;
+
+      border: 1px solid #334155;
+
+      border-radius: 14px;
+    }
+
+
+    .brand h1 {
+
+      font-size: 26px;
+
+      margin-bottom: 5px;
+    }
+
+
+    .brand p {
+
+      color: #94a3b8;
+
+      font-size: 14px;
+    }
+
+
+    /* ========================================
+       CONNECTION INDICATOR
+    ======================================== */
+
+    .connection {
+
+      display: flex;
+
+      align-items: center;
+
+      gap: 8px;
+
+      padding: 10px 15px;
+
+      background: #1e293b;
+
+      border: 1px solid #334155;
+
+      border-radius: 30px;
+
+      font-size: 14px;
+    }
+
+
+    .connection-dot {
+
+      width: 10px;
+
+      height: 10px;
+
+      border-radius: 50%;
+
+      background: #64748b;
+    }
+
+
+    .connection-dot.connected {
+
+      background: #22c55e;
+
+      box-shadow:
+        0 0 10px
+        rgba(34, 197, 94, 0.7);
+    }
+
+
+    /* ========================================
+       GRID
+    ======================================== */
+
+    .grid {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(2, 1fr);
+
+      gap: 20px;
+    }
+
+
+    /* ========================================
+       CARD
+    ======================================== */
+
+    .card {
+
+      background:
+        rgba(
+          30,
+          41,
+          59,
+          0.85
+        );
+
+      border: 1px solid #334155;
+
+      border-radius: 18px;
+
+      padding: 24px;
+
+      box-shadow:
+        0 10px 30px
+        rgba(0, 0, 0, 0.25);
+    }
+
+
+    .card.full {
+
+      grid-column:
+        1 / -1;
+    }
+
+
+    .card-title {
+
+      font-size: 18px;
+
+      font-weight: 600;
+
+      margin-bottom: 6px;
+    }
+
+
+    .card-description {
+
+      color: #94a3b8;
+
+      font-size: 13px;
+
+      margin-bottom: 20px;
+    }
+
+
+    /* ========================================
+       CONNECT BUTTON
+    ======================================== */
+
+    .connect-button {
+
+      width: 100%;
+
+      border: none;
+
+      padding: 14px 20px;
+
+      border-radius: 10px;
+
+      background: #2563eb;
+
+      color: white;
+
+      font-size: 15px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition:
+        transform 0.15s,
+        background 0.15s;
+    }
+
+
+    .connect-button:hover {
+
+      background: #1d4ed8;
+
+      transform:
+        translateY(-1px);
+    }
+
+
+    .connect-button:active {
+
+      transform:
+        translateY(0);
+    }
+
+
+    /* ========================================
+       STATUS
+    ======================================== */
+
+    .status-box {
+
+      margin-top: 15px;
+
+      padding: 13px;
+
+      border-radius: 10px;
+
+      background: #0f172a;
+
+      border: 1px solid #334155;
+
+      color: #cbd5e1;
+
+      font-size: 14px;
+    }
+
+
+    /* ========================================
+       RGB BUTTONS
+    ======================================== */
+
+    .rgb-grid {
+
+      display: grid;
+
+      grid-template-columns:
+        repeat(2, 1fr);
+
+      gap: 12px;
+    }
+
+
+    .rgb-button {
+
+      border: none;
+
+      padding: 16px;
+
+      border-radius: 12px;
+
+      color: white;
+
+      font-size: 14px;
+
+      font-weight: 600;
+
+      cursor: pointer;
+
+      transition:
+        transform 0.15s,
+        opacity 0.15s;
+    }
+
+
+    .rgb-button:hover {
+
+      transform:
+        translateY(-2px);
+
+      opacity: 0.9;
+    }
+
+
+    .rgb-button:active {
+
+      transform:
+        translateY(0);
+    }
+
+
+    .red {
+
+      background: #dc2626;
+    }
+
+
+    .green {
+
+      background: #16a34a;
+    }
+
+
+    .blue {
+
+      background: #2563eb;
+    }
+
+
+    .off {
+
+      background: #475569;
+    }
+
+
+    /* ========================================
+       RESPONSE
+    ======================================== */
+
+    .response {
+
+      min-height: 100px;
+
+      padding: 18px;
+
+      background: #020617;
+
+      border-radius: 12px;
+
+      border: 1px solid #334155;
+
+      font-family:
+        Consolas,
+        monospace;
+
+      color: #94a3b8;
+
+      font-size: 14px;
+
+      line-height: 1.7;
+    }
+
+
+    .response-label {
+
+      color: #64748b;
+
+      font-size: 12px;
+
+      margin-bottom: 8px;
+
+      text-transform:
+        uppercase;
+
+      letter-spacing: 1px;
+    }
+
+
+    /* ========================================
+       FOOTER
+    ======================================== */
+
+    .footer {
+
+      text-align: center;
+
+      color: #64748b;
+
+      font-size: 12px;
+
+      margin-top: 25px;
+    }
+
+
+    /* ========================================
+       RESPONSIVE
+    ======================================== */
+
+    @media (max-width: 700px) {
+
+      body {
+
+        padding: 20px;
+      }
+
+
+      .header {
+
+        flex-direction: column;
+
+        align-items: flex-start;
+      }
+
+
+      .grid {
+
+        grid-template-columns:
+          1fr;
+      }
+
+
+      .card.full {
+
+        grid-column:
+          auto;
+      }
+
+    }
+
+  </style>
+
+</head>
+
+
+<body>
+
+
+  <div class="container">
+
+
+    <!-- ======================================
+         HEADER
+    ======================================= -->
+
+    <header class="header">
+
+
+      <div class="brand">
+
+
+        <div class="robot-icon">
+
+          🤖
+
+        </div>
+
+
+        <div>
+
+          <h1>
+            Robot Control
+          </h1>
+
+          <p>
+            ESP32-S3 BLE Controller
+          </p>
+
+        </div>
+
+
+      </div>
+
+
+      <div class="connection">
+
+
+        <span
+          id="connectionDot"
+          class="connection-dot"
+        ></span>
+
+
+        <span id="connectionText">
+
+          Disconnected
+
+        </span>
+
+
+      </div>
+
+
+    </header>
+
+
+    <!-- ======================================
+         MAIN
+    ======================================= -->
+
+    <main class="grid">
+
+
+      <!-- ====================================
+           CONNECTION CARD
+      ===================================== -->
+
+      <section class="card">
+
+
+        <h2 class="card-title">
+
+          BLE Connection
+
+        </h2>
+
+
+        <p class="card-description">
+
+          Connect to the ESP32-S3 robot controller.
+
+        </p>
+
+
+        <button
+          id="connect"
+          class="connect-button"
+        >
+
+          Connect to ESP32
+
+        </button>
+
+
+        <div
+          id="status"
+          class="status-box"
+        >
+
+          Not connected
+
+        </div>
+
+
+      </section>
+
+
+      <!-- ====================================
+           RGB CARD
+      ===================================== -->
+
+      <section class="card">
+
+
+        <h2 class="card-title">
+
+          RGB Light
+
+        </h2>
+
+
+        <p class="card-description">
+
+          Control the ESP32 RGB LED.
+
+        </p>
+
+
+        <div class="rgb-grid">
+
+
+          <button
+            id="red"
+            class="rgb-button red"
+          >
+
+            🔴 Red
+
+          </button>
+
+
+          <button
+            id="green"
+            class="rgb-button green"
+          >
+
+            🟢 Green
+
+          </button>
+
+
+          <button
+            id="blue"
+            class="rgb-button blue"
+          >
+
+            🔵 Blue
+
+          </button>
+
+
+          <button
+            id="off"
+            class="rgb-button off"
+          >
+
+            ⚫ Off
+
+          </button>
+
+
+        </div>
+
+
+      </section>
+
+
+      <!-- ====================================
+           RESPONSE CARD
+      ===================================== -->
+
+      <section class="card full">
+
+
+        <h2 class="card-title">
+
+          ESP32 Response
+
+        </h2>
+
+
+        <p class="card-description">
+
+          Latest response received from the ESP32.
+
+        </p>
+
+
+        <div class="response">
+
+
+          <div class="response-label">
+
+            BLE Notification
+
+          </div>
+
+
+          <div id="received">
+
+            No response received yet.
+
+          </div>
+
+
+        </div>
+
+
+      </section>
+
+
+    </main>
+
+
+    <!-- ======================================
+         FOOTER
+    ======================================= -->
+
+    <footer class="footer">
+
+      ESP32-S3 • Web Bluetooth • JSON
+
+    </footer>
+
+
+  </div>
+
+
+  <script>
+
+
+    // ========================================
+    // BLE UUIDs
+    // ========================================
+
+    const SERVICE_UUID =
+      "12345678-1234-1234-1234-123456789001";
+
+
+    const CHARACTERISTIC_UUID =
+      "12345678-1234-1234-1234-123456789002";
+
+
+    // ========================================
+    // VARIABLES
+    // ========================================
+
+    let device = null;
+
+    let characteristic = null;
+
+
+    // ========================================
+    // DOM ELEMENTS
+    // ========================================
+
+    const connectButton =
+      document.getElementById(
+        "connect"
+      );
+
+
+    const statusElement =
+      document.getElementById(
+        "status"
+      );
+
+
+    const receivedElement =
+      document.getElementById(
+        "received"
+      );
+
+
+    const connectionDot =
+      document.getElementById(
+        "connectionDot"
+      );
+
+
+    const connectionText =
+      document.getElementById(
+        "connectionText"
+      );
+
+
+    // ========================================
+    // CONNECT BUTTON
+    // ========================================
+
+    connectButton.addEventListener(
+      "click",
+      connectToESP32
+    );
+
+
+    // ========================================
+    // CONNECT TO ESP32
+    // ========================================
+
+    async function connectToESP32() {
+
+      try {
+
+
+        // -----------------------------
+        // Update status
+        // -----------------------------
+
+        statusElement.textContent =
+          "Searching for ESP32...";
+
+
+        connectionText.textContent =
+          "Searching";
+
+
+        // -----------------------------
+        // Find BLE device
+        // -----------------------------
+
+        device =
+          await navigator.bluetooth.requestDevice({
+
+            filters: [
+
+              {
+                services: [
+                  SERVICE_UUID
+                ]
+              }
+
+            ]
+
+          });
+
+
+        console.log(
+          "Device found:",
+          device.name
+        );
+
+
+        // -----------------------------
+        // Connect to GATT server
+        // -----------------------------
+
+        const server =
+          await device.gatt.connect();
+
+
+        console.log(
+          "Connected to GATT server"
+        );
+
+
+        // -----------------------------
+        // Get service
+        // -----------------------------
+
+        const service =
+          await server.getPrimaryService(
+            SERVICE_UUID
+          );
+
+
+        console.log(
+          "Service found:",
+          service
+        );
+
+
+        // -----------------------------
+        // Get characteristic
+        // -----------------------------
+
+        characteristic =
+          await service.getCharacteristic(
+            CHARACTERISTIC_UUID
+          );
+
+
+        console.log(
+          "Characteristic found:",
+          characteristic
+        );
+
+
+        // -----------------------------
+        // Enable notifications
+        // -----------------------------
+
+        await characteristic
+          .startNotifications();
+
+
+        console.log(
+          "Notifications started"
+        );
+
+
+        // -----------------------------
+        // Listen for ESP32 data
+        // -----------------------------
+
+        characteristic.addEventListener(
+          "characteristicvaluechanged",
+          handleNotification
+        );
+
+
+        // -----------------------------
+        // Update UI
+        // -----------------------------
+
+        statusElement.textContent =
+          "Connected to " +
+          device.name;
+
+
+        connectionText.textContent =
+          "Connected";
+
+
+        connectionDot.classList.add(
+          "connected"
+        );
+
+
+        connectButton.textContent =
+          "Connected";
+
+
+        console.log(
+          "BLE connection successful!"
+        );
+
+      }
+
+
+      catch (error) {
+
+
+        console.error(
+          "BLE error:",
+          error
+        );
+
+
+        statusElement.textContent =
+          "Error: " +
+          error.message;
+
+
+        connectionText.textContent =
+          "Disconnected";
+
+
+        connectionDot.classList.remove(
+          "connected"
+        );
+
+      }
+
+    }
+
+
+    // ========================================
+    // RECEIVE ESP32 JSON RESPONSE
+    // ========================================
+
+    function handleNotification(event) {
+
+
+      // -----------------------------
+      // Get BLE data
+      // -----------------------------
+
+      const value =
+        event.target.value;
+
+
+      // -----------------------------
+      // Convert bytes to text
+      // -----------------------------
+
+      const decoder =
+        new TextDecoder();
+
+
+      const message =
+        decoder.decode(value);
+
+
+      console.log(
+        "Received:",
+        message
+      );
+
+
+      // -----------------------------
+      // Parse JSON
+      // -----------------------------
+
+      try {
+
+
+        const data =
+          JSON.parse(message);
+
+
+        console.log(
+          "Parsed response:",
+          data
+        );
+
+
+        // -----------------------------
+        // Display response
+        // -----------------------------
+
+        receivedElement.innerHTML = `
+
+          <strong>
+            Status:
+          </strong>
+          ${data.status}
+
+          <br>
+
+          <strong>
+            Command:
+          </strong>
+          ${data.command}
+
+          <br>
+
+          <strong>
+            RGB:
+          </strong>
+          ${data.r},
+          ${data.g},
+          ${data.b}
+
+        `;
+
+      }
+
+
+      catch (error) {
+
+
+        console.error(
+          "Invalid JSON:",
+          error
+        );
+
+      }
+
+    }
+
+
+    // ========================================
+    // SEND COLOR COMMAND
+    // ========================================
+
+    async function sendColor(
+      r,
+      g,
+      b
+    ) {
+
+
+      // -----------------------------
+      // Check connection
+      // -----------------------------
+
+      if (!characteristic) {
+
+
+        alert(
+          "Connect to ESP32 first!"
+        );
+
+
+        return;
+
+      }
+
+
+      // -----------------------------
+      // Create JSON object
+      // -----------------------------
+
+      const command = {
+
+        command: "color",
+
+        r: r,
+
+        g: g,
+
+        b: b
+
+      };
+
+
+      // -----------------------------
+      // Convert object to JSON
+      // -----------------------------
+
+      const message =
+        JSON.stringify(
+          command
+        );
+
+
+      console.log(
+        "Sending:",
+        message
+      );
+
+
+      // -----------------------------
+      // Convert JSON to bytes
+      // -----------------------------
+
+      const encoder =
+        new TextEncoder();
+
+
+      const data =
+        encoder.encode(
+          message
+        );
+
+
+      // -----------------------------
+      // Send through BLE
+      // -----------------------------
+
+      try {
+
+
+        await characteristic.writeValue(
+          data
+        );
+
+
+        console.log(
+          "Command sent successfully"
+        );
+
+      }
+
+
+      catch (error) {
+
+
+        console.error(
+          "Failed to send command:",
+          error
+        );
+
+
+        statusElement.textContent =
+          "Failed to send command";
+
+      }
+
+    }
+
+
+    // ========================================
+    // RED
+    // ========================================
+
+    document
+      .getElementById("red")
+      .addEventListener(
+        "click",
+        () => {
+
+          sendColor(
+            255,
+            0,
+            0
+          );
+
+        }
+      );
+
+
+    // ========================================
+    // GREEN
+    // ========================================
+
+    document
+      .getElementById("green")
+      .addEventListener(
+        "click",
+        () => {
+
+          sendColor(
+            0,
+            255,
+            0
+          );
+
+        }
+      );
+
+
+    // ========================================
+    // BLUE
+    // ========================================
+
+    document
+      .getElementById("blue")
+      .addEventListener(
+        "click",
+        () => {
+
+          sendColor(
+            0,
+            0,
+            255
+          );
+
+        }
+      );
+
+
+    // ========================================
+    // OFF
+    // ========================================
+
+    document
+      .getElementById("off")
+      .addEventListener(
+        "click",
+        () => {
+
+          sendColor(
+            0,
+            0,
+            0
+          );
+
+        }
+      );
+
+
+    // ========================================
+    // HANDLE ESP32 DISCONNECT
+    // ========================================
+
+    if ("bluetooth" in navigator) {
+
+      console.log(
+        "Web Bluetooth is supported."
+      );
+
+    }
+
+
+  </script>
+
+
+</body>
+
+</html>
