@@ -1,7 +1,12 @@
 "use client";
 
-import { Bluetooth, LoaderCircle, Unplug } from "lucide-react";
-import { useBle } from "@/lib/ble/useBle";
+import {
+  Bluetooth,
+  LoaderCircle,
+  Unplug,
+} from "lucide-react";
+
+import { useBleContext } from "@/context/BleContext";
 
 export default function BleTest() {
   const {
@@ -11,7 +16,7 @@ export default function BleTest() {
     connect,
     send,
     disconnect,
-  } = useBle();
+  } = useBleContext();
 
   const isConnecting = status === "connecting";
   const isConnected = status === "connected";
@@ -20,22 +25,22 @@ export default function BleTest() {
     try {
       await connect();
     } catch (error) {
-      console.error(error);
+      console.error("[BLE TEST]", error);
     }
   }
 
   async function sendBlueCommand() {
-  try {
-    await send({
-      command: "color",
-      r: 0,
-      g: 0,
-      b: 255,
-    });
-  } catch (error) {
-    console.error("[BLE TEST]", error);
+    try {
+      await send({
+        command: "color",
+        r: 0,
+        g: 0,
+        b: 255,
+      });
+    } catch (error) {
+      console.error("[BLE TEST]", error);
+    }
   }
-}
 
   return (
     <section className="mt-8 rounded-2xl border border-border bg-surface p-5">
@@ -66,7 +71,8 @@ export default function BleTest() {
 
         <p className="mt-1 font-semibold">
           {isConnecting && "Searching for robot..."}
-          {isConnected && `Connected to ${deviceName}`}
+          {isConnected &&
+            `Connected to ${deviceName ?? "robot"}`}
           {status === "disconnected" && "Not connected"}
         </p>
       </div>
@@ -94,22 +100,26 @@ export default function BleTest() {
           )}
         </button>
       ) : (
-        <button
-          type="button"
-          onClick={disconnect}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-bold text-danger"
-        >
-          <Unplug size={18} />
-          Disconnect
-        </button>
+        <>
+          <button
+            type="button"
+            onClick={sendBlueCommand}
+            className="mt-4 flex w-full items-center justify-center rounded-xl bg-accent px-4 py-3 text-sm font-bold text-black"
+          >
+            Test Blue LED
+          </button>
+
+          <button
+            type="button"
+            onClick={disconnect}
+            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm font-bold text-danger"
+          >
+            <Unplug size={18} />
+            Disconnect
+          </button>
+        </>
       )}
-      <button
-  type="button"
-  onClick={sendBlueCommand}
-  className="mt-3 flex w-full items-center justify-center rounded-xl bg-accent px-4 py-3 text-sm font-bold text-black"
->
-  Test Blue LED
-</button>
+
       {lastMessage !== null && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/30">
