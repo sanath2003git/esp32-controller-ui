@@ -81,6 +81,12 @@ export class BleClient {
       this.handleNotification
     );
 
+    // Tell the ESP32 that the browser has finished
+    // setting up its notification listener.
+    await this.send({
+      type: "client_ready",
+    });
+
     this.device.addEventListener(
       "gattserverdisconnected",
       this.handleDisconnect

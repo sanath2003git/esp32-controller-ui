@@ -11,6 +11,11 @@ import {
 
 import { BleClient } from "@/lib/ble/client";
 
+import type {
+  BleMessage,
+  RobotDeviceInfo,
+} from "@/types/ble";
+
 type BleStatus =
   | "disconnected"
   | "connecting"
@@ -19,7 +24,8 @@ type BleStatus =
 type BleContextValue = {
   status: BleStatus;
   deviceName: string | null;
-  lastMessage: unknown;
+  deviceInfo: RobotDeviceInfo | null;
+  lastMessage: BleMessage | null;
   connect: () => Promise<void>;
   send: (message: unknown) => Promise<void>;
   disconnect: () => void;
@@ -41,7 +47,10 @@ export function BleProvider({
     useState<string | null>(null);
 
   const [lastMessage, setLastMessage] =
-    useState<unknown>(null);
+  useState<BleMessage | null>(null);
+
+   const [deviceInfo, setDeviceInfo] =
+  useState<RobotDeviceInfo | null>(null);
 
   const connect = useCallback(async () => {
     setStatus("connecting");
@@ -51,9 +60,26 @@ export function BleProvider({
 
       clientRef.current = client;
 
-      const device = await client.connect((message) => {
+      const device = await client.connect((message: unknown) => {
         console.log("[BLE MESSAGE]", message);
-        setLastMessage(message);
+
+        // Only treat the incoming payload as a BleMessage when it matches
+        // the expected shape. The client.connect handler types use
+        // unknown for safety.
+        if (typeof message === "object" && message !== null && "type" in message) {
+          const msg = message as BleMessage;
+
+          setLastMessage(msg);
+
+          if (msg.type === "device_info") {
+            setDeviceInfo({
+              deviceId: String((msg as any).deviceId),
+              name: String((msg as any).name),
+              model: String((msg as any).model),
+              firmware: String((msg as any).firmware),
+            });
+          }
+        }
       });
 
       // BluetoothDevice may not have a strongly-typed `name` property in some TS configs,
@@ -87,6 +113,9 @@ export function BleProvider({
 
     setDeviceName(null);
     setStatus("disconnected");
+    setDeviceInfo(null);
+    setLastMessage(null);
+
   }, []);
 
   return (
@@ -94,6 +123,7 @@ export function BleProvider({
       value={{
         status,
         deviceName,
+        deviceInfo,
         lastMessage,
         connect,
         send,
