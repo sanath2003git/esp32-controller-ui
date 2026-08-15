@@ -1,4 +1,5 @@
 import type { RobotState } from "@/types/robot";
+import type { RobotTelemetry } from "@/types/ble";
 
 export const mockRobotState: RobotState = {
   connectionStatus: "connected",
@@ -11,3 +12,97 @@ export const mockRobotState: RobotState = {
     battery: 87,
   },
 };
+
+export const mockTelemetrySequence: RobotTelemetry[] = [
+  {
+    direction: 127,
+
+    distance: {
+      front: 42,
+    },
+
+    obstacle: {
+      frontLeft: false,
+      frontRight: false,
+      rearLeft: false,
+      rearRight: false,
+    },
+
+    motion: {
+      sudden: false,
+    },
+
+    pit: {
+      detected: false,
+    },
+  },
+
+  {
+    direction: 130,
+
+    distance: {
+      front: 39,
+    },
+
+    obstacle: {
+      frontLeft: false,
+      frontRight: false,
+      rearLeft: true,
+      rearRight: false,
+    },
+
+    motion: {
+      sudden: false,
+    },
+
+    pit: {
+      detected: false,
+    },
+  },
+
+  {
+    direction: 124,
+
+    distance: {
+      front: 45,
+    },
+
+    obstacle: {
+      frontLeft: false,
+      frontRight: false,
+      rearLeft: false,
+      rearRight: false,
+    },
+
+    motion: {
+      sudden: true,
+    },
+
+    pit: {
+      detected: false,
+    },
+  },
+
+  {
+    direction: 128,
+
+    distance: {
+      front: 50,
+    },
+
+    obstacle: {
+      frontLeft: false,
+      frontRight: false,
+      rearLeft: false,
+      rearRight: false,
+    },
+
+    motion: {
+      sudden: false,
+    },
+
+    pit: {
+      detected: false,
+    },
+  },
+];
