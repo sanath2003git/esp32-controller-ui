@@ -70,6 +70,7 @@ export default function Home() {
               description="Take control and explore freely."
               icon="drive"
               accent="primary"
+              href="/modes/free-drive"
             />
 
             <ModeCard
@@ -77,6 +78,7 @@ export default function Home() {
               description="Complete missions and beat your best score."
               icon="challenge"
               accent="accent"
+              href="/modes/challenge-arena"
             />
 
             <ModeCard
@@ -84,6 +86,7 @@ export default function Home() {
               description="Practice your driving skills without restrictions."
               icon="training"
               accent="warning"
+              href="/modes/training-ground"
             />
           </div>
         </section>
