@@ -1,4 +1,5 @@
 import AppHeader from "@/components/AppHeader";
+import ModeCard from "@/components/ModeCard";
 
 export default function Home() {
   return (
@@ -29,6 +30,7 @@ export default function Home() {
             <div className="mt-4 flex items-center justify-between">
               <div>
                 <p className="text-lg font-bold">MAINBOT</p>
+
                 <p className="mt-1 text-xs text-white/40">
                   Device connected
                 </p>
@@ -36,6 +38,41 @@ export default function Home() {
 
               <div className="h-3 w-3 rounded-full bg-success shadow-[0_0_12px_rgba(53,229,154,0.7)]" />
             </div>
+          </div>
+        </section>
+
+        <section className="mt-8">
+          <div className="mb-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/35">
+              Game modes
+            </p>
+
+            <h3 className="mt-1 text-xl font-bold">
+              Choose your mission
+            </h3>
+          </div>
+
+          <div className="space-y-3">
+            <ModeCard
+              title="Free Drive"
+              description="Take control and explore freely."
+              icon="drive"
+              accent="primary"
+            />
+
+            <ModeCard
+              title="Challenge Arena"
+              description="Complete missions and beat your best score."
+              icon="challenge"
+              accent="accent"
+            />
+
+            <ModeCard
+              title="Training Ground"
+              description="Practice your driving skills without restrictions."
+              icon="training"
+              accent="warning"
+            />
           </div>
         </section>
       </div>
