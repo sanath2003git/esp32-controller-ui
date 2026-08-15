@@ -1,10 +1,13 @@
 import AppHeader from "@/components/AppHeader";
 import ModeCard from "@/components/ModeCard";
+import { mockRobotState } from "@/data/mockRobot";
 
 export default function Home() {
+  const robot = mockRobotState;
+
   return (
     <main className="min-h-screen">
-      <AppHeader />
+      <AppHeader robot={robot} />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
         <section>
@@ -29,14 +32,22 @@ export default function Home() {
 
             <div className="mt-4 flex items-center justify-between">
               <div>
-                <p className="text-lg font-bold">MAINBOT</p>
+                <p className="text-lg font-bold">
+                  {robot.info?.name ?? "Unknown Robot"}
+                </p>
 
                 <p className="mt-1 text-xs text-white/40">
-                  Device connected
+                  {robot.info?.model ?? "Unknown model"}
                 </p>
               </div>
 
-              <div className="h-3 w-3 rounded-full bg-success shadow-[0_0_12px_rgba(53,229,154,0.7)]" />
+              <div
+                className={`h-3 w-3 rounded-full ${
+                  robot.connectionStatus === "connected"
+                    ? "bg-success shadow-[0_0_12px_rgba(53,229,154,0.7)]"
+                    : "bg-white/20"
+                }`}
+              />
             </div>
           </div>
         </section>
