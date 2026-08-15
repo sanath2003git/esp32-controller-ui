@@ -4,7 +4,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useRef,
   useState,
   type ReactNode,
@@ -20,8 +19,6 @@ import {
   type RobotDeviceInfo,
   type RobotTelemetry,
 } from "@/types/ble";
-
-import { mockTelemetrySequence } from "@/data/mockRobot";
 
 type BleStatus = "disconnected" | "connecting" | "connected";
 
@@ -51,33 +48,6 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const [telemetry, setTelemetry] = useState<RobotTelemetry | null>(null);
   const [lastMessage, setLastMessage] = useState<BleMessage | null>(null);
 
-    useEffect(() => {
-    if (status !== "disconnected") {
-      return;
-    }
-
-    let index = 0;
-
-    const updateMockTelemetry = () => {
-      const currentTelemetry = mockTelemetrySequence[index];
-
-      setTelemetry({
-        ...currentTelemetry,
-        timestamp: Date.now(),
-      });
-
-      index = (index + 1) % mockTelemetrySequence.length;
-    };
-
-    updateMockTelemetry();
-
-    const interval = window.setInterval(updateMockTelemetry, 2000);
-
-    return () => {
-      window.clearInterval(interval);
-    };
-  }, [status]);
-  
   const setConnectionStatus = useCallback((nextStatus: BleStatus) => {
     statusRef.current = nextStatus;
     setStatus(nextStatus);
