@@ -11,6 +11,7 @@
 // ========================================
 
 #define DEVICE_NAME "Robot-Test"
+#define FIRMWARE_VERSION "0.1.0"
 
 
 // ========================================
@@ -47,9 +48,51 @@ Adafruit_NeoPixel pixel(
 BLECharacteristic *characteristic;
 
 bool deviceConnected = false;
+bool wasDeviceConnected = false;
 
 unsigned long lastNotification = 0;
 
+void sendDeviceInfo() {
+
+  if (!deviceConnected) {
+    return;
+  }
+
+  String macAddress =
+    BLEDevice::getAddress().toString().c_str();
+
+  macAddress.toUpperCase();
+  macAddress.replace(":", "");
+
+  JsonDocument response;
+
+  response["type"] = "device_info";
+  response["deviceId"] = macAddress;
+  response["name"] = DEVICE_NAME;
+  response["model"] = "ESP32-S3 N16R8";
+  response["firmware"] = FIRMWARE_VERSION;
+
+  String responseJson;
+
+  serializeJson(
+    response,
+    responseJson
+  );
+
+  characteristic->setValue(
+    responseJson.c_str()
+  );
+
+  characteristic->notify();
+
+  Serial.print(
+    "Sent device info: "
+  );
+
+  Serial.println(
+    responseJson
+  );
+}
 
 // ========================================
 // SERVER CALLBACKS
@@ -62,6 +105,7 @@ class ServerCallbacks : public BLEServerCallbacks {
     deviceConnected = true;
 
     Serial.println("Web app connected!");
+
   }
 
 
@@ -70,11 +114,6 @@ class ServerCallbacks : public BLEServerCallbacks {
     deviceConnected = false;
 
     Serial.println("Web app disconnected!");
-
-    BLEAdvertising *advertising =
-      server->getAdvertising();
-
-    advertising->start();
   }
 };
 
@@ -140,6 +179,32 @@ class CharacteristicCallbacks
       return;
     }
 
+    // ====================================
+    // MESSAGE TYPE
+    // ====================================
+
+    const char* type =
+      doc["type"];
+
+
+    // ====================================
+    // CLIENT READY HANDSHAKE
+    // ====================================
+
+    if (
+      type != nullptr &&
+      strcmp(type, "client_ready") == 0
+    ) {
+
+      Serial.println(
+        "Client notification setup confirmed."
+      );
+
+      sendDeviceInfo();
+
+      return;
+    }
+
 
     // ====================================
     // GET COMMAND
@@ -167,10 +232,62 @@ class CharacteristicCallbacks
 
 
     // ====================================
-    // COLOR COMMAND
+    // PING COMMAND
     // ====================================
 
     if (
+      strcmp(command, "ping") == 0
+    ) {
+
+      pixel.setPixelColor(
+        0,
+        pixel.Color(0, 255, 0)
+      );
+
+      pixel.show();
+
+      JsonDocument response;
+
+      response["type"] =
+        "response";
+
+      response["status"] =
+        "ok";
+
+      response["command"] =
+        "ping";
+
+      response["message"] =
+        "Pong from ESP32";
+
+      String responseJson;
+
+      serializeJson(
+        response,
+        responseJson
+      );
+
+      characteristic->setValue(
+        responseJson.c_str()
+      );
+
+      characteristic->notify();
+
+      Serial.print(
+        "Sent response: "
+      );
+
+      Serial.println(
+        responseJson
+      );
+    }
+
+
+    // ====================================
+    // COLOR COMMAND
+    // ====================================
+
+    else if (
       strcmp(command, "color") == 0
     ) {
 
@@ -430,9 +547,31 @@ void setup() {
 
 void loop() {
 
-  // For now we don't send periodic JSON.
+  // Restart advertising only after the BLE stack has completed teardown of
+  // the prior GATT session. Starting it directly in onDisconnect can allow
+  // a new client to connect before notification state is ready.
+  if (
+    !deviceConnected &&
+    wasDeviceConnected
+  ) {
+    delay(500);
 
-  // We will send responses only when
-  // the Web App sends a command.
+    BLEDevice::startAdvertising();
+
+    Serial.println(
+      "BLE advertising restarted"
+    );
+
+    wasDeviceConnected = false;
+  }
+
+  if (
+    deviceConnected &&
+    !wasDeviceConnected
+  ) {
+    wasDeviceConnected = true;
+  }
+
+  // Responses are sent when the Web App writes a command.
 
 }
