@@ -2,6 +2,7 @@ import AppHeader from "@/components/AppHeader";
 import ModeCard from "@/components/ModeCard";
 import { mockRobotState } from "@/data/mockRobot";
 import BleTest from "@/components/BleTest";
+import ControlPanel from "@/components/ControlPanel";
 
 export default function Home() {
   const robot = mockRobotState;
@@ -52,7 +53,8 @@ export default function Home() {
             </div>
           </div>
         </section>
-                <BleTest/>
+        <BleTest />
+        <ControlPanel mode="free-ride" />
         <section className="mt-8">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/35">

@@ -27,22 +27,35 @@ declare global {
   interface BluetoothDevice {
     gatt?: BluetoothRemoteGATTServer | null;
     addEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
+    removeEventListener(type: string, listener: EventListenerOrEventListenerObject): void;
   }
 }
+
+// START
+// -------------
 
 import {
   BLE_CHARACTERISTIC_UUID,
   BLE_SERVICE_UUID,
 } from "@/lib/ble/constants";
+import { parseBleMessage, type BleMessage } from "@/types/ble";
 
-export type BleMessageHandler = (message: unknown) => void;
+export type BleMessageHandler = (message: BleMessage) => void;
+export type BleDisconnectHandler = () => void;
 
+// BLE Client
+// -------------
 export class BleClient {
   private device: BluetoothDevice | null = null;
   private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private messageHandler: BleMessageHandler | null = null;
+  private disconnectHandler: BleDisconnectHandler | null = null;
 
-  async connect(onMessage: BleMessageHandler): Promise<BluetoothDevice> {
+  // CONNECT
+  async connect(
+    onMessage: BleMessageHandler,
+    onDisconnect: BleDisconnectHandler,
+  ): Promise<BluetoothDevice> {
     if (!navigator.bluetooth) {
       throw new Error(
         "Web Bluetooth is not supported by this browser."
@@ -50,6 +63,7 @@ export class BleClient {
     }
 
     this.messageHandler = onMessage;
+    this.disconnectHandler = onDisconnect;
 
     this.device = await navigator.bluetooth.requestDevice({
       filters: [
@@ -95,6 +109,7 @@ export class BleClient {
     return this.device;
   }
 
+  // SEND
   async send(message: unknown): Promise<void> {
     if (!this.characteristic) {
       throw new Error("BLE device is not connected.");
@@ -106,20 +121,15 @@ export class BleClient {
     await this.characteristic.writeValue(data);
   }
 
+  // DISCONNECT
   disconnect(): void {
-    if (this.characteristic) {
-      this.characteristic.removeEventListener(
-        "characteristicvaluechanged",
-        this.handleNotification
-      );
-    }
+    const device = this.device;
 
-    if (this.device?.gatt?.connected) {
-      this.device.gatt.disconnect();
-    }
+    this.cleanup();
 
-    this.characteristic = null;
-    this.device = null;
+    if (device?.gatt?.connected) {
+      device.gatt.disconnect();
+    }
   }
 
   private handleNotification = (
@@ -139,7 +149,12 @@ export class BleClient {
     console.log("[BLE RX]", message);
 
     try {
-      const parsed = JSON.parse(message);
+      const parsed = parseBleMessage(JSON.parse(message));
+
+      if (!parsed) {
+        console.error("[BLE] Invalid message received");
+        return;
+      }
 
       this.messageHandler?.(parsed);
     } catch (error) {
@@ -153,6 +168,29 @@ export class BleClient {
   private handleDisconnect = (): void => {
     console.log("[BLE] Device disconnected");
 
-    this.characteristic = null;
+    const disconnectHandler = this.disconnectHandler;
+    this.cleanup();
+    disconnectHandler?.();
   };
+
+  private cleanup(): void {
+    if (this.characteristic) {
+      this.characteristic.removeEventListener(
+        "characteristicvaluechanged",
+        this.handleNotification,
+      );
+    }
+
+    if (this.device) {
+      this.device.removeEventListener(
+        "gattserverdisconnected",
+        this.handleDisconnect,
+      );
+    }
+
+    this.characteristic = null;
+    this.device = null;
+    this.messageHandler = null;
+    this.disconnectHandler = null;
+  }
 }
