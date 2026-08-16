@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
+
 import {
   ArrowDown,
   ArrowLeft,
@@ -29,6 +31,12 @@ type ObstacleIndicatorProps = {
   detected: boolean | null;
 };
 
+type AlertToast = {
+  id: number;
+  message: string;
+  tone: "warning" | "danger";
+};
+
 const modeLabel: Record<ControlPanelMode, string> = {
   "free-ride": "Free ride",
   training: "Training",
@@ -48,24 +56,36 @@ function ObstacleIndicator({
   detected,
 }: ObstacleIndicatorProps) {
   const stateLabel = detected === null ? "Waiting" : detected ? "Obstacle" : "Clear";
+  const hasObstacle = detected === true;
   const stateClass =
     detected === null
       ? "border-white/15 bg-white/5 text-white/45"
       : detected
-        ? "border-danger/50 bg-danger/15 text-danger"
+        ? "border-danger bg-danger text-white"
         : "border-success/50 bg-success/15 text-success";
 
   return (
     <div
-      className={`absolute flex items-center gap-1.5 ${obstaclePositionClass[position]}`}
+      className={`absolute flex items-center gap-1.5 rounded-full transition-all ${
+        hasObstacle
+          ? "border border-danger bg-danger/20 px-2.5 py-2 text-danger shadow-[0_0_24px_rgba(255,76,100,0.75)]"
+          : "px-1 py-0.5"
+      } ${obstaclePositionClass[position]}`}
     >
       <span
         aria-hidden="true"
-        className={`h-3.5 w-3.5 rounded-full border shadow-[0_0_12px_currentColor] ${stateClass}`}
+        className={`h-3.5 w-3.5 rounded-full border shadow-[0_0_12px_currentColor] ${
+          hasObstacle ? "animate-pulse" : ""
+        } ${stateClass}`}
       />
       <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">
         {label}
       </span>
+      {hasObstacle && (
+        <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.1em] text-white">
+          <TriangleAlert size={13} aria-hidden="true" /> Obstacle
+        </span>
+      )}
       <span className="sr-only">{stateLabel}</span>
     </div>
   );
@@ -73,9 +93,34 @@ function ObstacleIndicator({
 
 export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) {
   const { status, telemetry, move, stop, setColor } = useBleContext();
+  const [alertToast, setAlertToast] = useState<AlertToast | null>(null);
+  const previousAlerts = useRef({ sudden: false, pit: false });
   const isConnected = status === "connected";
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
+
+  useEffect(() => {
+    const sudden = telemetry?.motion.sudden ?? false;
+    const pit = telemetry?.pit.detected ?? false;
+
+    if (sudden && !previousAlerts.current.sudden) {
+      setAlertToast({ id: Date.now(), message: "Sudden motion detected", tone: "warning" });
+    } else if (pit && !previousAlerts.current.pit) {
+      setAlertToast({ id: Date.now(), message: "Pit detected ahead", tone: "danger" });
+    }
+
+    previousAlerts.current = { sudden, pit };
+  }, [telemetry?.motion.sudden, telemetry?.pit.detected]);
+
+  useEffect(() => {
+    if (!alertToast) return;
+
+    const timeoutId = window.setTimeout(() => {
+      setAlertToast((current) => (current?.id === alertToast.id ? null : current));
+    }, 3_000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [alertToast]);
 
   const sendMove = (direction: MovementDirection) => {
     void move(direction).catch((error: unknown) => {
@@ -92,14 +137,13 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
-      className="mt-8 overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
+      className=" overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-            {modeLabel[mode]} control
+            Robo Control
           </p>
-          <h2 className="mt-1 text-xl font-black tracking-tight">Robot command deck</h2>
         </div>
 
         <div
@@ -184,18 +228,17 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
         </div>
       </div>
 
-      {(telemetry?.motion.sudden || telemetry?.pit.detected) && (
-        <div className="mt-4 space-y-2" role="alert">
-          {telemetry.motion.sudden && (
-            <p className="flex items-center gap-2 rounded-2xl border border-warning/35 bg-warning/10 px-4 py-3 text-sm font-semibold text-warning">
-              <TriangleAlert size={18} /> Sudden motion detected
-            </p>
-          )}
-          {telemetry.pit.detected && (
-            <p className="flex items-center gap-2 rounded-2xl border border-danger/35 bg-danger/10 px-4 py-3 text-sm font-semibold text-danger">
-              <TriangleAlert size={18} /> Pit detected ahead
-            </p>
-          )}
+      {alertToast && (
+        <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2" role="alert">
+          <p
+            className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${
+              alertToast.tone === "warning"
+                ? "border-warning/35 bg-warning/90 text-black"
+                : "border-danger/35 bg-danger/90 text-white"
+            }`}
+          >
+            <TriangleAlert size={18} /> {alertToast.message}
+          </p>
         </div>
       )}
 
