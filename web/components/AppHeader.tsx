@@ -1,14 +1,13 @@
-"use client"
+"use client";
 
+import Link from "next/link";
 import { Battery, Bluetooth, Cpu } from "lucide-react";
-import { RobotState } from "@/types/robot";
+
 import { useBleContext } from "@/context/BleContext";
+import type { RobotState } from "@/types/robot";
 
 export default function AppHeader() {
-  const {
-      status,
-      deviceInfo
-    } = useBleContext();
+  const { status, deviceInfo } = useBleContext();
 
   const robot: RobotState = {
     connectionStatus: status,
@@ -26,7 +25,7 @@ export default function AppHeader() {
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-md items-center justify-between px-4">
-        <div className="flex min-w-0 items-center gap-3">
+        <Link href="/profile" className="flex min-w-0 flex-1 items-center gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary">
             <Cpu size={21} />
           </div>
@@ -40,7 +39,7 @@ export default function AppHeader() {
               {robot.info?.id ?? "Not connected"}
             </p>
           </div>
-        </div>
+        </Link>
 
         <div className="flex shrink-0 items-center gap-3">
           {robot.info && (
@@ -60,9 +59,7 @@ export default function AppHeader() {
           >
             <Bluetooth size={13} />
 
-            <span>
-              {isConnected ? "Connected" : "Offline"}
-            </span>
+            <span>{isConnected ? "Connected" : "Offline"}</span>
           </div>
         </div>
       </div>
