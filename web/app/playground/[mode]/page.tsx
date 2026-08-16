@@ -68,7 +68,7 @@ export default function ModeHubPage() {
               description="Free-form movement controls, no scoring."
               icon="training"
               accent={modeMeta.accent}
-              href={`/modes/${modeMeta.slug}/training`}
+              href={`/playground/${modeMeta.slug}/training`}
             />
 
             <ModeCard
@@ -76,7 +76,7 @@ export default function ModeHubPage() {
               description="Pick a level and race against the clock."
               icon="challenge"
               accent={modeMeta.accent}
-              href={`/modes/${modeMeta.slug}/challenges`}
+              href={`/playground/${modeMeta.slug}/challenges`}
             />
           </div>
         </section>

@@ -2,11 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
-import DPad from "@/components/DPad";
 import SubPageHeader from "@/components/SubPageHeader";
 import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import { getLevelMeta } from "@/data/levels";
+import ControlPanel from "@/components/ControlPanel";
 
 export default function ChallengeLevelPage() {
   const params = useParams<{ mode: string; level: string }>();
@@ -26,25 +26,25 @@ export default function ChallengeLevelPage() {
 
     startedRef.current = true;
 
-    send({
-      type: "command",
-      id: crypto.randomUUID(),
-      command: "start_challenge",
-      mode: params.mode,
-      level: levelId,
-    }).catch((error) => {
-      console.error("[CHALLENGE START]", error);
-    });
+    // send({
+    //   type: "command",
+    //   id: crypto.randomUUID(),
+    //   command: "start_challenge",
+    //   mode: params.mode,
+    //   level: levelId,
+    // }).catch((error) => {
+    //   console.error("[CHALLENGE START]", error);
+    // });
   }, [status, send, params.mode, levelId, levelMeta]);
 
   function handleExit() {
-    send({
-      type: "command",
-      id: crypto.randomUUID(),
-      command: "stop",
-    }).catch(() => {});
+    // send({
+    //   type: "command",
+    //   id: crypto.randomUUID(),
+    //   command: "stop",
+    // }).catch(() => {});
 
-    router.push(`/modes/${params.mode}/challenges`);
+    router.push(`/playground/${params.mode}/challenges`);
   }
 
   if (!levelMeta) {
@@ -52,7 +52,7 @@ export default function ChallengeLevelPage() {
       <main className="min-h-screen">
         <SubPageHeader
           title="Unknown level"
-          backHref={`/modes/${params.mode}/challenges`}
+          backHref={`/playground/${params.mode}/challenges`}
         />
 
         <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
@@ -70,7 +70,7 @@ export default function ChallengeLevelPage() {
       <SubPageHeader
         title={`${modeMeta?.title ?? "Challenge"} \u00b7 Level ${levelMeta.id}`}
         subtitle={`${levelMeta.difficulty} difficulty`}
-        backHref={`/modes/${params.mode}/challenges`}
+        backHref={`/playground/${params.mode}/challenges`}
       />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
@@ -89,7 +89,7 @@ export default function ChallengeLevelPage() {
         </section>
 
         <section className="mt-8">
-          <DPad />
+          <ControlPanel />
         </section>
 
         <button

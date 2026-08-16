@@ -16,7 +16,7 @@ export default function ChallengesPage() {
       <SubPageHeader
         title={`${title} \u00b7 Challenge`}
         subtitle="Pick a level"
-        backHref={`/modes/${params.mode}`}
+        backHref={`/playground/${params.mode}`}
       />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">

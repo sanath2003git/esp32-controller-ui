@@ -16,7 +16,7 @@ type LevelCardProps = {
 export default function LevelCard({ level, mode }: LevelCardProps) {
   return (
     <Link
-      href={`/modes/${mode}/challenges/${level.id}`}
+      href={`/playground/${mode}/challenges/${level.id}`}
       className="group flex flex-col gap-4 rounded-2xl border border-border bg-surface p-4 transition-all duration-200 active:scale-[0.98] hover:border-primary/40 hover:bg-surface-light"
     >
       <div className="flex items-center justify-between">

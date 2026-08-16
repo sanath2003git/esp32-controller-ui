@@ -1,11 +1,26 @@
+"use client"
+
 import { Battery, Bluetooth, Cpu } from "lucide-react";
-import type { RobotState } from "@/types/robot";
+import { RobotState } from "@/types/robot";
+import { useBleContext } from "@/context/BleContext";
 
-type AppHeaderProps = {
-  robot: RobotState;
-};
+export default function AppHeader() {
+  const {
+      status,
+      deviceInfo
+    } = useBleContext();
 
-export default function AppHeader({ robot }: AppHeaderProps) {
+  const robot: RobotState = {
+    connectionStatus: status,
+    info: {
+      id: deviceInfo?.deviceId ?? "Unknown ID",
+      name: deviceInfo?.name ?? "Unknown Robot",
+      model: deviceInfo?.model ?? "Unknown model",
+      firmware: deviceInfo?.firmware ?? "Unknown firmware",
+      battery: 0,
+    },
+  };
+
   const isConnected = robot.connectionStatus === "connected";
 
   return (
