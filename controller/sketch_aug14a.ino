@@ -30,15 +30,26 @@
 // ========================================
 
 #define RGB_PIN 48
-
 #define NUM_PIXELS 1
-
 
 Adafruit_NeoPixel pixel(
   NUM_PIXELS,
   RGB_PIN,
   NEO_GRB + NEO_KHZ800
 );
+
+void setRobotTestColor(
+  uint8_t r,
+  uint8_t g,
+  uint8_t b
+) {
+  pixel.setPixelColor(
+    0,
+    pixel.Color(r, g, b)
+  );
+
+  pixel.show();
+}
 
 
 // ========================================
@@ -50,7 +61,25 @@ BLECharacteristic *characteristic;
 bool deviceConnected = false;
 bool wasDeviceConnected = false;
 
-unsigned long lastNotification = 0;
+// Becomes true after the Web App enables notifications
+// and sends the client_ready message.
+bool clientReady = false;
+
+
+// ========================================
+// MOCK TELEMETRY
+// ========================================
+
+unsigned long lastTelemetry = 0;
+
+const unsigned long TELEMETRY_INTERVAL = 2000;
+
+int mockTelemetryIndex = 0;
+
+
+// ========================================
+// DEVICE INFO
+// ========================================
 
 void sendDeviceInfo() {
 
@@ -94,6 +123,166 @@ void sendDeviceInfo() {
   );
 }
 
+
+// ========================================
+// MOCK TELEMETRY
+// ========================================
+
+void sendMockTelemetry() {
+
+  if (!deviceConnected || !clientReady) {
+    return;
+  }
+
+  JsonDocument telemetry;
+
+
+  // ======================================
+  // TELEMETRY TYPE
+  // ======================================
+
+  telemetry["type"] = "telemetry";
+
+
+  // ======================================
+  // STATE 1
+  // ======================================
+
+  if (mockTelemetryIndex == 0) {
+
+    telemetry["direction"] = 127;
+
+    telemetry["distance"]["front"] = 42;
+
+    telemetry["obstacle"]["frontLeft"] = false;
+    telemetry["obstacle"]["frontRight"] = false;
+    telemetry["obstacle"]["rearLeft"] = false;
+    telemetry["obstacle"]["rearRight"] = false;
+
+    telemetry["motion"]["sudden"] = false;
+
+    telemetry["pit"]["detected"] = false;
+  }
+
+
+  // ======================================
+  // STATE 2
+  // ======================================
+
+  else if (mockTelemetryIndex == 1) {
+
+    telemetry["direction"] = 130;
+
+    telemetry["distance"]["front"] = 39;
+
+    telemetry["obstacle"]["frontLeft"] = false;
+    telemetry["obstacle"]["frontRight"] = false;
+    telemetry["obstacle"]["rearLeft"] = true;
+    telemetry["obstacle"]["rearRight"] = false;
+
+    telemetry["motion"]["sudden"] = false;
+
+    telemetry["pit"]["detected"] = false;
+  }
+
+
+  // ======================================
+  // STATE 3
+  // ======================================
+
+  else if (mockTelemetryIndex == 2) {
+
+    telemetry["direction"] = 124;
+
+    telemetry["distance"]["front"] = 45;
+
+    telemetry["obstacle"]["frontLeft"] = false;
+    telemetry["obstacle"]["frontRight"] = false;
+    telemetry["obstacle"]["rearLeft"] = false;
+    telemetry["obstacle"]["rearRight"] = false;
+
+    telemetry["motion"]["sudden"] = true;
+
+    telemetry["pit"]["detected"] = false;
+  }
+
+
+  // ======================================
+  // STATE 4
+  // ======================================
+
+  else {
+
+    telemetry["direction"] = 128;
+
+    telemetry["distance"]["front"] = 50;
+
+    telemetry["obstacle"]["frontLeft"] = false;
+    telemetry["obstacle"]["frontRight"] = false;
+    telemetry["obstacle"]["rearLeft"] = false;
+    telemetry["obstacle"]["rearRight"] = false;
+
+    telemetry["motion"]["sudden"] = false;
+
+    telemetry["pit"]["detected"] = false;
+  }
+
+
+  // ======================================
+  // TIMESTAMP
+  // ======================================
+
+  telemetry["timestamp"] = millis();
+
+
+  // ======================================
+  // SERIALIZE JSON
+  // ======================================
+
+  String telemetryJson;
+
+  serializeJson(
+    telemetry,
+    telemetryJson
+  );
+
+
+  // ======================================
+  // SEND BLE NOTIFICATION
+  // ======================================
+
+  characteristic->setValue(
+    telemetryJson.c_str()
+  );
+
+  characteristic->notify();
+
+
+  // ======================================
+  // SERIAL DEBUG
+  // ======================================
+
+  Serial.print(
+    "Sent telemetry: "
+  );
+
+  Serial.println(
+    telemetryJson
+  );
+
+
+  // ======================================
+  // NEXT STATE
+  // ======================================
+
+  mockTelemetryIndex++;
+
+  if (mockTelemetryIndex >= 4) {
+    mockTelemetryIndex = 0;
+  }
+}
+
+
 // ========================================
 // SERVER CALLBACKS
 // ========================================
@@ -104,8 +293,15 @@ class ServerCallbacks : public BLEServerCallbacks {
 
     deviceConnected = true;
 
-    Serial.println("Web app connected!");
+    clientReady = false;
 
+    mockTelemetryIndex = 0;
+
+    lastTelemetry = millis();
+
+    Serial.println(
+      "Web app connected!"
+    );
   }
 
 
@@ -113,7 +309,11 @@ class ServerCallbacks : public BLEServerCallbacks {
 
     deviceConnected = false;
 
-    Serial.println("Web app disconnected!");
+    clientReady = false;
+
+    Serial.println(
+      "Web app disconnected!"
+    );
   }
 };
 
@@ -179,6 +379,7 @@ class CharacteristicCallbacks
       return;
     }
 
+
     // ====================================
     // MESSAGE TYPE
     // ====================================
@@ -199,6 +400,8 @@ class CharacteristicCallbacks
       Serial.println(
         "Client notification setup confirmed."
       );
+
+      clientReady = true;
 
       sendDeviceInfo();
 
@@ -282,6 +485,237 @@ class CharacteristicCallbacks
       );
     }
 
+// ====================================
+// MOVE COMMAND
+// ====================================
+
+else if (
+  strcmp(command, "move") == 0
+) {
+
+  const char* direction =
+    doc["direction"];
+
+
+  if (direction == nullptr) {
+
+    Serial.println(
+      "Move command missing direction!"
+    );
+
+    return;
+  }
+
+
+  Serial.print(
+    "Movement direction: "
+  );
+
+  Serial.println(direction);
+
+
+  // ==================================
+  // FORWARD
+  // ==================================
+
+  if (
+    strcmp(direction, "forward") == 0
+  ) {
+
+    // Yellow
+    setRobotTestColor(
+      255,
+      255,
+      0
+    );
+
+    Serial.println(
+      "TEST: FORWARD -> YELLOW"
+    );
+  }
+
+
+  // ==================================
+  // BACKWARD
+  // ==================================
+
+  else if (
+    strcmp(direction, "backward") == 0
+  ) {
+
+    // Cyan
+    setRobotTestColor(
+      0,
+      255,
+      255
+    );
+
+    Serial.println(
+      "TEST: BACKWARD -> CYAN"
+    );
+  }
+
+
+  // ==================================
+  // RIGHT
+  // ==================================
+
+  else if (
+    strcmp(direction, "right") == 0
+  ) {
+
+    // Magenta
+    setRobotTestColor(
+      255,
+      0,
+      255
+    );
+
+    Serial.println(
+      "TEST: RIGHT -> MAGENTA"
+    );
+  }
+
+
+  // ==================================
+  // LEFT
+  // ==================================
+
+  else if (
+    strcmp(direction, "left") == 0
+  ) {
+
+    // White
+    setRobotTestColor(
+      255,
+      255,
+      255
+    );
+
+    Serial.println(
+      "TEST: LEFT -> WHITE"
+    );
+  }
+
+
+  // ==================================
+  // UNKNOWN DIRECTION
+  // ==================================
+
+  else {
+
+    Serial.print(
+      "Unknown movement direction: "
+    );
+
+    Serial.println(direction);
+
+    return;
+  }
+
+
+  // ==================================
+  // SEND RESPONSE TO WEB APP
+  // ==================================
+
+  JsonDocument response;
+
+  response["type"] =
+    "response";
+
+  response["status"] =
+    "ok";
+
+  response["command"] =
+    "move";
+
+  response["direction"] =
+    direction;
+
+
+  String responseJson;
+
+  serializeJson(
+    response,
+    responseJson
+  );
+
+
+  characteristic->setValue(
+    responseJson.c_str()
+  );
+
+  characteristic->notify();
+
+
+  Serial.print(
+    "Sent movement response: "
+  );
+
+  Serial.println(
+    responseJson
+  );
+}
+
+// ====================================
+// STOP COMMAND
+// ====================================
+
+else if (
+  strcmp(command, "stop") == 0
+) {
+
+  // Orange
+  setRobotTestColor(
+    255,
+    165,
+    0
+  );
+
+  Serial.println(
+    "TEST: STOP -> ORANGE"
+  );
+
+
+  // ==================================
+  // SEND RESPONSE TO WEB APP
+  // ==================================
+
+  JsonDocument response;
+
+  response["type"] =
+    "response";
+
+  response["status"] =
+    "ok";
+
+  response["command"] =
+    "stop";
+
+
+  String responseJson;
+
+  serializeJson(
+    response,
+    responseJson
+  );
+
+
+  characteristic->setValue(
+    responseJson.c_str()
+  );
+
+  characteristic->notify();
+
+
+  Serial.print(
+    "Sent stop response: "
+  );
+
+  Serial.println(
+    responseJson
+  );
+}
 
     // ====================================
     // COLOR COMMAND
@@ -547,13 +981,15 @@ void setup() {
 
 void loop() {
 
-  // Restart advertising only after the BLE stack has completed teardown of
-  // the prior GATT session. Starting it directly in onDisconnect can allow
-  // a new client to connect before notification state is ready.
+  // ========================================
+  // RESTART ADVERTISING AFTER DISCONNECT
+  // ========================================
+
   if (
     !deviceConnected &&
     wasDeviceConnected
   ) {
+
     delay(500);
 
     BLEDevice::startAdvertising();
@@ -565,13 +1001,32 @@ void loop() {
     wasDeviceConnected = false;
   }
 
+
+  // ========================================
+  // TRACK CONNECTION
+  // ========================================
+
   if (
     deviceConnected &&
     !wasDeviceConnected
   ) {
+
     wasDeviceConnected = true;
   }
 
-  // Responses are sent when the Web App writes a command.
 
+  // ========================================
+  // MOCK TELEMETRY
+  // ========================================
+
+  if (
+    deviceConnected &&
+    clientReady &&
+    millis() - lastTelemetry >= TELEMETRY_INTERVAL
+  ) {
+
+    lastTelemetry = millis();
+
+    sendMockTelemetry();
+  }
 }
