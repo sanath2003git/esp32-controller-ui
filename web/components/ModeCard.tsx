@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   ChevronRight,
   Gamepad2,
@@ -10,6 +11,7 @@ type ModeCardProps = {
   description: string;
   icon: "drive" | "challenge" | "training";
   accent: "primary" | "accent" | "warning";
+  href: string;
 };
 
 const iconMap = {
@@ -38,13 +40,14 @@ export default function ModeCard({
   description,
   icon,
   accent,
+  href,
 }: ModeCardProps) {
   const Icon = iconMap[icon];
   const colors = accentMap[accent];
 
   return (
-    <button
-      type="button"
+    <Link
+      href={href}
       className={`group flex w-full items-center gap-4 rounded-2xl border border-border bg-surface p-4 text-left transition-all duration-200 active:scale-[0.98] hover:bg-surface-light ${colors.glow}`}
     >
       <div
@@ -65,6 +68,6 @@ export default function ModeCard({
         size={20}
         className="shrink-0 text-white/25 transition-transform group-hover:translate-x-1"
       />
-    </button>
+    </Link>
   );
 }
