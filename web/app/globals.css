@@ -63,6 +63,37 @@ a {
   -webkit-tap-highlight-color: transparent;
 }
 
+.control-button {
+  display: flex;
+  min-height: 3.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 0.875rem;
+  background: rgb(0 0 0 / 0.2);
+  color: var(--foreground);
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
+}
+
+.control-button:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background: rgb(124 92 255 / 0.12);
+}
+
+.control-button:active:not(:disabled) {
+  transform: scale(0.94);
+}
+
+.control-button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.control-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
 ::selection {
   background: var(--primary);
   color: white;

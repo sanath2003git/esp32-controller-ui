@@ -1,10 +1,29 @@
+"use client"
+
 import AppHeader from "@/components/AppHeader";
 import ModeCard from "@/components/ModeCard";
-import { mockRobotState } from "@/data/mockRobot";
 import BleTest from "@/components/BleTest";
+import ControlPanel from "@/components/ControlPanel";
+import { RobotState } from "@/types/robot";
+import { useBleContext } from "@/context/BleContext";
+
 
 export default function Home() {
-  const robot = mockRobotState;
+  const {
+      status,
+      deviceInfo
+    } = useBleContext();
+
+  const robot: RobotState = {
+    connectionStatus: status,
+    info: {
+      id: deviceInfo?.deviceId ?? "Unknown ID",
+      name: deviceInfo?.name ?? "Unknown Robot",
+      model: deviceInfo?.model ?? "Unknown model",
+      firmware: deviceInfo?.firmware ?? "Unknown firmware",
+      battery: 0,
+    },
+  };
 
   return (
     <main className="min-h-screen">
@@ -52,7 +71,8 @@ export default function Home() {
             </div>
           </div>
         </section>
-                <BleTest/>
+        <BleTest />
+        <ControlPanel mode="free-ride" />
         <section className="mt-8">
           <div className="mb-4">
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/35">

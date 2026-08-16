@@ -10,113 +10,146 @@ import {
 } from "react";
 
 import { BleClient } from "@/lib/ble/client";
-
-import type {
-  BleMessage,
-  RobotDeviceInfo,
+import {
+  createColorCommand,
+  type BleMessage,
+  type MovementDirection,
+  type RgbColor,
+  type RobotCommand,
+  type RobotDeviceInfo,
+  type RobotTelemetry,
 } from "@/types/ble";
 
-type BleStatus =
-  | "disconnected"
-  | "connecting"
-  | "connected";
+type BleStatus = "disconnected" | "connecting" | "connected";
 
 type BleContextValue = {
   status: BleStatus;
   deviceName: string | null;
   deviceInfo: RobotDeviceInfo | null;
+  telemetry: RobotTelemetry | null;
   lastMessage: BleMessage | null;
   connect: () => Promise<void>;
-  send: (message: unknown) => Promise<void>;
+  send: (message: RobotCommand) => Promise<void>;
+  move: (direction: MovementDirection) => Promise<void>;
+  stop: () => Promise<void>;
+  setColor: (color: RgbColor) => Promise<void>;
   disconnect: () => void;
 };
 
 const BleContext = createContext<BleContextValue | null>(null);
 
-export function BleProvider({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function BleProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<BleClient | null>(null);
+  const statusRef = useRef<BleStatus>("disconnected");
 
-  const [status, setStatus] =
-    useState<BleStatus>("disconnected");
+  const [status, setStatus] = useState<BleStatus>("disconnected");
+  const [deviceName, setDeviceName] = useState<string | null>(null);
+  const [deviceInfo, setDeviceInfo] = useState<RobotDeviceInfo | null>(null);
+  const [telemetry, setTelemetry] = useState<RobotTelemetry | null>(null);
+  const [lastMessage, setLastMessage] = useState<BleMessage | null>(null);
 
-  const [deviceName, setDeviceName] =
-    useState<string | null>(null);
+  const setConnectionStatus = useCallback((nextStatus: BleStatus) => {
+    statusRef.current = nextStatus;
+    setStatus(nextStatus);
+  }, []);
 
-  const [lastMessage, setLastMessage] =
-  useState<BleMessage | null>(null);
-
-   const [deviceInfo, setDeviceInfo] =
-  useState<RobotDeviceInfo | null>(null);
+  const clearConnectionState = useCallback(() => {
+    setDeviceName(null);
+    setDeviceInfo(null);
+    setTelemetry(null);
+    setLastMessage(null);
+    setConnectionStatus("disconnected");
+  }, [setConnectionStatus]);
 
   const connect = useCallback(async () => {
-    setStatus("connecting");
+    if (statusRef.current !== "disconnected") {
+      return;
+    }
+
+    setConnectionStatus("connecting");
+    setDeviceInfo(null);
+    setTelemetry(null);
+    setLastMessage(null);
+
+    const client = new BleClient();
+    clientRef.current = client;
 
     try {
-      const client = new BleClient();
+      const device = await client.connect(
+        (message) => {
+          setLastMessage(message);
 
-      clientRef.current = client;
-
-      const device = await client.connect((message: unknown) => {
-        console.log("[BLE MESSAGE]", message);
-
-        // Only treat the incoming payload as a BleMessage when it matches
-        // the expected shape. The client.connect handler types use
-        // unknown for safety.
-        if (typeof message === "object" && message !== null && "type" in message) {
-          const msg = message as BleMessage;
-
-          setLastMessage(msg);
-
-          if (msg.type === "device_info") {
-            setDeviceInfo({
-              deviceId: String((msg as any).deviceId),
-              name: String((msg as any).name),
-              model: String((msg as any).model),
-              firmware: String((msg as any).firmware),
-            });
+          if (message.type === "device_info") {
+            setDeviceInfo(message);
           }
-        }
-      });
 
-      // BluetoothDevice may not have a strongly-typed `name` property in some TS configs,
-      // fall back to device.id or a default string.
-      const deviceNameFallback = (device as any)?.name ?? (device as any)?.id ?? "Unknown device";
-      setDeviceName(deviceNameFallback);
-      setStatus("connected");
+          if (message.type === "telemetry") {
+            setTelemetry(message.telemetry);
+          }
+        },
+        () => {
+          if (clientRef.current === client) {
+            clientRef.current = null;
+            clearConnectionState();
+          }
+        },
+      );
+
+      const bluetoothDevice = device as BluetoothDevice & {
+        id?: string;
+        name?: string | null;
+      };
+
+      setDeviceName(
+        bluetoothDevice.name ?? bluetoothDevice.id ?? "Unknown device",
+      );
+      setConnectionStatus("connected");
     } catch (error) {
       console.error("[BLE CONNECT ERROR]", error);
 
-      clientRef.current = null;
-      setDeviceName(null);
-      setStatus("disconnected");
+      if (clientRef.current === client) {
+        client.disconnect();
+        clientRef.current = null;
+        clearConnectionState();
+      }
 
       throw error;
     }
-  }, []);
+  }, [clearConnectionState, setConnectionStatus]);
 
-  const send = useCallback(async (message: unknown) => {
-    if (!clientRef.current) {
+  const send = useCallback(async (message: RobotCommand) => {
+    const client = clientRef.current;
+
+    if (!client || statusRef.current !== "connected") {
       throw new Error("BLE device is not connected.");
     }
 
-    await clientRef.current.send(message);
+    await client.send(message);
   }, []);
+
+  const move = useCallback(
+    async (direction: MovementDirection) => {
+      await send({ command: "move", direction });
+    },
+    [send],
+  );
+
+  const stop = useCallback(async () => {
+    await send({ command: "stop" });
+  }, [send]);
+
+  const setColor = useCallback(
+    async (color: RgbColor) => {
+      await send(createColorCommand(color));
+    },
+    [send],
+  );
 
   const disconnect = useCallback(() => {
     clientRef.current?.disconnect();
-
     clientRef.current = null;
-
-    setDeviceName(null);
-    setStatus("disconnected");
-    setDeviceInfo(null);
-    setLastMessage(null);
-
-  }, []);
+    clearConnectionState();
+  }, [clearConnectionState]);
 
   return (
     <BleContext.Provider
@@ -124,9 +157,13 @@ export function BleProvider({
         status,
         deviceName,
         deviceInfo,
+        telemetry,
         lastMessage,
         connect,
         send,
+        move,
+        stop,
+        setColor,
         disconnect,
       }}
     >
@@ -139,9 +176,7 @@ export function useBleContext() {
   const context = useContext(BleContext);
 
   if (!context) {
-    throw new Error(
-      "useBleContext must be used inside BleProvider"
-    );
+    throw new Error("useBleContext must be used inside BleProvider");
   }
 
   return context;
