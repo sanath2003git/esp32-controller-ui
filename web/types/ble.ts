@@ -33,6 +33,19 @@ export type MovementDirection =
 
 export type RgbColor = "red" | "green" | "blue" | "off";
 
+export type DisplayEmojiName =
+  | "happy"
+  | "sad"
+  | "heart"
+  | "star"
+  | "check"
+  | "cross"
+  | "warning"
+  | "robot"
+  | "battery"
+  | "sleep"
+  | "wifi";
+
 export type MoveCommand = {
   command: "move";
   direction: MovementDirection;
@@ -49,7 +62,29 @@ export type ColorCommand = {
   b: number;
 };
 
-export type RobotCommand = MoveCommand | StopCommand | ColorCommand;
+export type DisplayTextCommand = {
+  command: "display_text";
+  text: string;
+  line?: number;
+};
+
+export type DisplayEmojiCommand = {
+  command: "display_emoji";
+  emoji: DisplayEmojiName;
+  text?: string;
+};
+
+export type DisplayClearCommand = {
+  command: "display_clear";
+};
+
+export type RobotCommand =
+  | MoveCommand
+  | StopCommand
+  | ColorCommand
+  | DisplayTextCommand
+  | DisplayEmojiCommand
+  | DisplayClearCommand;
 
 export type DeviceInfoMessage = {
   type: "device_info";

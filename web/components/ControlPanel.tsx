@@ -11,11 +11,14 @@ import {
   Compass,
   Gauge,
   OctagonX,
+  Send,
+  Trash2,
   TriangleAlert,
+  Tv,
 } from "lucide-react";
 
 import { useBleContext } from "@/context/BleContext";
-import type { MovementDirection, RgbColor } from "@/types/ble";
+import type { DisplayEmojiName, MovementDirection, RgbColor } from "@/types/ble";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
@@ -91,13 +94,49 @@ function ObstacleIndicator({
   );
 }
 
+const SUPPORTED_EMOJIS: Array<{ name: DisplayEmojiName; char: string; label: string }> = [
+  { name: "happy", char: "😊", label: "Happy" },
+  { name: "sad", char: "😢", label: "Sad" },
+  { name: "heart", char: "❤️", label: "Heart" },
+  { name: "star", char: "⭐", label: "Star" },
+  { name: "check", char: "✅", label: "Check" },
+  { name: "cross", char: "❌", label: "Cross" },
+  { name: "warning", char: "⚠️", label: "Warning" },
+  { name: "robot", char: "🤖", label: "Robot" },
+  { name: "battery", char: "🔋", label: "Battery" },
+  { name: "sleep", char: "😴", label: "Sleep" },
+  { name: "wifi", char: "📶", label: "WiFi" },
+];
+
 export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) {
-  const { status, telemetry, move, stop, setColor } = useBleContext();
+  const { status, telemetry, move, stop, setColor, send, lastMessage } = useBleContext();
   const [alertToast, setAlertToast] = useState<AlertToast | null>(null);
+  const [displayText, setDisplayText] = useState<string>("");
+  const [displayLine, setDisplayLine] = useState<number>(0);
+  const [selectedEmoji, setSelectedEmoji] = useState<DisplayEmojiName | null>(null);
+  const [previewContent, setPreviewContent] = useState<{ text?: string; emoji?: string }>({});
+
   const previousAlerts = useRef({ sudden: false, pit: false });
   const isConnected = status === "connected";
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
+
+  useEffect(() => {
+    if (
+      lastMessage &&
+      lastMessage.type === "response" &&
+      typeof lastMessage.command === "string" &&
+      lastMessage.command.startsWith("display_")
+    ) {
+      if (lastMessage.status === "error" && typeof lastMessage.message === "string") {
+        setAlertToast({
+          id: Date.now(),
+          message: `OLED Error: ${lastMessage.message}`,
+          tone: "danger",
+        });
+      }
+    }
+  }, [lastMessage]);
 
   useEffect(() => {
     const sudden = telemetry?.motion.sudden ?? false;
@@ -132,6 +171,56 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
     void setColor(color).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Color command failed", error);
     });
+  };
+
+  const sendDisplayText = async () => {
+    if (!displayText.trim()) return;
+    try {
+      await send({
+        command: "display_text",
+        text: displayText,
+        line: displayLine,
+      });
+      setPreviewContent((prev) => ({ ...prev, text: displayText }));
+    } catch (error: unknown) {
+      console.error("[CONTROL PANEL] Display text command failed", error);
+    }
+  };
+
+  const sendDisplayEmoji = async (emojiName: DisplayEmojiName) => {
+    setSelectedEmoji(emojiName);
+    const emojiObj = SUPPORTED_EMOJIS.find((e) => e.name === emojiName);
+    try {
+      if (displayText.trim()) {
+        await send({
+          command: "display_emoji",
+          emoji: emojiName,
+          text: displayText,
+        });
+        setPreviewContent({ text: displayText, emoji: emojiObj?.char });
+      } else {
+        await send({
+          command: "display_emoji",
+          emoji: emojiName,
+        });
+        setPreviewContent((prev) => ({ ...prev, emoji: emojiObj?.char }));
+      }
+    } catch (error: unknown) {
+      console.error("[CONTROL PANEL] Display emoji command failed", error);
+    }
+  };
+
+  const sendDisplayClear = async () => {
+    try {
+      await send({
+        command: "display_clear",
+      });
+      setDisplayText("");
+      setSelectedEmoji(null);
+      setPreviewContent({});
+    } catch (error: unknown) {
+      console.error("[CONTROL PANEL] Display clear command failed", error);
+    }
   };
 
   return (
@@ -322,6 +411,135 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+      </div>
+
+      {/* OLED Display Control Section */}
+      <div className="mt-5 rounded-3xl border border-border bg-black/20 p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Tv size={18} className="text-accent" />
+            <h3 className="text-xs font-semibold uppercase tracking-[0.18em] text-white/80">
+              OLED Display Control
+            </h3>
+          </div>
+          <button
+            type="button"
+            disabled={!isConnected}
+            onClick={() => void sendDisplayClear()}
+            className="flex items-center gap-1.5 rounded-xl border border-danger/30 bg-danger/10 px-3 py-1.5 text-xs font-bold text-danger transition hover:bg-danger/20 focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <Trash2 size={13} />
+            Clear Display
+          </button>
+        </div>
+
+        {/* OLED Screen Mock Preview */}
+        <div className="mt-4 flex flex-col items-center justify-center rounded-2xl border-2 border-cyan-500/40 bg-slate-950 p-4 shadow-[0_0_20px_rgba(6,182,212,0.15)]">
+          <div className="mb-2 flex w-full items-center justify-between border-b border-cyan-900/50 pb-1 font-mono text-[10px] uppercase tracking-wider text-cyan-400/60">
+            <span>SSD1306 OLED (128x64)</span>
+            <span className="flex items-center gap-1">
+              <span className={`h-1.5 w-1.5 rounded-full ${previewContent.text || previewContent.emoji ? "bg-cyan-400 animate-pulse" : "bg-cyan-900"}`} />
+              {previewContent.text || previewContent.emoji ? "ACTIVE" : "IDLE"}
+            </span>
+          </div>
+
+          <div className="flex min-h-20 w-full flex-col items-center justify-center rounded bg-black/80 px-3 py-2 text-center font-mono text-cyan-400">
+            {previewContent.emoji && (
+              <span className="mb-1 text-3xl">{previewContent.emoji}</span>
+            )}
+            {previewContent.text ? (
+              <p className="whitespace-pre-wrap break-all text-xs leading-tight tracking-wide">
+                {previewContent.text}
+              </p>
+            ) : (
+              !previewContent.emoji && (
+                <span className="text-[11px] italic text-cyan-700/80">
+                  Screen blank / Ready for input
+                </span>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Emoji Selector */}
+        <div className="mt-4">
+          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50">
+            Tap Emoji to Send (Sends name to ESP32)
+          </p>
+          <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-11">
+            {SUPPORTED_EMOJIS.map((item) => {
+              const isSelected = selectedEmoji === item.name;
+              return (
+                <button
+                  key={item.name}
+                  type="button"
+                  disabled={!isConnected}
+                  onClick={() => void sendDisplayEmoji(item.name)}
+                  title={`Send emoji: ${item.name}`}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-xl border p-2 text-center transition ${
+                    isSelected
+                      ? "border-accent bg-accent/20 shadow-[0_0_12px_rgba(124,92,255,0.4)]"
+                      : "border-border bg-black/30 hover:border-accent/50 hover:bg-white/5"
+                  } disabled:cursor-not-allowed disabled:opacity-40`}
+                >
+                  <span className="text-xl" role="img" aria-label={item.label}>
+                    {item.char}
+                  </span>
+                  <span className="max-w-full truncate text-[9px] font-semibold text-white/60">
+                    {item.name}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Custom Text Input */}
+        <div className="mt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <label
+              htmlFor="oled-text-input"
+              className="text-[11px] font-semibold uppercase tracking-[0.14em] text-white/50"
+            >
+              Text Input (ASCII support, multi-line)
+            </label>
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-white/40">Line:</span>
+              <select
+                value={displayLine}
+                onChange={(e) => setDisplayLine(Number(e.target.value))}
+                disabled={!isConnected}
+                className="rounded-lg border border-border bg-black/40 px-2 py-0.5 font-mono text-xs text-white focus:border-accent focus:outline-none disabled:opacity-40"
+              >
+                <option value={0}>Line 0</option>
+                <option value={1}>Line 1</option>
+                <option value={2}>Line 2</option>
+                <option value={3}>Line 3</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            <textarea
+              id="oled-text-input"
+              rows={2}
+              value={displayText}
+              onChange={(e) => setDisplayText(e.target.value)}
+              placeholder={"Type message to display (e.g. Robot Ready\nConnected)..."}
+              disabled={!isConnected}
+              className="w-full resize-none rounded-xl border border-border bg-black/40 p-2.5 font-mono text-xs text-white placeholder-white/25 focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+            />
+            <button
+              type="button"
+              disabled={!isConnected || !displayText.trim()}
+              onClick={() => void sendDisplayText()}
+              className="flex flex-col items-center justify-center gap-1 rounded-xl border border-accent bg-accent/20 px-4 font-bold text-accent transition hover:bg-accent/30 focus-visible:outline-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:border-border disabled:bg-white/5 disabled:text-white/30"
+            >
+              <Send size={16} />
+              <span className="text-[10px] uppercase tracking-wider">Send</span>
+            </button>
           </div>
         </div>
       </div>
