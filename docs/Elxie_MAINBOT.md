@@ -7,37 +7,37 @@ ESP32-S3 · matches MAINBOT v3.1 wiring with the v1.2 change applied
 
 ## Pinout Table
 
-| Subsystem                | Signal                  | ESP32-S3 GPIO |
-|--------------------------|-------------------------|---------------|
-| **Motor driver (TB6612FNG)** | STBY                   | 14            |
-|                          | PWMA (motor A speed)    | 18            |
-|                          | AIN1                   | 19            |
-|                          | AIN2                   | 20            |
-|                          | PWMB (motor B speed)    | 21            |
-|                          | BIN1                   | 47            |
-|                          | BIN2                   | 45            |
-| **Sonar (HC-SR04)**      | TRIG                   | 15            |
-|                          | ECHO                   | 16            |
-| **I2C bus**              | SDA                    | 8             |
-|                          | SCL                    | 9             |
-| **Mux (CD4067, IR bank)**| S0                     | 7             |
-|                          | S1                     | 6             |
-|                          | S2                     | 5             |
-|                          | S3                     | 4             |
-|                          | SIG (shared analog in) | 1             |
-| **Touch (TTP223)**       | signal                 | 12            |
-| **Buzzer (passive)**     | PWM out                | 13            |
-| **External NeoPixel strip** | data                 | 10            |
-| **Encoders**             | left                   | 39            |
-|                          | right                  | 40            |
-| **Reserved**             | freed from onboard NeoPixel, unassigned | 48 |
+| Subsystem                    | Signal                                  | ESP32-S3 GPIO |
+| ---------------------------- | --------------------------------------- | ------------- |
+| **Motor driver (TB6612FNG)** | STBY                                    | 14            |
+|                              | PWMA (motor A speed)                    | 18            |
+|                              | AIN1                                    | 19            |
+|                              | AIN2                                    | 20            |
+|                              | PWMB (motor B speed)                    | 21            |
+|                              | BIN1                                    | 47            |
+|                              | BIN2                                    | 48            |
+| **Sonar (HC-SR04)**          | TRIG                                    | 15            |
+|                              | ECHO                                    | 16            |
+| **I2C bus**                  | SDA                                     | 8             |
+|                              | SCL                                     | 9             |
+| **Mux (CD4067, IR bank)**    | S0                                      | 4             |
+|                              | S1                                      | 5             |
+|                              | S2                                      | 6             |
+|                              | S3                                      | 17            |
+|                              | SIG (shared analog in)                  | 1             |
+| **Touch (TTP223)**           | signal                                  | 12            |
+| **Buzzer (passive)**         | PWM out                                 | 13            |
+| **External NeoPixel strip**  | data                                    | 10            |
+| **Encoders**                 | left                                    | 39            |
+|                              | right                                   | 40            |
+| **Reserved**                 | freed from onboard NeoPixel, unassigned | 45            |
 
 ---
 
 ## I2C Device Addresses
 
-- MPU6050 → `0x68`  
-- QMC5883P → `0x2C`  
+- MPU6050 → `0x68`
+- QMC5883P → `0x2C`
 - OLED (SSD1306) → `0x3C`
 
 ---
@@ -47,12 +47,12 @@ ESP32-S3 · matches MAINBOT v3.1 wiring with the v1.2 change applied
 These are CD4067 channel numbers selected via S0-S3, not separate GPIOs.  
 All four channels share the single MUX_SIG analog input (GPIO 1).
 
-| Position       | Mux channel |
-|----------------|-------------|
-| Front-right (FR) | 9         |
-| Front-left (FL)  | 11        |
-| Rear-right (RR)  | 12        |
-| Rear-left (RL)   | 14        |
+| Position         | Mux channel |
+| ---------------- | ----------- |
+| Front-right (FR) | 9           |
+| Front-left (FL)  | 11          |
+| Rear-right (RR)  | 12          |
+| Rear-left (RL)   | 14          |
 
 ⚠️ The full product brief calls for **16 IR channels** (8 front line-sensing array + 4 bottom-edge + 4 side-edge).  
 Currently, only these 4 corner channels are wired. Add the remaining channel numbers once assigned.
@@ -61,12 +61,11 @@ Currently, only these 4 corner channels are wired. Add the remaining channel num
 
 ## Not Yet Wired
 
-- Sound sensor / microphone  
-- Battery-voltage ADC sensing  
+- Sound sensor / microphone
+- Battery-voltage ADC sensing
 
 Both are specified in the product brief but absent from this pin reference.
 
 ---
 
-*Generated from the pin definitions in `Elxie_AP_WebControl_v0.2.ino` / `MAINBOT_test_bench_v1.2.ino`.*
-
+_Generated from the pin definitions in `Elxie_AP_WebControl_v0.2.ino` / `MAINBOT_test_bench_v1.2.ino`._
