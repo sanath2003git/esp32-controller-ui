@@ -2,10 +2,44 @@
 
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
-import { Battery, Bluetooth, Cpu } from "lucide-react";
+import { Bluetooth, Cpu } from "lucide-react";
+import { useState } from "react";
 
 import { useBleContext } from "@/context/BleContext";
 import type { RobotState } from "@/types/robot";
+
+/** Horizontal battery bar indicator */
+function BatteryBar({
+  label,
+  pct,
+  accent,
+}: {
+  label: string;
+  pct: number;
+  accent: "cyan" | "green";
+}) {
+  const color = accent === "cyan" ? "#00e5ff" : "#35e59a";
+  const low = pct < 20;
+  const displayColor = low ? "#ff4d67" : color;
+
+  return (
+    <div className="flex items-center gap-1.5">
+      <span className="w-7 text-right text-[9px] font-bold uppercase tracking-[0.1em] text-white/35">
+        {label}
+      </span>
+      <div className="relative flex h-3.5 w-16 items-center overflow-hidden rounded-sm border border-white/20 bg-black/40">
+        <div
+          className="h-full rounded-[1px] transition-all duration-500"
+          style={{ width: `${pct}%`, background: displayColor, boxShadow: `0 0 6px ${displayColor}88` }}
+        />
+      </div>
+      <div className="h-2 w-1 rounded-r-sm" style={{ background: "rgba(255,255,255,0.2)" }} />
+      <span className="text-[9px] font-bold" style={{ color: displayColor }}>
+        {pct}%
+      </span>
+    </div>
+  );
+}
 
 export default function AppHeader() {
   const { status, deviceInfo, openModal } = useBleContext();
@@ -23,6 +57,10 @@ export default function AppHeader() {
 
   const isConnected = robot.connectionStatus === "connected";
 
+  // Mock battery values — replace with real telemetry when available
+  const robotBattery = 72;
+  const remoteBattery = 45;
+
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-md items-center justify-between px-4">
@@ -35,7 +73,6 @@ export default function AppHeader() {
             <p className="truncate text-sm font-bold">
               {robot.info?.name ?? "No Robot"}
             </p>
-
             <p className="truncate text-[11px] text-white/40">
               {robot.info?.id ?? "Not connected"}
             </p>
@@ -43,21 +80,16 @@ export default function AppHeader() {
         </Link>
 
         <div className="flex shrink-0 items-center gap-2.5">
-          {robot.info && (
-            <div className="flex items-center gap-1.5 text-xs text-white/60">
-              <Battery size={15} />
+          {/* Dual battery indicators */}
+          <div className="flex flex-col gap-1">
+            <BatteryBar label="RC"  pct={remoteBattery} accent="cyan"  />
+            <BatteryBar label="Bot" pct={robotBattery}  accent="green" />
+          </div>
 
-              <span>{robot.info.battery}%</span>
-            </div>
-          )}
-
+          {/* BLE connect button */}
           <button
             type="button"
-            onClick={() => {
-              if (!isConnected) {
-                openModal();
-              }
-            }}
+            onClick={() => { if (!isConnected) openModal(); }}
             className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
               isConnected
                 ? "border-success/30 bg-success/10 text-success cursor-default"
@@ -65,7 +97,6 @@ export default function AppHeader() {
             }`}
           >
             <Bluetooth size={13} />
-
             <span>{isConnected ? "Connected" : status === "connecting" ? "Connecting" : "Offline"}</span>
           </button>
 

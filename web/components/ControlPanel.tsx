@@ -14,7 +14,7 @@ import JoystickController, {
 } from "@/components/JoystickController";
 
 import { useBleContext } from "@/context/BleContext";
-import type { MovementDirection, RgbColor } from "@/types/ble";
+import type { MovementDirection } from "@/types/ble";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
@@ -108,7 +108,7 @@ function ObstacleIndicator({
 export default function ControlPanel({
   mode = "free-ride",
 }: ControlPanelProps) {
-  const { status, telemetry, move, stop, setColor } =
+  const { status, telemetry, move, stop } =
     useBleContext();
 
   const [alertToast, setAlertToast] =
@@ -215,14 +215,6 @@ export default function ControlPanel({
     });
   };
 
-  const sendColor = (color: RgbColor) => {
-    void setColor(color).catch((error: unknown) => {
-      console.error(
-        "[CONTROL PANEL] Color command failed",
-        error,
-      );
-    });
-  };
 
   return (
     <section
@@ -391,36 +383,7 @@ export default function ControlPanel({
           </div>
         </div>
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            RGB Lights
-          </p>
 
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {([
-              ["red", "Red", "bg-danger"],
-              ["green", "Green", "bg-success"],
-              ["blue", "Blue", "bg-accent"],
-              ["off", "Off", "bg-white/30"],
-            ] as const).map(
-              ([color, label, swatchClass]) => (
-                <button
-                  key={color}
-                  type="button"
-                  disabled={!isConnected}
-                  onClick={() => sendColor(color)}
-                  className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-black/20 px-3 text-sm font-bold transition hover:border-primary/50 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={`h-3 w-3 rounded-full ${swatchClass}`}
-                  />
-                  {label}
-                </button>
-              ),
-            )}
-          </div>
-        </div>
       </div>
     </section>
   );
