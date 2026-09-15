@@ -4,4 +4,4 @@ export const BLE_SERVICE_UUID =
 export const BLE_CHARACTERISTIC_UUID =
   "12345678-1234-1234-1234-123456789002";
 
-export const BLE_DEVICE_NAME = "MAINBOT";
+export const BLE_DEVICE_NAME = "Elxie-CQ";

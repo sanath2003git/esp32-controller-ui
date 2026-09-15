@@ -33,6 +33,11 @@ export type MovementDirection =
 
 export type RgbColor = "red" | "green" | "blue" | "off";
 
+import type {
+  ColorQuestResult,
+  ColorQuestStartCommand,
+} from "@/types/colourQuest";
+
 export type MoveCommand = {
   command: "move";
   direction: MovementDirection;
@@ -49,7 +54,11 @@ export type ColorCommand = {
   b: number;
 };
 
-export type RobotCommand = MoveCommand | StopCommand | ColorCommand;
+export type RobotCommand =
+  | MoveCommand
+  | StopCommand
+  | ColorCommand
+  | ColorQuestStartCommand;
 
 export type DeviceInfoMessage = {
   type: "device_info";
@@ -74,7 +83,8 @@ export type ResponseMessage = {
 export type BleMessage =
   | DeviceInfoMessage
   | TelemetryMessage
-  | ResponseMessage;
+  | ResponseMessage
+  | ColorQuestResult;
 
 const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   red: { r: 255, g: 0, b: 0 },
@@ -164,12 +174,26 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     };
   }
 
-  if (
-    value.type === "response" &&
-    (typeof value.status !== "string" || typeof value.command !== "string")
-  ) {
+  if (value.type === "response") {
+    if (
+      value.game === "color-quest" &&
+      typeof value.score === "number" &&
+      Number.isFinite(value.score) &&
+      value.score >= 0 &&
+      value.score <= 1
+    ) {
+      return value as ColorQuestResult;
+    }
+
+    if (
+      typeof value.status === "string" &&
+      typeof value.command === "string"
+    ) {
+      return value as ResponseMessage;
+    }
+
     return null;
   }
 
-  return value.type === "response" ? (value as ResponseMessage) : null;
+  return null;
 }

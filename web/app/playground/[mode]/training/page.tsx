@@ -23,16 +23,15 @@ export default function TrainingPage() {
           <p className="text-sm font-medium text-accent">Training</p>
 
           <h2 className="mt-2 text-3xl font-black tracking-tight">
-            Drive freely
+            How to play?
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-white/50">
-            No timers, no scoring — just get a feel for the robot.
+            Below video gives you an idea of how to play this game!!
           </p>
         </section>
 
         <section className="mt-8">
-          <ControlPanel />
         </section>
       </div>
     </main>

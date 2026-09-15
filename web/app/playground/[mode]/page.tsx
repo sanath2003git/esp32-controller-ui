@@ -37,7 +37,7 @@ export default function ModeHubPage() {
       <SubPageHeader
         title={modeMeta.title}
         subtitle={modeMeta.description}
-        backHref="/"
+        backHref="/playground"
       />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
@@ -47,7 +47,7 @@ export default function ModeHubPage() {
           </p>
 
           <h2 className="mt-2 text-3xl font-black tracking-tight">
-            How do you want to play?
+            Choose what you want do
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-white/50">
@@ -65,7 +65,7 @@ export default function ModeHubPage() {
           <div className="space-y-3">
             <ModeCard
               title="Training"
-              description="Free-form movement controls, no scoring."
+              description="Learn how to play."
               icon="training"
               accent={modeMeta.accent}
               href={`/playground/${modeMeta.slug}/training`}
