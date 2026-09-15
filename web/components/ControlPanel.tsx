@@ -3,14 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   Bot,
   Compass,
   Gauge,
-  OctagonX,
   Send,
   Trash2,
   TriangleAlert,
@@ -19,6 +14,7 @@ import {
 
 import { useBleContext } from "@/context/BleContext";
 import type { DisplayEmojiName, MovementDirection, RgbColor } from "@/types/ble";
+import JoystickController, { type JoystickDirection } from "@/components/JoystickController";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
@@ -117,6 +113,7 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
   const [previewContent, setPreviewContent] = useState<{ text?: string; emoji?: string }>({});
 
   const previousAlerts = useRef({ sudden: false, pit: false });
+  const activeMovementDirection = useRef<MovementDirection | null>(null);
   const isConnected = status === "connected";
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
@@ -165,6 +162,35 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
     void move(direction).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Movement command failed", error);
     });
+  };
+
+  const handleJoystickDirection = ({ dx, dy }: JoystickDirection) => {
+    if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
+      return;
+    }
+
+    const nextDirection: MovementDirection =
+      Math.abs(dy) >= Math.abs(dx)
+        ? dy > 0
+          ? "forward"
+          : "backward"
+        : dx > 0
+          ? "right"
+          : "left";
+
+    if (activeMovementDirection.current === nextDirection) {
+      return;
+    }
+
+    activeMovementDirection.current = nextDirection;
+    sendMove(nextDirection);
+  };
+
+  const handleJoystickRelease = () => {
+    activeMovementDirection.current = null;
+    void stop().catch((error: unknown) =>
+      console.error("[CONTROL PANEL] Stop command failed", error),
+    );
   };
 
   const sendColor = (color: RgbColor) => {
@@ -336,56 +362,12 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
             Navigation
           </p>
-          <div className="mx-auto mt-3 grid max-w-56 grid-cols-3 gap-2">
-            <div />
-            <button
-              type="button"
-              aria-label="Move forward"
+          <div className="mx-auto mt-3 max-w-72">
+            <JoystickController
               disabled={!isConnected}
-              onClick={() => sendMove("forward")}
-              className="control-button"
-            >
-              <ArrowUp size={22} />
-            </button>
-            <div />
-            <button
-              type="button"
-              aria-label="Turn left"
-              disabled={!isConnected}
-              onClick={() => sendMove("left")}
-              className="control-button"
-            >
-              <ArrowLeft size={22} />
-            </button>
-            <button
-              type="button"
-              aria-label="Stop robot"
-              disabled={!isConnected}
-              onClick={() => void stop().catch((error: unknown) => console.error("[CONTROL PANEL] Stop command failed", error))}
-              className="control-button border-danger/35 bg-danger/10 text-danger hover:bg-danger/20"
-            >
-              <OctagonX size={21} />
-            </button>
-            <button
-              type="button"
-              aria-label="Turn right"
-              disabled={!isConnected}
-              onClick={() => sendMove("right")}
-              className="control-button"
-            >
-              <ArrowRight size={22} />
-            </button>
-            <div />
-            <button
-              type="button"
-              aria-label="Move backward"
-              disabled={!isConnected}
-              onClick={() => sendMove("backward")}
-              className="control-button"
-            >
-              <ArrowDown size={22} />
-            </button>
-            <div />
+              onDirectionChange={handleJoystickDirection}
+              onRelease={handleJoystickRelease}
+            />
           </div>
         </div>
 
