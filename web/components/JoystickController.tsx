@@ -115,8 +115,12 @@ export default function JoystickController({
     finishInteraction(event.pointerId);
   };
 
-  const thumbOffsetX = direction.dx * MAX_TRAVEL_RATIO * 100;
-  const thumbOffsetY = -direction.dy * MAX_TRAVEL_RATIO * 100;
+  // `left` and `top` percentages are relative to the full pad diameter, while
+  // `maxTravel` is relative to its radius. Using 100 here doubled the visual
+  // movement: the thumb reached its limit when the finger was only halfway
+  // there. Convert the radius ratio to a diameter percentage instead.
+  const thumbOffsetX = direction.dx * MAX_TRAVEL_RATIO * 50;
+  const thumbOffsetY = -direction.dy * MAX_TRAVEL_RATIO * 50;
 
   return (
     <section
@@ -186,7 +190,7 @@ export default function JoystickController({
               isDragging
                 ? "border-primary bg-primary shadow-[0_0_22px_rgba(124,92,255,0.5)]"
                 : "border-primary/55 bg-surface-light"
-            } ${isDragging ? "transition-none" : "transition-[left,top] duration-[180ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]"}`}
+            } ${isDragging ? "transition-[left,top] duration-75 ease-out" : "transition-[left,top] duration-[180ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]"}`}
             style={{ left: `${50 + thumbOffsetX}%`, top: `${50 + thumbOffsetY}%` }}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${isDragging ? "bg-white" : "bg-primary/80"}`} />
