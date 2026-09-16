@@ -5,15 +5,20 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  Award,
+  BarChart2,
+  Brain,
   CheckCircle2,
+  ChevronRight,
+  Clock,
   Clock3,
   Gamepad2,
   Heart,
   Lightbulb,
   Maximize2,
   Minimize2,
+  Navigation,
   SmilePlus,
+  Star,
   Swords,
   Trophy,
   X,
@@ -133,38 +138,42 @@ const CHALLENGES = [
   {
     id: "colour-quest",
     name: "Colour Quest",
-    icon: Zap,
-    accent: "#00e5ff",
-    done: 4,
+    icon: Gamepad2,
+    accent: "#ffc857",
+    done: 6,
     total: 10,
     score: 320,
+    playTime: null,
   },
   {
     id: "echo-memory",
     name: "Echo Memory",
-    icon: Trophy,
+    icon: Brain,
     accent: "#7c5cff",
     done: 7,
     total: 10,
     score: 580,
+    playTime: "20m",
   },
   {
     id: "driving-pro",
     name: "Driving Pro",
-    icon: Swords,
-    accent: "#35e59a",
-    done: 2,
+    icon: Navigation,
+    accent: "#00e5ff",
+    done: 4,
     total: 10,
-    score: 150,
+    score: 210,
+    playTime: null,
   },
   {
     id: "reflex-dash",
     name: "Reflex Dash",
-    icon: Award,
-    accent: "#ffc857",
-    done: 9,
+    icon: Zap,
+    accent: "#ff4d67",
+    done: 2,
     total: 10,
-    score: 910,
+    score: 150,
+    playTime: null,
   },
 ] as const;
 
@@ -183,7 +192,7 @@ const MOOD_LABELS: Record<ExpressionId, string> = {
   10: "Searching…",
 };
 
-/* ─── Challenge Carousel ──────────────────────────── */
+/* ─── Today's Progress & Carousel ──────────────────────────── */
 function ChallengeCarousel() {
   const [active, setActive] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -192,7 +201,7 @@ function ChallengeCarousel() {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
       setActive((p) => (p + 1) % CHALLENGES.length);
-    }, 3000);
+    }, 4000);
   };
 
   useEffect(() => {
@@ -210,51 +219,143 @@ function ChallengeCarousel() {
   const Icon = ch.icon;
   const pct = Math.round((ch.done / ch.total) * 100);
 
+  // SVG parameters for circular progress
+  const r = 20;
+  const c = 2 * Math.PI * r;
+  const offset = c - (pct / 100) * c;
+
   return (
-    <div className="mt-3 rounded-2xl border border-border bg-black/20 p-4">
-      <div className="flex items-center justify-between">
+    <div className="mt-5 rounded-3xl border border-border bg-black/30 p-4 pb-5">
+      {/* Title Row */}
+      <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon size={15} style={{ color: ch.accent }} />
-          <span
-            className="text-sm font-bold"
-            style={{ color: ch.accent }}
-          >
-            {ch.name}
-          </span>
+          <Trophy size={16} className="text-accent" />
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white">
+            Today&apos;s Progress
+          </p>
         </div>
-        <span className="text-xs text-white/40">
-          {ch.done}/{ch.total} completed
-        </span>
+        <button className="text-[10px] font-semibold text-primary transition hover:text-primary-dark">
+          View All <ChevronRight size={12} className="inline -ml-0.5" />
+        </button>
       </div>
 
-      {/* Progress bar */}
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: ch.accent, boxShadow: `0 0 8px ${ch.accent}88` }}
-        />
-      </div>
+      {/* Sliding Card */}
+      <div className="relative flex items-center justify-between rounded-2xl border border-white/5 bg-white/5 p-3">
+        
+        {/* Left: Icon + Title */}
+        <div 
+          className="flex w-[28%] flex-col items-center justify-center gap-1.5 overflow-hidden rounded-xl border border-white/5 py-2 px-1 text-center"
+          style={{ background: `linear-gradient(135deg, ${ch.accent}33 0%, rgba(0,0,0,0.4) 100%)` }}
+        >
+          <Icon size={20} style={{ color: ch.accent }} />
+          <span className="w-full truncate text-[10px] font-bold text-white">{ch.name}</span>
+        </div>
 
-      <div className="mt-2 flex items-center justify-between text-xs text-white/40">
-        <span>{pct}% done</span>
-        <span className="font-bold text-white">{ch.score} pts</span>
+        {/* Circular Progress */}
+        <div className="relative flex h-12 w-12 shrink-0 items-center justify-center">
+          <svg className="absolute inset-0 h-full w-full -rotate-90">
+            <circle cx="24" cy="24" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="4" />
+            <circle
+              cx="24" cy="24" r={r}
+              fill="none"
+              stroke={ch.accent}
+              strokeWidth="4"
+              strokeDasharray={c}
+              strokeDashoffset={offset}
+              strokeLinecap="round"
+              className="transition-all duration-700 ease-in-out"
+              style={{ filter: `drop-shadow(0 0 4px ${ch.accent}88)` }}
+            />
+          </svg>
+          <span className="text-[10px] font-black text-white">{pct}%</span>
+        </div>
+
+        {/* Text Stats */}
+        <div className="flex flex-col items-center gap-0.5">
+          <p className="text-sm font-bold text-white">{ch.done}/{ch.total}</p>
+          <p className="text-[8px] uppercase tracking-[0.05em] text-white/40">completed</p>
+        </div>
+
+        <div className="flex flex-col items-center gap-0.5">
+          <div className="flex items-center gap-1">
+            <Star size={10} className="text-warning" />
+            <span className="text-sm font-bold text-white">{ch.score}</span>
+          </div>
+          <p className="text-[8px] uppercase tracking-[0.05em] text-white/40">best score</p>
+        </div>
+
+        {/* Play Time (Only shown if space permits or if data exists) */}
+        {ch.playTime && (
+          <div className="hidden sm:flex flex-col items-center gap-0.5">
+            <div className="flex items-center gap-1">
+              <Clock size={10} className="text-accent" />
+              <span className="text-sm font-bold text-white">{ch.playTime}</span>
+            </div>
+            <p className="text-[8px] uppercase tracking-[0.05em] text-white/40">play time</p>
+          </div>
+        )}
+
+        {/* Right Arrow Button */}
+        <button
+          onClick={() => goTo((active + 1) % CHALLENGES.length)}
+          aria-label="Next game"
+          className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 active:scale-95"
+        >
+          <ChevronRight size={14} />
+        </button>
       </div>
 
       {/* Dots */}
-      <div className="mt-3 flex justify-center gap-2">
+      <div className="mt-3 mb-5 flex justify-center gap-1.5">
         {CHALLENGES.map((c, i) => (
           <button
             key={c.id}
             type="button"
             aria-label={`Go to ${c.name}`}
             onClick={() => goTo(i)}
-            className="h-1.5 rounded-full transition-all duration-300"
+            className="h-1 rounded-full transition-all duration-300"
             style={{
-              width: i === active ? "20px" : "6px",
+              width: i === active ? "16px" : "6px",
               background: i === active ? ch.accent : "rgba(255,255,255,0.2)",
             }}
           />
         ))}
+      </div>
+
+      {/* Bottom Summary (2x2 grid for mobile) */}
+      <div className="mt-2 grid grid-cols-2 gap-3 border-t border-border/60 pt-4 sm:grid-cols-4">
+        {/* Total Stars */}
+        <div className="flex items-center gap-2.5">
+          <Star size={20} className="shrink-0 text-warning drop-shadow-[0_0_6px_rgba(255,200,87,0.5)]" />
+          <div className="flex flex-col">
+            <span className="text-sm font-black leading-tight text-white">12</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Total Stars<br />earned today</span>
+          </div>
+        </div>
+        {/* Games Played */}
+        <div className="flex items-center gap-2.5">
+          <Gamepad2 size={20} className="shrink-0 text-[#7c5cff] drop-shadow-[0_0_6px_rgba(124,92,255,0.5)]" />
+          <div className="flex flex-col">
+            <span className="text-sm font-black leading-tight text-white">4/4</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Games Played<br />today</span>
+          </div>
+        </div>
+        {/* Play Time */}
+        <div className="flex items-center gap-2.5">
+          <Clock size={20} className="shrink-0 text-accent drop-shadow-[0_0_6px_rgba(0,229,255,0.5)]" />
+          <div className="flex flex-col">
+            <span className="text-sm font-black leading-tight text-white">20m</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Total Play Time<br />today</span>
+          </div>
+        </div>
+        {/* Best Score */}
+        <div className="flex items-center gap-2.5">
+          <BarChart2 size={20} className="shrink-0 text-success drop-shadow-[0_0_6px_rgba(53,229,154,0.5)]" />
+          <div className="flex flex-col">
+            <span className="text-sm font-black leading-tight text-white">1,250</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Best Score<br />overall</span>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -383,7 +484,7 @@ export default function HomeDashboard() {
                     ? "bg-success shadow-[0_0_6px_rgba(53,229,154,0.9)]"
                     : status === "connecting"
                       ? "bg-warning animate-pulse shadow-[0_0_6px_rgba(255,200,87,0.7)]"
-                      : "bg-white/20"
+                      : "bg-danger shadow-[0_0_6px_rgba(255,77,103,0.9)]"
                 }`}
               />
             </button>
@@ -578,66 +679,8 @@ export default function HomeDashboard() {
         )}
       </div>
 
-      {/* ── Today's Progress ── */}
-      <div className="mt-5">
-        <div className="flex items-center gap-2">
-          <Trophy size={16} className="text-accent" />
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            Today&apos;s Progress
-          </p>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          {/* Daily Challenge */}
-          <div className="rounded-2xl border border-border bg-black/20 p-4">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-success" />
-              <span className="text-xs text-white/45">Daily Challenge</span>
-            </div>
-            <p className="mt-2 text-2xl font-black text-white">
-              3<span className="text-sm text-white/35">/10</span>
-            </p>
-            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
-              <div className="h-full rounded-full bg-success" style={{ width: "30%" }} />
-            </div>
-          </div>
-
-          {/* Total Stars */}
-          <div className="rounded-2xl border border-border bg-black/20 p-4">
-            <div className="flex items-center gap-2">
-              <Award size={16} className="text-warning" />
-              <span className="text-xs text-white/45">Total Stars</span>
-            </div>
-            <p className="mt-2 text-2xl font-black text-white">12</p>
-            <p className="mt-1 text-xs text-white/35">Stars earned</p>
-          </div>
-
-          {/* Best Score */}
-          <div className="rounded-2xl border border-border bg-black/20 p-4">
-            <div className="flex items-center gap-2">
-              <Trophy size={16} className="text-accent" />
-              <span className="text-xs text-white/45">Best Score</span>
-            </div>
-            <p className="mt-2 text-2xl font-black text-white">1,250</p>
-            <p className="mt-1 text-xs text-white/35">Personal best</p>
-          </div>
-
-          {/* Daily Play Time */}
-          <div className="rounded-2xl border border-border bg-black/20 p-4">
-            <div className="flex items-center gap-2">
-              <Clock3 size={16} className="text-accent" />
-              <span className="text-xs text-white/45">Play Time</span>
-            </div>
-            <p className="mt-2 text-2xl font-black text-white">
-              20<span className="text-sm text-white/35">m</span>
-            </p>
-            <p className="mt-1 text-xs text-white/35">of 30m today</p>
-          </div>
-        </div>
-
-        {/* Challenge Carousel */}
-        <ChallengeCarousel />
-      </div>
+      {/* ── Today's Progress (Sliding Card Layout) ── */}
+      <ChallengeCarousel />
 
       {/* Color wheel modal — portalled to body */}
       {colorWheelOpen && (
