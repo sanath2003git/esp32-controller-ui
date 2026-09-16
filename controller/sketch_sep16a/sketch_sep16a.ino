@@ -89,10 +89,10 @@
 #define PIN_SCL 9
 
 // Mux (CD4067)
-#define PIN_MUX_S0 7
-#define PIN_MUX_S1 6
-#define PIN_MUX_S2 5
-#define PIN_MUX_S3 4
+#define PIN_MUX_S0 4
+#define PIN_MUX_S1 5
+#define PIN_MUX_S2 6
+#define PIN_MUX_S3 17
 #define PIN_MUX_SIG 1
 
 // Touch (TTP223)
@@ -128,12 +128,17 @@ bool oledPresent = false;
 // IR MUX CHANNELS
 // ========================================
 
-#define MUX_CH_FRONT_RIGHT 9
-#define MUX_CH_FRONT_LEFT 11
-#define MUX_CH_REAR_RIGHT 12
-#define MUX_CH_REAR_LEFT 14
+// Corner sensors used for obstacle telemetry.
+// C1 = corner-front-left  -> CH9
+// C2 = corner-front-right -> CH15
+// C3 = corner-rear-left   -> CH11
+// C4 = corner-rear-right  -> CH14
+#define MUX_CH_C1 9
+#define MUX_CH_C2 15
+#define MUX_CH_C3 11
+#define MUX_CH_C4 14
 
-#define IR_OBSTACLE_THRESHOLD 2000
+#define IR_OBSTACLE_THRESHOLD 4000
 
 // ========================================
 // EXTERNAL NEOPIXEL STRIP
@@ -1383,17 +1388,19 @@ void sendLiveTelemetry() {
   long frontCm = readSonarCm();
   telemetry["distance"]["front"] = (frontCm < 0) ? -1 : frontCm;
 
+  // Corner IR sensors only.
+  // Obstacle is detected when the ADC value drops below 4000.
   telemetry["obstacle"]["frontLeft"] =
-      readMuxChannel(MUX_CH_FRONT_LEFT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_C1) < IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["frontRight"] =
-      readMuxChannel(MUX_CH_FRONT_RIGHT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_C2) < IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["rearLeft"] =
-      readMuxChannel(MUX_CH_REAR_LEFT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_C3) < IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["rearRight"] =
-      readMuxChannel(MUX_CH_REAR_RIGHT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_C4) < IR_OBSTACLE_THRESHOLD;
 
   telemetry["motion"]["sudden"] = detectSuddenMotion();
   telemetry["pit"]["detected"] = false;
