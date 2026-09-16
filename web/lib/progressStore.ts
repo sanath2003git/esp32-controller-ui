@@ -10,6 +10,33 @@ import {
 import type { LevelProgress, UserGameProgressResponse } from "@/types/colourQuest";
 
 const LOCAL_STORAGE_KEY = "robotoy_color_quest_progress_v1";
+const LOCAL_STORAGE_TRUST_KEY = "robotoy_trust_v1";
+
+export function getTrustLevel(): number {
+  if (typeof window === "undefined") return 50;
+  try {
+    const raw = localStorage.getItem(LOCAL_STORAGE_TRUST_KEY);
+    if (!raw) return 50;
+    const val = parseInt(raw, 10);
+    return isNaN(val) ? 50 : Math.min(100, Math.max(0, val));
+  } catch {
+    return 50;
+  }
+}
+
+export function incrementTrustLevel(amount: number): void {
+  if (typeof window === "undefined") return;
+  try {
+    const current = getTrustLevel();
+    const newLevel = Math.min(100, Math.max(0, current + amount));
+    localStorage.setItem(LOCAL_STORAGE_TRUST_KEY, newLevel.toString());
+    
+    // Dispatch custom event to notify UI components
+    window.dispatchEvent(new CustomEvent("trustLevelChanged", { detail: newLevel }));
+  } catch (err) {
+    console.warn("[PROGRESS STORE] Trust Level write failed:", err);
+  }
+}
 
 export function getInitialProgressMap(): Record<number, LevelProgress> {
   const map: Record<number, LevelProgress> = {};
@@ -189,6 +216,10 @@ export async function submitAndPersistLevelResult(
   writeLocalProgress(localMap);
   const isNextUnlocked = isLevelUnlocked(level + 1, localMap);
   const progressInfo = calculateGameProgress(localMap);
+  
+  if (awardedStars >= 2) {
+    incrementTrustLevel(5);
+  }
 
   // 2. Submit to API asynchronously
   try {

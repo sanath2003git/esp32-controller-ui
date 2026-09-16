@@ -21,7 +21,7 @@ import {
 
 import { useBleContext } from "@/context/BleContext";
 import ColorWheelModal from "@/components/ColorWheelModal";
-import { fetchAndSyncProgress } from "@/lib/progressStore";
+import { fetchAndSyncProgress, getTrustLevel, incrementTrustLevel } from "@/lib/progressStore";
 
 /* ─── Trust tips ──────────────────────────────────── */
 const TRUST_TIPS = [
@@ -379,7 +379,7 @@ function ChallengeCarousel() {
 
 /* ─── Main component ──────────────────────────────── */
 export default function HomeDashboard() {
-  const { status, send, openModal } = useBleContext();
+  const { status, send, openModal, lastMessage } = useBleContext();
   const router = useRouter();
 
   const isConnected = status === "connected";
@@ -391,6 +391,32 @@ export default function HomeDashboard() {
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [petFullscreen, setPetFullscreen] = useState(false);
   const [trustOpen, setTrustOpen] = useState(false);
+  
+  const [trustLevel, setTrustLevel] = useState(50);
+
+  // Initialize and listen for trust changes
+  useEffect(() => {
+    setTrustLevel(getTrustLevel());
+    
+    const onTrustChange = (e: Event) => {
+      const ce = e as CustomEvent<number>;
+      setTrustLevel(ce.detail);
+    };
+    window.addEventListener("trustLevelChanged", onTrustChange);
+    return () => window.removeEventListener("trustLevelChanged", onTrustChange);
+  }, []);
+
+  // Listen for BLE hold events (throttled to 1 per second)
+  const lastHoldTimeRef = useRef<number>(0);
+  useEffect(() => {
+    if (lastMessage?.type === "telemetry" && lastMessage.touch?.event === "hold") {
+      const now = Date.now();
+      if (now - lastHoldTimeRef.current > 1000) {
+        lastHoldTimeRef.current = now;
+        incrementTrustLevel(1);
+      }
+    }
+  }, [lastMessage]);
 
   /* Auto-switch expression based on connection status */
   useEffect(() => {
@@ -544,7 +570,7 @@ export default function HomeDashboard() {
 
               {/* Trust Level button */}
               {(() => {
-                const pct = 58;
+                const pct = trustLevel;
                 const tier =
                   pct >= 67
                     ? { label: "High Trust",   color: "#35e59a" }
@@ -718,7 +744,7 @@ export default function HomeDashboard() {
 
       {/* Trust modal — portalled to body, rendered at section level so close btn works */}
       {trustOpen && (() => {
-        const pct = 58;
+        const pct = trustLevel;
         const tier =
           pct >= 67
             ? { label: "High Trust",   color: "#35e59a" }
