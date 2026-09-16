@@ -366,11 +366,24 @@ export default function HomeDashboard() {
   const { status, send, openModal } = useBleContext();
   const router = useRouter();
 
-  const [selectedExpression, setSelectedExpression] = useState<ExpressionId>(0);
+  const isConnected = status === "connected";
+
+  const [selectedExpression, setSelectedExpression] = useState<ExpressionId>(
+    isConnected ? 0 : 9
+  );
   const [expressionAnimating, setExpressionAnimating] = useState(false);
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [petFullscreen, setPetFullscreen] = useState(false);
   const [trustOpen, setTrustOpen] = useState(false);
+
+  /* Auto-switch expression based on connection status */
+  useEffect(() => {
+    if (isConnected) {
+      setSelectedExpression(0); // Happy
+    } else {
+      setSelectedExpression(9); // Sleep
+    }
+  }, [isConnected]);
 
   /* Hide/show AppHeader + BottomNav during fullscreen */
   useEffect(() => {
@@ -381,8 +394,6 @@ export default function HomeDashboard() {
     }
     return () => document.body.classList.remove("pet-fullscreen");
   }, [petFullscreen]);
-
-  const isConnected = status === "connected";
 
   const sendRgb = (r: number, g: number, b: number) => {
     void send({ command: "color", r, g, b }).catch((err: unknown) => {
