@@ -1,22 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+
 import {
-  ArrowDown,
-  ArrowLeft,
-  ArrowRight,
-  ArrowUp,
   Bot,
   Compass,
   Gauge,
-  OctagonX,
-  TriangleAlert,
-  Volume2,
+  Lightbulb,
   Target,
+  TriangleAlert,
 } from "lucide-react";
 
+import JoystickController, {
+  type JoystickDirection,
+} from "@/components/JoystickController";
+import ColorWheelModal from "@/components/ColorWheelModal";
+
 import { useBleContext } from "@/context/BleContext";
-import type { MovementDirection, RgbColor } from "@/types/ble";
+import type { MovementDirection } from "@/types/ble";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
@@ -34,7 +35,11 @@ type ControlPanelProps = {
   onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
 };
 
-type ObstaclePosition = "front-left" | "front-right" | "rear-left" | "rear-right";
+type ObstaclePosition =
+  | "front-left"
+  | "front-right"
+  | "rear-left"
+  | "rear-right";
 
 type ObstacleIndicatorProps = {
   label: string;
@@ -66,8 +71,15 @@ function ObstacleIndicator({
   position,
   detected,
 }: ObstacleIndicatorProps) {
-  const stateLabel = detected === null ? "Waiting" : detected ? "Obstacle" : "Clear";
+  const stateLabel =
+    detected === null
+      ? "Waiting"
+      : detected
+        ? "Obstacle"
+        : "Clear";
+
   const hasObstacle = detected === true;
+
   const stateClass =
     detected === null
       ? "border-white/15 bg-white/5 text-white/45"
@@ -89,14 +101,18 @@ function ObstacleIndicator({
           hasObstacle ? "animate-pulse" : ""
         } ${stateClass}`}
       />
+
       <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">
         {label}
       </span>
+
       {hasObstacle && (
         <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.1em] text-white">
-          <TriangleAlert size={13} aria-hidden="true" /> Obstacle
+          <TriangleAlert size={13} aria-hidden="true" />
+          Obstacle
         </span>
       )}
+
       <span className="sr-only">{stateLabel}</span>
     </div>
   );
@@ -109,77 +125,158 @@ export default function ControlPanel({
   activeTask,
   onInputDirection,
 }: ControlPanelProps) {
-  const { status, telemetry, send, move, stop, setColor, beep } = useBleContext();
-  const [alertToast, setAlertToast] = useState<AlertToast | null>(null);
-  const previousAlerts = useRef({ sudden: false, pit: false });
+  const { status, telemetry, move, stop, send } =
+    useBleContext();
+
+  const [colorWheelOpen, setColorWheelOpen] = useState(false);
+  const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
+
+  const [alertToast, setAlertToast] =
+    useState<AlertToast | null>(null);
+
+  const previousAlerts = useRef({
+    sudden: false,
+    pit: false,
+  });
+
+  const activeMovementDirection =
+    useRef<MovementDirection | null>(null);
+
   const isConnected = status === "connected";
+  const isColorQuestActive =
+    (game === "color-quest" || mode === "challenge") && isGameActive;
+
+  const dirToRegionMap: Record<
+    "up" | "right" | "down" | "left",
+    "front" | "right" | "back" | "left"
+  > = {
+    up: "front",
+    right: "right",
+    down: "back",
+    left: "left",
+  };
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
-
-  const isColorQuestActive = (game === "color-quest" || mode === "challenge") && isGameActive;
 
   useEffect(() => {
     const sudden = telemetry?.motion.sudden ?? false;
     const pit = telemetry?.pit.detected ?? false;
 
     if (sudden && !previousAlerts.current.sudden) {
-      setAlertToast({ id: Date.now(), message: "Sudden motion detected", tone: "warning" });
+      setAlertToast({
+        id: Date.now(),
+        message: "Sudden motion detected",
+        tone: "warning",
+      });
     } else if (pit && !previousAlerts.current.pit) {
-      setAlertToast({ id: Date.now(), message: "Pit detected ahead", tone: "danger" });
+      setAlertToast({
+        id: Date.now(),
+        message: "Pit detected ahead",
+        tone: "danger",
+      });
     }
 
     previousAlerts.current = { sudden, pit };
-  }, [telemetry?.motion.sudden, telemetry?.pit.detected]);
+  }, [
+    telemetry?.motion.sudden,
+    telemetry?.pit.detected,
+  ]);
 
   useEffect(() => {
     if (!alertToast) return;
 
     const timeoutId = window.setTimeout(() => {
-      setAlertToast((current) => (current?.id === alertToast.id ? null : current));
+      setAlertToast((current) =>
+        current?.id === alertToast.id ? null : current,
+      );
     }, 3_000);
 
     return () => window.clearTimeout(timeoutId);
   }, [alertToast]);
 
-  const dirToRegionMap: Record<"up" | "right" | "down" | "left", "front" | "right" | "back" | "left"> = {
-    up: "front",
-    right: "right",
-    down: "back",
-    left: "left",
+  const sendMove = (direction: MovementDirection) => {
+    void move(direction).catch((error: unknown) => {
+      console.error(
+        "[CONTROL PANEL] Movement command failed",
+        error,
+      );
+    });
   };
 
-  const handleNavigationClick = (
-    dir: "up" | "right" | "down" | "left",
-    moveDir: MovementDirection
-  ) => {
-    if (!isConnected) return;
+  const handleJoystickDirection = ({
+    dx,
+    dy,
+  }: JoystickDirection) => {
+    if (
+      Math.abs(dx) < 0.08 &&
+      Math.abs(dy) < 0.08
+    ) {
+      return;
+    }
 
-    // Specifically for Colour Quest game when active, emit {"command":"input","region":...}
+    const nextDirection: MovementDirection =
+      Math.abs(dy) >= Math.abs(dx)
+        ? dy > 0
+          ? "forward"
+          : "backward"
+        : dx > 0
+          ? "right"
+          : "left";
+
+    if (
+      activeMovementDirection.current ===
+      nextDirection
+    ) {
+      return;
+    }
+
+    activeMovementDirection.current =
+      nextDirection;
+
     if (isColorQuestActive) {
-      const region = dirToRegionMap[dir];
-      void send({ command: "input", region }).catch((error: unknown) => {
-        console.error("[CONTROL PANEL] Colour Quest region input command failed", error);
-      });
-      onInputDirection?.(dir);
-    } else {
-      // For all other games/modes, send standard movement command
-      void move(moveDir).catch((error: unknown) => {
-        console.error("[CONTROL PANEL] Movement command failed", error);
+      const inputDirection =
+        nextDirection === "forward"
+          ? "up"
+          : nextDirection === "backward"
+            ? "down"
+            : nextDirection;
+
+      void send({ command: "input", region: dirToRegionMap[inputDirection] }).catch(
+        (error: unknown) => {
+          console.error("[CONTROL PANEL] Colour Quest region input command failed", error);
+        },
+      );
+      onInputDirection?.(inputDirection);
+      return;
+    }
+
+    sendMove(nextDirection);
+  };
+
+  const handleJoystickRelease = () => {
+    activeMovementDirection.current = null;
+
+    if (!isColorQuestActive) {
+      void stop().catch((error: unknown) => {
+        console.error(
+          "[CONTROL PANEL] Stop command failed",
+          error,
+        );
       });
     }
   };
 
-  const sendColor = (color: RgbColor) => {
-    void setColor(color).catch((error: unknown) => {
-      console.error("[CONTROL PANEL] Color command failed", error);
+  const sendRgb = (r: number, g: number, b: number) => {
+    setLedColor({ r, g, b });
+    void send({ command: "color", r, g, b }).catch((err: unknown) => {
+      console.error("[CONTROL PANEL] Color send failed", err);
     });
   };
 
-  const handleBeepTest = () => {
-    void beep(2000, 150).catch((error: unknown) => {
-      console.error("[CONTROL PANEL] Beep command failed", error);
-    });
-  };
+  const ledHex = ledColor
+    ? `#${[ledColor.r, ledColor.g, ledColor.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+    : null;
+
 
   return (
     <section
@@ -191,11 +288,6 @@ export default function ControlPanel({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
             Robo Control
           </p>
-          {isColorQuestActive && (
-            <span className="text-[10px] font-bold uppercase text-emerald-400">
-              Colour Quest Mode Active
-            </span>
-          )}
         </div>
 
         <div
@@ -205,22 +297,186 @@ export default function ControlPanel({
               : "border-white/10 bg-white/5 text-white/45"
           }`}
         >
-          {isConnected ? "Live" : status === "connecting" ? "Connecting" : "Offline"}
+          {isConnected
+            ? "Live"
+            : status === "connecting"
+              ? "Connecting"
+              : "Offline"}
+        </div>
+      </div>
+{/* LED Color section */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+            LED Color
+          </p>
+
+          <button
+            type="button"
+            id="control-panel-color-wheel-btn"
+            disabled={!isConnected}
+            aria-label="Open robot LED color picker"
+            onClick={() => setColorWheelOpen(true)}
+            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+              isConnected
+                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
+                : "cursor-not-allowed border-border bg-black/10 opacity-40"
+            }`}
+          >
+            {/* Mini color wheel SVG icon */}
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
+              <defs>
+                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="white" stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#ff0000" />
+                  <stop offset="16%"  stopColor="#ffff00" />
+                  <stop offset="33%"  stopColor="#00ff00" />
+                  <stop offset="50%"  stopColor="#00ffff" />
+                  <stop offset="66%"  stopColor="#0000ff" />
+                  <stop offset="83%"  stopColor="#ff00ff" />
+                  <stop offset="100%" stopColor="#ff0000" />
+                </linearGradient>
+              </defs>
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
+              <circle cx="8" cy="8" r="3" fill="#080b14" />
+            </svg>
+
+            <div className="flex flex-1 items-center justify-between">
+              <span className="text-sm font-semibold text-white/70">
+                {ledHex ? ledHex.toUpperCase() : "Not set"}
+              </span>
+              <div
+                className="h-5 w-5 rounded-full border border-white/15"
+                style={{
+                  background: ledHex ?? "rgba(255,255,255,0.08)",
+                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
+                }}
+              />
+            </div>
+
+            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
+          </button>
+        </div>
+
+      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
+        <div className="flex items-center justify-between text-xs text-white/45">
+          <span className="flex items-center gap-1.5">
+            <Compass
+              size={14}
+              className="text-accent"
+            />
+            Heading
+          </span>
+
+          <strong className="font-mono text-sm text-white">
+            {heading === null
+              ? "--°"
+              : `${Math.round(heading)}°`}
+          </strong>
+        </div>
+
+        <div className="relative mx-auto mt-4 h-64 max-w-72">
+          <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+            Front
+          </p>
+
+          <ObstacleIndicator
+            label="FL"
+            position="front-left"
+            detected={obstacle?.frontLeft ?? null}
+          />
+
+          <ObstacleIndicator
+            label="FR"
+            position="front-right"
+            detected={obstacle?.frontRight ?? null}
+          />
+
+          <ObstacleIndicator
+            label="RL"
+            position="rear-left"
+            detected={obstacle?.rearLeft ?? null}
+          />
+
+          <ObstacleIndicator
+            label="RR"
+            position="rear-right"
+            detected={obstacle?.rearRight ?? null}
+          />
+
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div
+              aria-label={
+                heading === null
+                  ? "Robot heading unavailable"
+                  : `Robot heading ${Math.round(
+                      heading,
+                    )} degrees`
+              }
+              className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
+              style={{
+                transform: `rotate(${heading ?? 0}deg)`,
+              }}
+            >
+              <div className="absolute top-3 h-0 w-0 border-x-[10px] border-b-[16px] border-x-transparent border-b-accent" />
+
+              <Bot
+                size={64}
+                strokeWidth={1.65}
+                className="text-primary"
+              />
+            </div>
+          </div>
+
+          <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+            Rear
+          </p>
+        </div>
+
+        <div className="mt-2 flex items-center justify-center gap-2 text-center">
+          <Gauge
+            size={16}
+            className="text-accent"
+          />
+
+          <span className="text-sm text-white/55">
+            Front distance
+          </span>
+
+          <strong className="font-mono text-lg text-white">
+            {telemetry?.distance.front ===
+                undefined ||
+            telemetry.distance.front === null
+              ? "-- cm"
+              : `${telemetry.distance.front} cm`}
+          </strong>
         </div>
       </div>
 
-      {!isConnected && (
-        <p className="mt-4 rounded-2xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-          {status === "connecting"
-            ? "Connecting to robot. Controls will unlock when ready."
-            : "Robot disconnected. Connect to unlock controls."}
-        </p>
+      {alertToast && (
+        <div
+          className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2"
+          role="alert"
+        >
+          <p
+            className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${
+              alertToast.tone === "warning"
+                ? "border-warning/35 bg-warning/90 text-black"
+                : "border-danger/35 bg-danger/90 text-white"
+            }`}
+          >
+            <TriangleAlert size={18} />
+            {alertToast.message}
+          </p>
+        </div>
       )}
 
-      {/* Colour Quest Active Task HUD Overlay */}
       {isColorQuestActive && activeTask && (
         <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/10 p-3.5 text-center">
-          <div className="flex items-center justify-between text-xs text-primary font-bold">
+          <div className="flex items-center justify-between text-xs font-bold text-primary">
             <span className="flex items-center gap-1">
               <Target size={14} /> Task {activeTask.index + 1} / 10
             </span>
@@ -240,183 +496,41 @@ export default function ControlPanel({
         </div>
       )}
 
-      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
-        <div className="flex items-center justify-between text-xs text-white/45">
-          <span className="flex items-center gap-1.5">
-            <Compass size={14} className="text-accent" /> Heading
-          </span>
-          <strong className="font-mono text-sm text-white">
-            {heading === null ? "--°" : `${Math.round(heading)}°`}
-          </strong>
-        </div>
-
-        <div className="relative mx-auto mt-4 h-64 max-w-72">
-          <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
-            Front
-          </p>
-
-          <ObstacleIndicator
-            label="FL"
-            position="front-left"
-            detected={obstacle?.frontLeft ?? null}
-          />
-          <ObstacleIndicator
-            label="FR"
-            position="front-right"
-            detected={obstacle?.frontRight ?? null}
-          />
-          <ObstacleIndicator
-            label="RL"
-            position="rear-left"
-            detected={obstacle?.rearLeft ?? null}
-          />
-          <ObstacleIndicator
-            label="RR"
-            position="rear-right"
-            detected={obstacle?.rearRight ?? null}
-          />
-
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div
-              aria-label={heading === null ? "Robot heading unavailable" : `Robot heading ${Math.round(heading)} degrees`}
-              className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
-              style={{ transform: `rotate(${heading ?? 0}deg)` }}
-            >
-              <div className="absolute top-3 h-0 w-0 border-x-[10px] border-b-[16px] border-x-transparent border-b-accent" />
-              <Bot size={64} strokeWidth={1.65} className="text-primary" />
-            </div>
-          </div>
-
-          <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
-            Rear
-          </p>
-        </div>
-
-        <div className="mt-2 flex items-center justify-center gap-2 text-center">
-          <Gauge size={16} className="text-accent" />
-          <span className="text-sm text-white/55">Front distance</span>
-          <strong className="font-mono text-lg text-white">
-            {telemetry?.distance.front === undefined || telemetry.distance.front === null
-              ? "-- cm"
-              : `${telemetry.distance.front} cm`}
-          </strong>
-        </div>
-      </div>
-
-      {alertToast && (
-        <div className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2" role="alert">
-          <p
-            className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${
-              alertToast.tone === "warning"
-                ? "border-warning/35 bg-warning/90 text-black"
-                : "border-danger/35 bg-danger/90 text-white"
-            }`}
-          >
-            <TriangleAlert size={18} /> {alertToast.message}
-          </p>
-        </div>
-      )}
-
-      <div className="mt-5 grid gap-5 sm:grid-cols-2">
+      <div className="mt-5 space-y-5">
         <div>
           <div className="flex items-center justify-between">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
               Navigation
             </p>
             {isColorQuestActive && (
-              <span className="text-[10px] font-bold text-accent uppercase">
-                Sending Task Input
+              <span className="text-[10px] font-bold uppercase text-accent">
+                Sending task input
               </span>
             )}
           </div>
 
-          <div className="mx-auto mt-3 grid max-w-56 grid-cols-3 gap-2">
-            <div />
-            <button
-              type="button"
-              aria-label="Move forward or Up input"
+          <div className="mx-auto mt-3 max-w-72">
+            <JoystickController
               disabled={!isConnected}
-              onClick={() => handleNavigationClick("up", "forward")}
-              className="control-button"
-            >
-              <ArrowUp size={22} />
-            </button>
-            <div />
-            <button
-              type="button"
-              aria-label="Turn left or Left input"
-              disabled={!isConnected}
-              onClick={() => handleNavigationClick("left", "left")}
-              className="control-button"
-            >
-              <ArrowLeft size={22} />
-            </button>
-            <button
-              type="button"
-              aria-label="Stop robot"
-              disabled={!isConnected}
-              onClick={() => void stop().catch((error: unknown) => console.error("[CONTROL PANEL] Stop command failed", error))}
-              className="control-button border-danger/35 bg-danger/10 text-danger hover:bg-danger/20"
-            >
-              <OctagonX size={21} />
-            </button>
-            <button
-              type="button"
-              aria-label="Turn right or Right input"
-              disabled={!isConnected}
-              onClick={() => handleNavigationClick("right", "right")}
-              className="control-button"
-            >
-              <ArrowRight size={22} />
-            </button>
-            <div />
-            <button
-              type="button"
-              aria-label="Move backward or Down input"
-              disabled={!isConnected}
-              onClick={() => handleNavigationClick("down", "backward")}
-              className="control-button"
-            >
-              <ArrowDown size={22} />
-            </button>
-            <div />
+              onDirectionChange={
+                handleJoystickDirection
+              }
+              onRelease={
+                handleJoystickRelease
+              }
+            />
           </div>
         </div>
 
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            RGB & Sound Test
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {([
-              ["red", "Red", "bg-danger"],
-              ["green", "Green", "bg-success"],
-              ["blue", "Blue", "bg-accent"],
-              ["off", "Off", "bg-white/30"],
-            ] as const).map(([color, label, swatchClass]) => (
-              <button
-                key={color}
-                type="button"
-                disabled={!isConnected}
-                onClick={() => sendColor(color)}
-                className="flex min-h-12 items-center gap-2 rounded-xl border border-border bg-black/20 px-3 text-sm font-bold transition hover:border-primary/50 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <span aria-hidden="true" className={`h-3 w-3 rounded-full ${swatchClass}`} />
-                {label}
-              </button>
-            ))}
-
-            <button
-              type="button"
-              disabled={!isConnected}
-              onClick={handleBeepTest}
-              className="col-span-2 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              <Volume2 size={16} /> Test Buzzer (Beep)
-            </button>
-          </div>
-        </div>
       </div>
+
+      {/* Color wheel modal */}
+      {colorWheelOpen && (
+        <ColorWheelModal
+          onClose={() => setColorWheelOpen(false)}
+          sendRgb={sendRgb}
+        />
+      )}
     </section>
   );
 }
