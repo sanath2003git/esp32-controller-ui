@@ -258,14 +258,63 @@ export default function ControlPanel({
               : "Offline"}
         </div>
       </div>
+{/* LED Color section */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+            LED Color
+          </p>
 
-      {!isConnected && (
-        <p className="mt-4 rounded-2xl border border-warning/25 bg-warning/10 px-4 py-3 text-sm text-warning">
-          {status === "connecting"
-            ? "Connecting to robot. Controls will unlock when ready."
-            : "Robot disconnected. Connect to unlock controls."}
-        </p>
-      )}
+          <button
+            type="button"
+            id="control-panel-color-wheel-btn"
+            disabled={!isConnected}
+            aria-label="Open robot LED color picker"
+            onClick={() => setColorWheelOpen(true)}
+            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+              isConnected
+                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
+                : "cursor-not-allowed border-border bg-black/10 opacity-40"
+            }`}
+          >
+            {/* Mini color wheel SVG icon */}
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
+              <defs>
+                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="white" stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#ff0000" />
+                  <stop offset="16%"  stopColor="#ffff00" />
+                  <stop offset="33%"  stopColor="#00ff00" />
+                  <stop offset="50%"  stopColor="#00ffff" />
+                  <stop offset="66%"  stopColor="#0000ff" />
+                  <stop offset="83%"  stopColor="#ff00ff" />
+                  <stop offset="100%" stopColor="#ff0000" />
+                </linearGradient>
+              </defs>
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
+              <circle cx="8" cy="8" r="3" fill="#080b14" />
+            </svg>
+
+            <div className="flex flex-1 items-center justify-between">
+              <span className="text-sm font-semibold text-white/70">
+                {ledHex ? ledHex.toUpperCase() : "Not set"}
+              </span>
+              <div
+                className="h-5 w-5 rounded-full border border-white/15"
+                style={{
+                  background: ledHex ?? "rgba(255,255,255,0.08)",
+                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
+                }}
+              />
+            </div>
+
+            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
+          </button>
+        </div>
+      
 
       <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
         <div className="flex items-center justify-between text-xs text-white/45">
@@ -399,62 +448,7 @@ export default function ControlPanel({
           </div>
         </div>
 
-        {/* LED Color section */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            LED Color
-          </p>
-
-          <button
-            type="button"
-            id="control-panel-color-wheel-btn"
-            disabled={!isConnected}
-            aria-label="Open robot LED color picker"
-            onClick={() => setColorWheelOpen(true)}
-            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
-              isConnected
-                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
-                : "cursor-not-allowed border-border bg-black/10 opacity-40"
-            }`}
-          >
-            {/* Mini color wheel SVG icon */}
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
-              <defs>
-                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="white" stopOpacity="0" />
-                </radialGradient>
-                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#ff0000" />
-                  <stop offset="16%"  stopColor="#ffff00" />
-                  <stop offset="33%"  stopColor="#00ff00" />
-                  <stop offset="50%"  stopColor="#00ffff" />
-                  <stop offset="66%"  stopColor="#0000ff" />
-                  <stop offset="83%"  stopColor="#ff00ff" />
-                  <stop offset="100%" stopColor="#ff0000" />
-                </linearGradient>
-              </defs>
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
-              <circle cx="8" cy="8" r="3" fill="#080b14" />
-            </svg>
-
-            <div className="flex flex-1 items-center justify-between">
-              <span className="text-sm font-semibold text-white/70">
-                {ledHex ? ledHex.toUpperCase() : "Not set"}
-              </span>
-              <div
-                className="h-5 w-5 rounded-full border border-white/15"
-                style={{
-                  background: ledHex ?? "rgba(255,255,255,0.08)",
-                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
-                }}
-              />
-            </div>
-
-            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
-          </button>
-        </div>
+        
 
       </div>
 
