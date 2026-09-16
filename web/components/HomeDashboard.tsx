@@ -552,7 +552,7 @@ export default function HomeDashboard() {
                         <path
                           d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
                           fill="none"
-                          stroke="rgba(255,255,255,0.15)"
+                          stroke="#3b82f6"
                           strokeWidth="1.5"
                         />
                         <path
