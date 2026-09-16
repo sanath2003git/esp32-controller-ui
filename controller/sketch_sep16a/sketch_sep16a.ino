@@ -430,10 +430,12 @@ const uint8_t CQ_BACK_PIXELS[] = {11, 12};
 const uint8_t CQ_LEFT_PIXELS[] = {18, 19, 20};
 const uint8_t CQ_FRONT_PIXELS[] = {27, 28};
 
-#define CQ_RIGHT_PIXEL_COUNT (sizeof(CQ_RIGHT_PIXELS) / sizeof(CQ_RIGHT_PIXELS[0]))
+#define CQ_RIGHT_PIXEL_COUNT                                                   \
+  (sizeof(CQ_RIGHT_PIXELS) / sizeof(CQ_RIGHT_PIXELS[0]))
 #define CQ_BACK_PIXEL_COUNT (sizeof(CQ_BACK_PIXELS) / sizeof(CQ_BACK_PIXELS[0]))
 #define CQ_LEFT_PIXEL_COUNT (sizeof(CQ_LEFT_PIXELS) / sizeof(CQ_LEFT_PIXELS[0]))
-#define CQ_FRONT_PIXEL_COUNT (sizeof(CQ_FRONT_PIXELS) / sizeof(CQ_FRONT_PIXELS[0]))
+#define CQ_FRONT_PIXEL_COUNT                                                   \
+  (sizeof(CQ_FRONT_PIXELS) / sizeof(CQ_FRONT_PIXELS[0]))
 
 void setCQRegionColor(StripRegion region, uint8_t r, uint8_t g, uint8_t b) {
   switch (region) {
@@ -636,58 +638,64 @@ void challengeBuildTask() {
   static const int SECONDARY[] = {3, 4, 5}; // yellow, cyan, magenta
   static const int EXTENDED[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-  if (challengeLevel <= 2) {
-    // Exactly one primary and three secondary colours.
-    // Select one primary target and fill the other regions with
-    // the three secondary colours.
-    int primary = PRIMARY[random(3)];
+  if (challengeLevel <= 4) {
+    int targetColor;
+    int distractorColors[3];
 
-    int secondaryOrder[3] = {0, 1, 2};
-    for (int i = 2; i > 0; i--) {
-      int j = random(i + 1);
-      int t = secondaryOrder[i];
-      secondaryOrder[i] = secondaryOrder[j];
-      secondaryOrder[j] = t;
-    }
-
-    int primarySlot = random(4);
-    int secondaryCursor = 0;
-
-    for (int slot = 0; slot < 4; slot++) {
-      if (slot == primarySlot) {
-        colorOption[slot] = primary;
-      } else {
-        colorOption[slot] = SECONDARY[secondaryOrder[secondaryCursor++]];
+    if (challengeLevel <= 2) {
+      // L1 & L2: Target is a primary colour. We use visually distinct distractors.
+      targetColor = PRIMARY[random(3)];
+      if (targetColor == 0) { // Red
+        distractorColors[0] = 3; // Yellow
+        distractorColors[1] = 4; // Cyan
+        distractorColors[2] = 1; // Green
+      } else if (targetColor == 1) { // Green (avoid cyan/lime)
+        distractorColors[0] = 0; // Red
+        distractorColors[1] = 5; // Magenta (Pink)
+        distractorColors[2] = 7; // Purple
+      } else { // Blue (avoid cyan/turquoise)
+        distractorColors[0] = 0; // Red
+        distractorColors[1] = 3; // Yellow
+        distractorColors[2] = 6; // Orange
+      }
+    } else {
+      // L3 & L4: Target is a secondary colour. We use visually distinct distractors.
+      targetColor = SECONDARY[random(3)];
+      if (targetColor == 3) { // Yellow
+        distractorColors[0] = 1; // Green
+        distractorColors[1] = 2; // Blue
+        distractorColors[2] = 7; // Purple
+      } else if (targetColor == 4) { // Cyan (avoid blue/green together)
+        distractorColors[0] = 0; // Red
+        distractorColors[1] = 6; // Orange
+        distractorColors[2] = 5; // Magenta
+      } else { // Magenta
+        distractorColors[0] = 1; // Green
+        distractorColors[1] = 3; // Yellow
+        distractorColors[2] = 4; // Cyan
       }
     }
 
-    colorTargetDirection = primarySlot;
-  } else if (challengeLevel <= 4) {
-    // Exactly one secondary and three primary colours.
-    // This implements "spot the secondary colour", with L4 using
-    // the same discrimination task under a faster timer.
-    int secondary = SECONDARY[random(3)];
-
-    int primaryOrder[3] = {0, 1, 2};
+    // Shuffle the three distractor colours so their positions are random.
     for (int i = 2; i > 0; i--) {
       int j = random(i + 1);
-      int t = primaryOrder[i];
-      primaryOrder[i] = primaryOrder[j];
-      primaryOrder[j] = t;
+      int t = distractorColors[i];
+      distractorColors[i] = distractorColors[j];
+      distractorColors[j] = t;
     }
 
-    int secondarySlot = random(4);
-    int primaryCursor = 0;
+    int targetSlot = random(4);
+    int distractorCursor = 0;
 
     for (int slot = 0; slot < 4; slot++) {
-      if (slot == secondarySlot) {
-        colorOption[slot] = secondary;
+      if (slot == targetSlot) {
+        colorOption[slot] = targetColor;
       } else {
-        colorOption[slot] = PRIMARY[primaryOrder[primaryCursor++]];
+        colorOption[slot] = distractorColors[distractorCursor++];
       }
     }
 
-    colorTargetDirection = secondarySlot;
+    colorTargetDirection = targetSlot;
   } else if (challengeLevel == 5) {
     // Advanced hue/tint recognition.
     // Use a controlled family of close colours so the player must
@@ -762,13 +770,13 @@ void challengeIlluminateTask() {
 
   // Slots correspond to FRONT, RIGHT, BACK, LEFT.
   setCQRegionColor(REGION_FRONT, taskColors[0].r, taskColors[0].g,
-                 taskColors[0].b);
+                   taskColors[0].b);
   setCQRegionColor(REGION_RIGHT, taskColors[1].r, taskColors[1].g,
-                 taskColors[1].b);
+                   taskColors[1].b);
   setCQRegionColor(REGION_BACK, taskColors[2].r, taskColors[2].g,
-                 taskColors[2].b);
+                   taskColors[2].b);
   setCQRegionColor(REGION_LEFT, taskColors[3].r, taskColors[3].g,
-                 taskColors[3].b);
+                   taskColors[3].b);
 
   strip.show();
 
