@@ -18,7 +18,10 @@ import ColorWheelModal from "@/components/ColorWheelModal";
 import { useBleContext } from "@/context/BleContext";
 import type { MovementDirection } from "@/types/ble";
 
-type ControlPanelMode = "free-ride" | "training" | "challenge";
+type ControlPanelMode =
+  | "free-ride"
+  | "training"
+  | "challenge";
 
 type ControlPanelProps = {
   mode?: ControlPanelMode;
@@ -42,13 +45,19 @@ type AlertToast = {
   tone: "warning" | "danger";
 };
 
-const modeLabel: Record<ControlPanelMode, string> = {
+const modeLabel: Record<
+  ControlPanelMode,
+  string
+> = {
   "free-ride": "Free ride",
   training: "Training",
   challenge: "Challenge",
 };
 
-const obstaclePositionClass: Record<ObstaclePosition, string> = {
+const obstaclePositionClass: Record<
+  ObstaclePosition,
+  string
+> = {
   "front-left": "left-0 top-3",
   "front-right": "right-0 top-3",
   "rear-left": "bottom-3 left-0",
@@ -67,7 +76,8 @@ function ObstacleIndicator({
         ? "Obstacle"
         : "Clear";
 
-  const hasObstacle = detected === true;
+  const hasObstacle =
+    detected === true;
 
   const stateClass =
     detected === null
@@ -87,7 +97,9 @@ function ObstacleIndicator({
       <span
         aria-hidden="true"
         className={`h-3.5 w-3.5 rounded-full border shadow-[0_0_12px_currentColor] ${
-          hasObstacle ? "animate-pulse" : ""
+          hasObstacle
+            ? "animate-pulse"
+            : ""
         } ${stateClass}`}
       />
 
@@ -97,12 +109,17 @@ function ObstacleIndicator({
 
       {hasObstacle && (
         <span className="flex items-center gap-1 text-[10px] font-black uppercase tracking-[0.1em] text-white">
-          <TriangleAlert size={13} aria-hidden="true" />
+          <TriangleAlert
+            size={13}
+            aria-hidden="true"
+          />
           Obstacle
         </span>
       )}
 
-      <span className="sr-only">{stateLabel}</span>
+      <span className="sr-only">
+        {stateLabel}
+      </span>
     </div>
   );
 }
@@ -110,14 +127,34 @@ function ObstacleIndicator({
 export default function ControlPanel({
   mode = "free-ride",
 }: ControlPanelProps) {
-  const { status, telemetry, move, stop, send } =
-    useBleContext();
+  const {
+    status,
+    telemetry,
+    move,
+    stop,
+    send,
+  } = useBleContext();
 
-  const [colorWheelOpen, setColorWheelOpen] = useState(false);
-  const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
+  const [
+    colorWheelOpen,
+    setColorWheelOpen,
+  ] = useState(false);
 
-  const [alertToast, setAlertToast] =
-    useState<AlertToast | null>(null);
+  const [
+    ledColor,
+    setLedColor,
+  ] = useState<{
+    r: number;
+    g: number;
+    b: number;
+  } | null>(null);
+
+  const [
+    alertToast,
+    setAlertToast,
+  ] = useState<AlertToast | null>(
+    null,
+  );
 
   const previousAlerts = useRef({
     sudden: false,
@@ -125,31 +162,54 @@ export default function ControlPanel({
   });
 
   const activeMovementDirection =
-    useRef<MovementDirection | null>(null);
+    useRef<MovementDirection | null>(
+      null,
+    );
 
-  const isConnected = status === "connected";
-  const heading = telemetry?.direction ?? null;
-  const obstacle = telemetry?.obstacle;
+  const isConnected =
+    status === "connected";
+
+  const heading =
+    telemetry?.direction ?? null;
+
+  const obstacle =
+    telemetry?.obstacle;
 
   useEffect(() => {
-    const sudden = telemetry?.motion.sudden ?? false;
-    const pit = telemetry?.pit.detected ?? false;
+    const sudden =
+      telemetry?.motion.sudden ??
+      false;
 
-    if (sudden && !previousAlerts.current.sudden) {
+    const pit =
+      telemetry?.pit.detected ??
+      false;
+
+    if (
+      sudden &&
+      !previousAlerts.current.sudden
+    ) {
       setAlertToast({
         id: Date.now(),
-        message: "Sudden motion detected",
+        message:
+          "Sudden motion detected",
         tone: "warning",
       });
-    } else if (pit && !previousAlerts.current.pit) {
+    } else if (
+      pit &&
+      !previousAlerts.current.pit
+    ) {
       setAlertToast({
         id: Date.now(),
-        message: "Pit detected ahead",
+        message:
+          "Pit detected ahead",
         tone: "danger",
       });
     }
 
-    previousAlerts.current = { sudden, pit };
+    previousAlerts.current = {
+      sudden,
+      pit,
+    };
   }, [
     telemetry?.motion.sudden,
     telemetry?.pit.detected,
@@ -158,22 +218,32 @@ export default function ControlPanel({
   useEffect(() => {
     if (!alertToast) return;
 
-    const timeoutId = window.setTimeout(() => {
-      setAlertToast((current) =>
-        current?.id === alertToast.id ? null : current,
-      );
-    }, 3_000);
+    const timeoutId =
+      window.setTimeout(() => {
+        setAlertToast(
+          (current) =>
+            current?.id ===
+              alertToast.id
+              ? null
+              : current,
+        );
+      }, 3_000);
 
-    return () => window.clearTimeout(timeoutId);
+    return () =>
+      window.clearTimeout(timeoutId);
   }, [alertToast]);
 
-  const sendMove = (direction: MovementDirection) => {
-    void move(direction).catch((error: unknown) => {
-      console.error(
-        "[CONTROL PANEL] Movement command failed",
-        error,
-      );
-    });
+  const sendMove = (
+    direction: MovementDirection,
+  ) => {
+    void move(direction).catch(
+      (error: unknown) => {
+        console.error(
+          "[CONTROL PANEL] Movement command failed",
+          error,
+        );
+      },
+    );
   };
 
   const handleJoystickDirection = ({
@@ -209,34 +279,65 @@ export default function ControlPanel({
     sendMove(nextDirection);
   };
 
-  const handleJoystickRelease = () => {
-    activeMovementDirection.current = null;
+  const handleJoystickRelease =
+    () => {
+      activeMovementDirection.current =
+        null;
 
-    void stop().catch((error: unknown) => {
+      void stop().catch(
+        (error: unknown) => {
+          console.error(
+            "[CONTROL PANEL] Stop command failed",
+            error,
+          );
+        },
+      );
+    };
+
+  const sendRgb = (
+    r: number,
+    g: number,
+    b: number,
+  ) => {
+    setLedColor({
+      r,
+      g,
+      b,
+    });
+
+    void send({
+      command: "color",
+      r,
+      g,
+      b,
+    }).catch((err: unknown) => {
       console.error(
-        "[CONTROL PANEL] Stop command failed",
-        error,
+        "[CONTROL PANEL] Color send failed",
+        err,
       );
     });
   };
 
-  const sendRgb = (r: number, g: number, b: number) => {
-    setLedColor({ r, g, b });
-    void send({ command: "color", r, g, b }).catch((err: unknown) => {
-      console.error("[CONTROL PANEL] Color send failed", err);
-    });
-  };
-
   const ledHex = ledColor
-    ? `#${[ledColor.r, ledColor.g, ledColor.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+    ? `#${[
+        ledColor.r,
+        ledColor.g,
+        ledColor.b,
+      ]
+        .map((v) =>
+          v
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`
     : null;
-
 
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
       className="overflow-hidden rounded-3xl border border-border bg-surface px-4 pb-2 pt-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
+      {/* Control header */}
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
@@ -253,70 +354,152 @@ export default function ControlPanel({
         >
           {isConnected
             ? "Live"
-            : status === "connecting"
+            : status ===
+                "connecting"
               ? "Connecting"
               : "Offline"}
         </div>
       </div>
-{/* LED Color section */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            LED Color
-          </p>
 
-          <button
-            type="button"
-            id="control-panel-color-wheel-btn"
-            disabled={!isConnected}
-            aria-label="Open robot LED color picker"
-            onClick={() => setColorWheelOpen(true)}
-            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
-              isConnected
-                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
-                : "cursor-not-allowed border-border bg-black/10 opacity-40"
-            }`}
+      {/* LED Color */}
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+          LED Color
+        </p>
+
+        <button
+          type="button"
+          id="control-panel-color-wheel-btn"
+          disabled={!isConnected}
+          aria-label="Open robot LED color picker"
+          onClick={() =>
+            setColorWheelOpen(true)
+          }
+          className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+            isConnected
+              ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
+              : "cursor-not-allowed border-border bg-black/10 opacity-40"
+          }`}
+        >
+          {/* Mini color wheel */}
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 16 16"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+            className="shrink-0"
           >
-            {/* Mini color wheel SVG icon */}
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
-              <defs>
-                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="white" stopOpacity="0" />
-                </radialGradient>
-                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#ff0000" />
-                  <stop offset="16%"  stopColor="#ffff00" />
-                  <stop offset="33%"  stopColor="#00ff00" />
-                  <stop offset="50%"  stopColor="#00ffff" />
-                  <stop offset="66%"  stopColor="#0000ff" />
-                  <stop offset="83%"  stopColor="#ff00ff" />
-                  <stop offset="100%" stopColor="#ff0000" />
-                </linearGradient>
-              </defs>
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
-              <circle cx="8" cy="8" r="3" fill="#080b14" />
-            </svg>
+            <defs>
+              <radialGradient
+                id="cp-rg"
+                cx="50%"
+                cy="50%"
+                r="50%"
+              >
+                <stop
+                  offset="0%"
+                  stopColor="white"
+                  stopOpacity="0.9"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="white"
+                  stopOpacity="0"
+                />
+              </radialGradient>
 
-            <div className="flex flex-1 items-center justify-between">
-              <span className="text-sm font-semibold text-white/70">
-                {ledHex ? ledHex.toUpperCase() : "Not set"}
-              </span>
-              <div
-                className="h-5 w-5 rounded-full border border-white/15"
-                style={{
-                  background: ledHex ?? "rgba(255,255,255,0.08)",
-                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
-                }}
-              />
-            </div>
+              <linearGradient
+                id="cp-hg"
+                x1="0%"
+                y1="0%"
+                x2="100%"
+                y2="0%"
+              >
+                <stop
+                  offset="0%"
+                  stopColor="#ff0000"
+                />
+                <stop
+                  offset="16%"
+                  stopColor="#ffff00"
+                />
+                <stop
+                  offset="33%"
+                  stopColor="#00ff00"
+                />
+                <stop
+                  offset="50%"
+                  stopColor="#00ffff"
+                />
+                <stop
+                  offset="66%"
+                  stopColor="#0000ff"
+                />
+                <stop
+                  offset="83%"
+                  stopColor="#ff00ff"
+                />
+                <stop
+                  offset="100%"
+                  stopColor="#ff0000"
+                />
+              </linearGradient>
+            </defs>
 
-            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
-          </button>
-        </div>
-      
+            <circle
+              cx="8"
+              cy="8"
+              r="7.5"
+              fill="url(#cp-hg)"
+            />
 
-      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
+            <circle
+              cx="8"
+              cy="8"
+              r="7.5"
+              fill="url(#cp-rg)"
+            />
+
+            <circle
+              cx="8"
+              cy="8"
+              r="3"
+              fill="#080b14"
+            />
+          </svg>
+
+          <div className="flex flex-1 items-center justify-between">
+            <span className="text-sm font-semibold text-white/70">
+              {ledHex
+                ? ledHex.toUpperCase()
+                : "Not set"}
+            </span>
+
+            <div
+              className="h-5 w-5 rounded-full border border-white/15"
+              style={{
+                background:
+                  ledHex ??
+                  "rgba(255,255,255,0.08)",
+                boxShadow: ledHex
+                  ? `0 0 10px ${ledHex}99`
+                  : "none",
+              }}
+            />
+          </div>
+
+          <Lightbulb
+            size={15}
+            className="shrink-0 text-white/30"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+
+      {/* Telemetry / robot heading */}
+      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5 [@media(max-height:800px)]:mt-3 [@media(max-height:800px)]:px-3 [@media(max-height:800px)]:py-3">
         <div className="flex items-center justify-between text-xs text-white/45">
           <span className="flex items-center gap-1.5">
             <Compass
@@ -329,11 +512,14 @@ export default function ControlPanel({
           <strong className="font-mono text-sm text-white">
             {heading === null
               ? "--°"
-              : `${Math.round(heading)}°`}
+              : `${Math.round(
+                  heading,
+                )}°`}
           </strong>
         </div>
 
-        <div className="relative mx-auto mt-4 h-52 max-w-72">
+        {/* Responsive robot visualization */}
+        <div className="relative mx-auto mt-4 h-[clamp(160px,22.7vh,208px)] max-w-72 [@media(max-height:800px)]:mt-2">
           <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             Front
           </p>
@@ -341,54 +527,71 @@ export default function ControlPanel({
           <ObstacleIndicator
             label="FL"
             position="front-left"
-            detected={obstacle?.frontLeft ?? null}
+            detected={
+              obstacle?.frontLeft ??
+              null
+            }
           />
 
           <ObstacleIndicator
             label="FR"
             position="front-right"
-            detected={obstacle?.frontRight ?? null}
+            detected={
+              obstacle?.frontRight ??
+              null
+            }
           />
 
           <ObstacleIndicator
             label="RL"
             position="rear-left"
-            detected={obstacle?.rearLeft ?? null}
+            detected={
+              obstacle?.rearLeft ??
+              null
+            }
           />
 
           <ObstacleIndicator
             label="RR"
             position="rear-right"
-            detected={obstacle?.rearRight ?? null}
+            detected={
+              obstacle?.rearRight ??
+              null
+            }
           />
 
-          
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-  <div
-    aria-label={
-      heading === null
-        ? "Robot heading unavailable"
-        : `Robot heading ${Math.round(heading)} degrees`
-    }
-    className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
-    style={{
-      transform: `rotate(${heading ?? 0}deg)`,
-    }}
-  >
-    <Bot
-      size={64}
-      strokeWidth={1.65}
-      className="text-primary"
-    />
-  </div>
-</div>
+          {/* Robot */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+            <div
+              aria-label={
+                heading === null
+                  ? "Robot heading unavailable"
+                  : `Robot heading ${Math.round(
+                      heading,
+                    )} degrees`
+              }
+              className="flex h-[clamp(96px,14vh,128px)] w-[clamp(96px,14vh,128px)] items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
+              style={{
+                transform: `rotate(${
+                  heading ?? 0
+                }deg)`,
+              }}
+            >
+              <Bot
+                size={64}
+                strokeWidth={1.65}
+                className="text-primary"
+              />
+            </div>
+          </div>
 
           <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             Rear
           </p>
         </div>
 
-        <div className="mt-2 flex items-center justify-center gap-2 text-center">
+        {/* Front distance */}
+        <div className="mt-2 flex items-center justify-center gap-2 text-center [@media(max-height:800px)]:mt-1">
           <Gauge
             size={16}
             className="text-accent"
@@ -399,15 +602,18 @@ export default function ControlPanel({
           </span>
 
           <strong className="font-mono text-lg text-white">
-            {telemetry?.distance.front ===
+            {telemetry?.distance
+              .front ===
                 undefined ||
-            telemetry.distance.front === null
+            telemetry.distance
+              .front === null
               ? "-- cm"
               : `${telemetry.distance.front} cm`}
           </strong>
         </div>
       </div>
 
+      {/* Alert */}
       {alertToast && (
         <div
           className="fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2"
@@ -415,18 +621,22 @@ export default function ControlPanel({
         >
           <p
             className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${
-              alertToast.tone === "warning"
+              alertToast.tone ===
+              "warning"
                 ? "border-warning/35 bg-warning/90 text-black"
                 : "border-danger/35 bg-danger/90 text-white"
             }`}
           >
-            <TriangleAlert size={18} />
+            <TriangleAlert
+              size={18}
+            />
             {alertToast.message}
           </p>
         </div>
       )}
 
-      <div className="mt-2">
+      {/* Navigation */}
+      <div className="mt-2 [@media(max-height:800px)]:mt-1">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
             Navigation
@@ -444,15 +654,14 @@ export default function ControlPanel({
             />
           </div>
         </div>
-
-        
-
       </div>
 
       {/* Color wheel modal */}
       {colorWheelOpen && (
         <ColorWheelModal
-          onClose={() => setColorWheelOpen(false)}
+          onClose={() =>
+            setColorWheelOpen(false)
+          }
           sendRgb={sendRgb}
         />
       )}
