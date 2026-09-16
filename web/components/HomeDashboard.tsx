@@ -118,17 +118,17 @@ function TrustModal({
 
 /* ─── Expression table ────────────────────────────── */
 const EXPRESSIONS = [
-  { id: 0,  label: "Happy"   },
-  { id: 1,  label: "Sad"     },
-  { id: 2,  label: "Heart"   },
-  { id: 3,  label: "Star"    },
-  { id: 4,  label: "Check"   },
-  { id: 5,  label: "Cross"   },
-  { id: 6,  label: "Warning" },
-  { id: 7,  label: "Robot"   },
-  { id: 8,  label: "Battery" },
-  { id: 9,  label: "Sleep"   },
-  { id: 10, label: "WiFi"    },
+  { id: 0,  label: "Happy",   image: "/happy.png" },
+  { id: 1,  label: "Sad",     image: "/sad.png" },
+  { id: 2,  label: "Heart",   image: "/heart.png" },
+  { id: 3,  label: "Star",    image: "/star.png" },
+  { id: 4,  label: "Check",   image: "/check.png" },
+  { id: 5,  label: "Cross",   image: "/cross.png" },
+  { id: 6,  label: "Warning", image: "/warning.png" },
+  { id: 7,  label: "Robot",   image: "/happy.png" },
+  { id: 8,  label: "Battery", image: "/battery.png" },
+  { id: 9,  label: "Sleep",   image: "/sleep.png" },
+  { id: 10, label: "WiFi",    image: "/wifi.png" },
 ] as const;
 
 type ExpressionId = (typeof EXPRESSIONS)[number]["id"];
@@ -502,7 +502,7 @@ export default function HomeDashboard() {
               }`}
             >
               <Image
-                src="/robot-face.jpg"
+                src={EXPRESSIONS.find((e) => e.id === selectedExpression)?.image ?? "/happy.png"}
                 alt={`Robot expression: ${EXPRESSIONS.find((e) => e.id === selectedExpression)?.label ?? "Happy"}`}
                 width={176}
                 height={176}
@@ -617,7 +617,7 @@ export default function HomeDashboard() {
                 }`}
               >
                 <Image
-                  src="/robot-face.jpg"
+                  src={EXPRESSIONS.find((e) => e.id === selectedExpression)?.image ?? "/happy.png"}
                   alt={`Robot expression: ${EXPRESSIONS.find((e) => e.id === selectedExpression)?.label ?? "Happy"}`}
                   fill
                   className="object-cover"
@@ -665,8 +665,7 @@ export default function HomeDashboard() {
               id="expression-select"
               value={selectedExpression}
               onChange={handleExpressionChange}
-              disabled={!isConnected}
-              className="w-full rounded-xl border border-border bg-black/40 px-3 py-2.5 text-sm font-semibold text-white transition focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+              className="w-full rounded-xl border border-border bg-black/40 px-3 py-2.5 text-sm font-semibold text-white transition focus:border-accent focus:outline-none"
               style={{ colorScheme: "dark" }}
             >
               {EXPRESSIONS.map(({ id, label }) => (
