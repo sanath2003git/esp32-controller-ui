@@ -6,12 +6,14 @@ import {
   Bot,
   Compass,
   Gauge,
+  Lightbulb,
   TriangleAlert,
 } from "lucide-react";
 
 import JoystickController, {
   type JoystickDirection,
 } from "@/components/JoystickController";
+import ColorWheelModal from "@/components/ColorWheelModal";
 
 import { useBleContext } from "@/context/BleContext";
 import type { MovementDirection } from "@/types/ble";
@@ -108,8 +110,11 @@ function ObstacleIndicator({
 export default function ControlPanel({
   mode = "free-ride",
 }: ControlPanelProps) {
-  const { status, telemetry, move, stop } =
+  const { status, telemetry, move, stop, send } =
     useBleContext();
+
+  const [colorWheelOpen, setColorWheelOpen] = useState(false);
+  const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
 
   const [alertToast, setAlertToast] =
     useState<AlertToast | null>(null);
@@ -214,6 +219,17 @@ export default function ControlPanel({
       );
     });
   };
+
+  const sendRgb = (r: number, g: number, b: number) => {
+    setLedColor({ r, g, b });
+    void send({ command: "color", r, g, b }).catch((err: unknown) => {
+      console.error("[CONTROL PANEL] Color send failed", err);
+    });
+  };
+
+  const ledHex = ledColor
+    ? `#${[ledColor.r, ledColor.g, ledColor.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+    : null;
 
 
   return (
@@ -383,8 +399,72 @@ export default function ControlPanel({
           </div>
         </div>
 
+        {/* LED Color section */}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+            LED Color
+          </p>
+
+          <button
+            type="button"
+            id="control-panel-color-wheel-btn"
+            disabled={!isConnected}
+            aria-label="Open robot LED color picker"
+            onClick={() => setColorWheelOpen(true)}
+            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
+              isConnected
+                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
+                : "cursor-not-allowed border-border bg-black/10 opacity-40"
+            }`}
+          >
+            {/* Mini color wheel SVG icon */}
+            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
+              <defs>
+                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
+                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
+                  <stop offset="100%" stopColor="white" stopOpacity="0" />
+                </radialGradient>
+                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
+                  <stop offset="0%"   stopColor="#ff0000" />
+                  <stop offset="16%"  stopColor="#ffff00" />
+                  <stop offset="33%"  stopColor="#00ff00" />
+                  <stop offset="50%"  stopColor="#00ffff" />
+                  <stop offset="66%"  stopColor="#0000ff" />
+                  <stop offset="83%"  stopColor="#ff00ff" />
+                  <stop offset="100%" stopColor="#ff0000" />
+                </linearGradient>
+              </defs>
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
+              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
+              <circle cx="8" cy="8" r="3" fill="#080b14" />
+            </svg>
+
+            <div className="flex flex-1 items-center justify-between">
+              <span className="text-sm font-semibold text-white/70">
+                {ledHex ? ledHex.toUpperCase() : "Not set"}
+              </span>
+              <div
+                className="h-5 w-5 rounded-full border border-white/15"
+                style={{
+                  background: ledHex ?? "rgba(255,255,255,0.08)",
+                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
+                }}
+              />
+            </div>
+
+            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
+          </button>
+        </div>
 
       </div>
+
+      {/* Color wheel modal */}
+      {colorWheelOpen && (
+        <ColorWheelModal
+          onClose={() => setColorWheelOpen(false)}
+          sendRgb={sendRgb}
+        />
+      )}
     </section>
   );
 }
