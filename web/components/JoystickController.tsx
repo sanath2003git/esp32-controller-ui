@@ -121,7 +121,7 @@ export default function JoystickController({
   return (
     <section
       aria-label="Joystick navigation control"
-      className={`h-[200px] overflow-hidden rounded-2xl border border-border bg-surface ${
+      className={`h-[265px] overflow-hidden rounded-2xl border border-border bg-surface ${
         disabled ? "opacity-40" : ""
       }`}
     >
@@ -148,7 +148,7 @@ export default function JoystickController({
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
           onLostPointerCapture={handlePointerEnd}
-          className={`relative h-[180px] w-[180px] shrink-0 select-none rounded-full border-[1.5px] border-border bg-surface touch-none ${
+          className={`relative h-[220px] w-[220px] shrink-0 select-none rounded-full border-[1.5px] border-border bg-surface touch-none ${
             disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
           }`}
         >
@@ -182,7 +182,7 @@ export default function JoystickController({
 
           <div
             aria-hidden="true"
-            className={`absolute left-1/2 top-1/2 flex h-7 w-7 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 ${
+            className={`absolute left-1/2 top-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 ${
               isDragging
                 ? "border-primary bg-primary shadow-[0_0_22px_rgba(124,92,255,0.5)]"
                 : "border-primary/55 bg-surface-light"

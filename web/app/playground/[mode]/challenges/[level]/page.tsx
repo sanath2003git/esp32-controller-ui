@@ -73,8 +73,8 @@ export default function ChallengeLevelPage() {
         backHref={`/playground/${params.mode}/challenges`}
       />
 
-      <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
-        <section className="mt-8">
+      <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-20">
+        <section>
           <ControlPanel />
         </section>
 
