@@ -390,125 +390,156 @@ export default function HomeDashboard() {
           </div>
         </div>
 
-        {/* Robot face + right button column */}
-        <div className="mt-4 flex items-start justify-center">
+        {/* ── Normal mode: face centred + side buttons ── */}
+        {!petFullscreen && (
+          <div className="mt-4 relative flex items-start justify-center">
 
-          {/* Robot face image — borderless, blends into black bg */}
-          <div
-            className={`relative flex h-44 w-44 shrink-0 items-center justify-center overflow-hidden rounded-[2.75rem] bg-black transition-all duration-300 ${
-              expressionAnimating ? "scale-105" : ""
-            }`}
-          >
-            <Image
-              src="/robot-face.jpg"
-              alt={`Robot expression: ${EXPRESSIONS.find((e) => e.id === selectedExpression)?.label ?? "Happy"}`}
-              width={176}
-              height={176}
-              className="h-full w-full object-cover"
-              priority
-            />
-          </div>
-
-          {/* Vertical button column — Trust + LED — flush right, aligned with controller */}
-          <div className="ml-auto flex flex-col items-center gap-3 pt-1">
-
-            {/* Trust Level button */}
-            {(() => {
-              const pct = 58;
-              const tier =
-                pct >= 67
-                  ? { label: "Best Friend", color: "#35e59a" }
-                  : pct >= 34
-                  ? { label: "Unsure",      color: "#ffc857" }
-                  : { label: "Broken Bond", color: "#ff4d67" };
-              return (
-                <div className="flex flex-col items-center gap-1">
-                  <button
-                    type="button"
-                    id="pet-trust-btn"
-                    onClick={() => setTrustOpen(true)}
-                    aria-label={`Trust level: ${tier.label}`}
-                    className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
-                  >
-                    <svg width="22" height="20" viewBox="0 0 32 30" aria-hidden="true">
-                      <defs>
-                        <clipPath id="pet-heart-clip">
-                          <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
-                        </clipPath>
-                      </defs>
-                      <path
-                        d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
-                        fill="none"
-                        stroke="rgba(255,255,255,0.15)"
-                        strokeWidth="1.5"
-                      />
-                      <path
-                        d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
-                        fill={tier.color}
-                        clipPath="url(#pet-heart-clip)"
-                        style={{ filter: `drop-shadow(0 0 5px ${tier.color}aa)` }}
-                      />
-                    </svg>
-                    {trustOpen && (
-                      <TrustModal
-                        pct={pct}
-                        tier={tier}
-                        onClose={() => setTrustOpen(false)}
-                      />
-                    )}
-                  </button>
-                  <p className="text-[9px] uppercase tracking-[0.15em] text-white/30">Trust</p>
-                </div>
-              );
-            })()}
-
-            {/* LED Color button */}
-            <div className="flex flex-col items-center gap-1">
-              <button
-                type="button"
-                id="pet-color-wheel-btn"
-                aria-label="Open robot light color picker"
-                onClick={() => setColorWheelOpen(true)}
-                className="flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
-              >
-                <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                  <defs>
-                    <radialGradient id="pet-rg" cx="50%" cy="50%" r="50%">
-                      <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-                      <stop offset="100%" stopColor="white" stopOpacity="0" />
-                    </radialGradient>
-                    <linearGradient id="pet-hg" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%"   stopColor="#ff0000" />
-                      <stop offset="16%"  stopColor="#ffff00" />
-                      <stop offset="33%"  stopColor="#00ff00" />
-                      <stop offset="50%"  stopColor="#00ffff" />
-                      <stop offset="66%"  stopColor="#0000ff" />
-                      <stop offset="83%"  stopColor="#ff00ff" />
-                      <stop offset="100%" stopColor="#ff0000" />
-                    </linearGradient>
-                  </defs>
-                  <circle cx="8" cy="8" r="7.5" fill="url(#pet-hg)" />
-                  <circle cx="8" cy="8" r="7.5" fill="url(#pet-rg)" />
-                  <circle cx="8" cy="8" r="3" fill="#080b14" />
-                </svg>
-              </button>
-              <p className="text-[9px] uppercase tracking-[0.15em] text-white/30">LED</p>
+            {/* Robot face image — centred, borderless */}
+            <div
+              className={`relative flex h-44 w-44 shrink-0 items-center justify-center overflow-hidden rounded-[2.75rem] bg-black transition-all duration-300 ${
+                expressionAnimating ? "scale-105" : ""
+              }`}
+            >
+              <Image
+                src="/robot-face.jpg"
+                alt={`Robot expression: ${EXPRESSIONS.find((e) => e.id === selectedExpression)?.label ?? "Happy"}`}
+                width={176}
+                height={176}
+                className="h-full w-full object-cover"
+                priority
+              />
             </div>
 
-          </div>
-        </div>
+            {/* Vertical button column — Trust + LED — absolutely pinned to the right */}
+            <div className="absolute right-0 top-0 flex flex-col items-center gap-3">
 
-        {/* Status text */}
-        <div className="mt-4 text-center">
-          <p className="text-lg font-bold text-white">
-            {isConnected ? `Feeling ${currentMood}!` : "Waiting for my robot…"}
-          </p>
-          <p className="mt-1 text-sm text-white/45">
-            {isConnected
-              ? "Keep playing and take care of your Robo."
-              : "Connect your robot to get started."}
-          </p>
-        </div>
+              {/* Trust Level button */}
+              {(() => {
+                const pct = 58;
+                const tier =
+                  pct >= 67
+                    ? { label: "Best Friend", color: "#35e59a" }
+                    : pct >= 34
+                    ? { label: "Unsure",      color: "#ffc857" }
+                    : { label: "Broken Bond", color: "#ff4d67" };
+                return (
+                  <div className="flex flex-col items-center gap-1">
+                    <button
+                      type="button"
+                      id="pet-trust-btn"
+                      onClick={() => setTrustOpen(true)}
+                      aria-label={`Trust level: ${tier.label}`}
+                      className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
+                    >
+                      <svg width="22" height="20" viewBox="0 0 32 30" aria-hidden="true">
+                        <defs>
+                          <clipPath id="pet-heart-clip">
+                            <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
+                          </clipPath>
+                        </defs>
+                        <path
+                          d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
+                          fill="none"
+                          stroke="rgba(255,255,255,0.15)"
+                          strokeWidth="1.5"
+                        />
+                        <path
+                          d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
+                          fill={tier.color}
+                          clipPath="url(#pet-heart-clip)"
+                          style={{ filter: `drop-shadow(0 0 5px ${tier.color}aa)` }}
+                        />
+                      </svg>
+                    </button>
+                    <p className="text-[9px] uppercase tracking-[0.15em] text-white/30">Trust</p>
+                  </div>
+                );
+              })()}
+
+              {/* LED Color button */}
+              <div className="flex flex-col items-center gap-1">
+                <button
+                  type="button"
+                  id="pet-color-wheel-btn"
+                  aria-label="Open robot light color picker"
+                  onClick={() => setColorWheelOpen(true)}
+                  className="flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
+                >
+                  <svg width="20" height="20" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <defs>
+                      <radialGradient id="pet-rg" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" stopColor="white" stopOpacity="0.9" />
+                        <stop offset="100%" stopColor="white" stopOpacity="0" />
+                      </radialGradient>
+                      <linearGradient id="pet-hg" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%"   stopColor="#ff0000" />
+                        <stop offset="16%"  stopColor="#ffff00" />
+                        <stop offset="33%"  stopColor="#00ff00" />
+                        <stop offset="50%"  stopColor="#00ffff" />
+                        <stop offset="66%"  stopColor="#0000ff" />
+                        <stop offset="83%"  stopColor="#ff00ff" />
+                        <stop offset="100%" stopColor="#ff0000" />
+                      </linearGradient>
+                    </defs>
+                    <circle cx="8" cy="8" r="7.5" fill="url(#pet-hg)" />
+                    <circle cx="8" cy="8" r="7.5" fill="url(#pet-rg)" />
+                    <circle cx="8" cy="8" r="3" fill="#080b14" />
+                  </svg>
+                </button>
+                <p className="text-[9px] uppercase tracking-[0.15em] text-white/30">LED</p>
+              </div>
+
+            </div>
+          </div>
+        )}
+
+        {/* ── Fullscreen mode: face centred with padding + exit button overlay ── */}
+        {petFullscreen && (
+          <div className="fixed inset-0 z-[201] bg-black">
+            {/* Exit fullscreen button — absolute top-right overlay */}
+            <button
+              type="button"
+              id="pet-exit-fullscreen-btn"
+              onClick={() => setPetFullscreen(false)}
+              aria-label="Exit fullscreen"
+              style={{ position: 'absolute', top: '24px', right: '24px', zIndex: 202 }}
+              className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 border border-white/20 text-white backdrop-blur-md transition hover:bg-white/20 active:scale-95"
+            >
+              <Minimize2 size={20} />
+            </button>
+
+            {/* Centering wrapper for the face */}
+            <div className="absolute inset-0 flex items-center justify-center p-8">
+              <div
+                className={`relative w-full max-w-sm aspect-square max-h-[70vh] overflow-hidden rounded-[3rem] transition-transform duration-300 ${
+                  expressionAnimating ? "scale-105" : ""
+                }`}
+              >
+                <Image
+                  src="/robot-face.jpg"
+                  alt={`Robot expression: ${EXPRESSIONS.find((e) => e.id === selectedExpression)?.label ?? "Happy"}`}
+                  fill
+                  className="object-cover"
+                  priority
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Status text — hidden in fullscreen */}
+        {!petFullscreen && (
+          <div className="mt-4 text-center">
+            <p className="text-lg font-bold text-white">
+              {isConnected ? `Feeling ${currentMood}!` : "Waiting for my robot…"}
+            </p>
+            <p className="mt-1 text-sm text-white/45">
+              {isConnected
+                ? "Keep playing and take care of your Robo."
+                : "Connect your robot to get started."}
+            </p>
+          </div>
+        )}
 
         {/* ── Mood stat row — commented out, not needed ──
         <div className="mt-5 flex w-full items-stretch gap-0 rounded-2xl border border-border bg-black/30 overflow-hidden">
@@ -520,29 +551,31 @@ export default function HomeDashboard() {
         </div>
         ── */}
 
-        {/* Expression picker dropdown */}
-        <div className="mt-4">
-          <label
-            htmlFor="expression-select"
-            className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.15em] text-white/40"
-          >
-            Face Expression
-          </label>
-          <select
-            id="expression-select"
-            value={selectedExpression}
-            onChange={handleExpressionChange}
-            disabled={!isConnected}
-            className="w-full rounded-xl border border-border bg-black/40 px-3 py-2.5 text-sm font-semibold text-white transition focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ colorScheme: "dark" }}
-          >
-            {EXPRESSIONS.map(({ id, label }) => (
-              <option key={id} value={id}>
-                #{id} — {label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Expression picker — hidden in fullscreen */}
+        {!petFullscreen && (
+          <div className="mt-4">
+            <label
+              htmlFor="expression-select"
+              className="mb-1.5 block text-[10px] font-bold uppercase tracking-[0.15em] text-white/40"
+            >
+              Face Expression
+            </label>
+            <select
+              id="expression-select"
+              value={selectedExpression}
+              onChange={handleExpressionChange}
+              disabled={!isConnected}
+              className="w-full rounded-xl border border-border bg-black/40 px-3 py-2.5 text-sm font-semibold text-white transition focus:border-accent focus:outline-none disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ colorScheme: "dark" }}
+            >
+              {EXPRESSIONS.map(({ id, label }) => (
+                <option key={id} value={id}>
+                  #{id} — {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
       </div>
 
       {/* ── Today's Progress ── */}
@@ -613,6 +646,24 @@ export default function HomeDashboard() {
           sendRgb={sendRgb}
         />
       )}
+
+      {/* Trust modal — portalled to body, rendered at section level so close btn works */}
+      {trustOpen && (() => {
+        const pct = 58;
+        const tier =
+          pct >= 67
+            ? { label: "Best Friend", color: "#35e59a" }
+            : pct >= 34
+            ? { label: "Unsure",      color: "#ffc857" }
+            : { label: "Broken Bond", color: "#ff4d67" };
+        return (
+          <TrustModal
+            pct={pct}
+            tier={tier}
+            onClose={() => setTrustOpen(false)}
+          />
+        );
+      })()}
     </section>
   );
 }
