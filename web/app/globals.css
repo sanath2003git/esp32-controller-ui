@@ -98,3 +98,10 @@ a {
   background: var(--primary);
   color: white;
 }
+
+/* ── Pet fullscreen mode: hide header + bottom nav ── */
+body.pet-fullscreen header,
+body.pet-fullscreen nav {
+  visibility: hidden;
+  pointer-events: none;
+}
