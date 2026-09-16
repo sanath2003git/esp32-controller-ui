@@ -156,10 +156,6 @@ export default function ControlPanel({
 
     // Specifically for Colour Quest game when active, emit {"command":"input","region":...}
     if (isColorQuestActive) {
-      const region = dirToRegionMap[dir];
-      void send({ command: "input", region }).catch((error: unknown) => {
-        console.error("[CONTROL PANEL] Colour Quest region input command failed", error);
-      });
       onInputDirection?.(dir);
     } else {
       // For all other games/modes, send standard movement command

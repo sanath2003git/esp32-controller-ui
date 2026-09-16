@@ -244,8 +244,15 @@ export default function ChallengeLevelPage() {
     }
   }, [gameState, status, clearTimeoutTimer]);
 
-  const handleExit = () => {
+  const handleExit = async () => {
     clearTimeoutTimer();
+    if (status === "connected") {
+      try {
+        await send({ command: "abort", game: "color-quest" });
+      } catch (err) {
+        console.warn("[ABORT ERROR]", err);
+      }
+    }
     router.push(`/playground/${params.mode}/challenges`);
   };
 
