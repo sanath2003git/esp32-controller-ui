@@ -121,7 +121,7 @@ export default function JoystickController({
   return (
     <section
       aria-label="Joystick navigation control"
-      className={`h-[280px] overflow-hidden rounded-2xl border border-border bg-surface ${
+      className={`h-[200px] overflow-hidden rounded-2xl border border-border bg-surface ${
         disabled ? "opacity-40" : ""
       }`}
     >
@@ -133,7 +133,7 @@ export default function JoystickController({
         </span>
       </div>
 
-      <div className="flex h-[calc(100%_-_42px)] items-center justify-center px-5 pb-4 pt-2">
+      <div className="flex h-[calc(100%_-_42px)] items-center justify-center px-2 pb-1 pt-1">
         <div
           ref={padRef}
           role="slider"
@@ -148,7 +148,7 @@ export default function JoystickController({
           onPointerUp={handlePointerEnd}
           onPointerCancel={handlePointerEnd}
           onLostPointerCapture={handlePointerEnd}
-          className={`relative aspect-square h-full max-h-[220px] w-full max-w-[220px] select-none rounded-full border-[1.5px] border-border bg-surface touch-none ${
+          className={`relative h-[180px] w-[180px] shrink-0 select-none rounded-full border-[1.5px] border-border bg-surface touch-none ${
             disabled ? "cursor-not-allowed" : "cursor-grab active:cursor-grabbing"
           }`}
         >

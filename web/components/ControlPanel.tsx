@@ -235,7 +235,7 @@ export default function ControlPanel({
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
-      className="overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
+      className="overflow-hidden rounded-3xl border border-border bg-surface px-4 pb-2 pt-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -333,7 +333,7 @@ export default function ControlPanel({
           </strong>
         </div>
 
-        <div className="relative mx-auto mt-4 h-64 max-w-72">
+        <div className="relative mx-auto mt-4 h-52 max-w-72">
           <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             Front
           </p>
@@ -362,29 +362,26 @@ export default function ControlPanel({
             detected={obstacle?.rearRight ?? null}
           />
 
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div
-              aria-label={
-                heading === null
-                  ? "Robot heading unavailable"
-                  : `Robot heading ${Math.round(
-                      heading,
-                    )} degrees`
-              }
-              className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
-              style={{
-                transform: `rotate(${heading ?? 0}deg)`,
-              }}
-            >
-              <div className="absolute top-3 h-0 w-0 border-x-[10px] border-b-[16px] border-x-transparent border-b-accent" />
-
-              <Bot
-                size={64}
-                strokeWidth={1.65}
-                className="text-primary"
-              />
-            </div>
-          </div>
+          
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+  <div
+    aria-label={
+      heading === null
+        ? "Robot heading unavailable"
+        : `Robot heading ${Math.round(heading)} degrees`
+    }
+    className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
+    style={{
+      transform: `rotate(${heading ?? 0}deg)`,
+    }}
+  >
+    <Bot
+      size={64}
+      strokeWidth={1.65}
+      className="text-primary"
+    />
+  </div>
+</div>
 
           <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             Rear
@@ -429,13 +426,13 @@ export default function ControlPanel({
         </div>
       )}
 
-      <div className="mt-5 space-y-5">
+      <div className="mt-2">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
             Navigation
           </p>
 
-          <div className="mx-auto mt-3 max-w-72">
+          <div className="mx-auto max-w-72">
             <JoystickController
               disabled={!isConnected}
               onDirectionChange={

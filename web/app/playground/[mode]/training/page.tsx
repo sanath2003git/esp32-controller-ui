@@ -18,8 +18,8 @@ export default function TrainingPage() {
         backHref={`/playground/${params.mode}`}
       />
 
-      <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
-        <section className="mt-8">
+      <div className="mx-auto min-h-screen max-w-md px-4 pb-0 pt-20">
+        <section >
           <ControlPanel />
         </section>
       </div>
