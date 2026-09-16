@@ -78,7 +78,6 @@ function TrustModal({
               d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
               fill={tier.color}
               clipPath="url(#trust-modal-clip)"
-              style={{ filter: `drop-shadow(0 0 8px ${tier.color}bb)` }}
             />
           </svg>
         </div>
@@ -548,10 +547,10 @@ export default function HomeDashboard() {
                 const pct = 58;
                 const tier =
                   pct >= 67
-                    ? { label: "Best Friend", color: "#35e59a" }
+                    ? { label: "High Trust",   color: "#35e59a" }
                     : pct >= 34
-                    ? { label: "Unsure",      color: "#ffc857" }
-                    : { label: "Broken Bond", color: "#ff4d67" };
+                    ? { label: "Medium Trust", color: "#ffc857" }
+                    : { label: "Low Trust",    color: "#ff4d67" };
                 return (
                   <div className="flex flex-col items-center gap-1">
                     <button
@@ -577,7 +576,6 @@ export default function HomeDashboard() {
                           d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
                           fill={tier.color}
                           clipPath="url(#pet-heart-clip)"
-                          style={{ filter: `drop-shadow(0 0 5px ${tier.color}aa)` }}
                         />
                       </svg>
                     </button>
@@ -723,10 +721,10 @@ export default function HomeDashboard() {
         const pct = 58;
         const tier =
           pct >= 67
-            ? { label: "Best Friend", color: "#35e59a" }
+            ? { label: "High Trust",   color: "#35e59a" }
             : pct >= 34
-            ? { label: "Unsure",      color: "#ffc857" }
-            : { label: "Broken Bond", color: "#ff4d67" };
+            ? { label: "Medium Trust", color: "#ffc857" }
+            : { label: "Low Trust",    color: "#ff4d67" };
         return (
           <TrustModal
             pct={pct}
