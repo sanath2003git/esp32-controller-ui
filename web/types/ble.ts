@@ -71,7 +71,7 @@ export type OledTextCommand = {
 
 export type OledEmojiCommand = {
   command: "oled_emoji";
-  emoji: string;
+  emoji_id: number;
 };
 
 export type RobotCommand =
