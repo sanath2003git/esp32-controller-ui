@@ -74,20 +74,6 @@ export default function ChallengeLevelPage() {
       />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
-        <section>
-          <p className="text-sm font-medium text-accent">
-            Level {levelMeta.id}
-          </p>
-
-          <h2 className="mt-2 text-3xl font-black tracking-tight">
-            {levelMeta.title}
-          </h2>
-
-          <p className="mt-2 text-sm leading-6 text-white/50">
-            {levelMeta.description}
-          </p>
-        </section>
-
         <section className="mt-8">
           <ControlPanel />
         </section>

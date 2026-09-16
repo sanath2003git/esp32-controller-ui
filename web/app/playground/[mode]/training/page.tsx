@@ -19,18 +19,6 @@ export default function TrainingPage() {
       />
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
-        <section>
-          <p className="text-sm font-medium text-accent">Training</p>
-
-          <h2 className="mt-2 text-3xl font-black tracking-tight">
-            Drive freely
-          </h2>
-
-          <p className="mt-2 text-sm leading-6 text-white/50">
-            No timers, no scoring — just get a feel for the robot.
-          </p>
-        </section>
-
         <section className="mt-8">
           <ControlPanel />
         </section>
