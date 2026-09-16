@@ -23,18 +23,27 @@ function BatteryBar({
   const displayColor = low ? "#ff4d67" : color;
 
   return (
-    <div className="flex items-center gap-1.5">
-      <span className="w-7 text-right text-[9px] font-bold uppercase tracking-[0.1em] text-white/35">
+    <div className="flex items-center gap-1">
+      <span className="w-5 text-right text-[8px] font-bold uppercase tracking-[0.05em] text-white/40">
         {label}
       </span>
-      <div className="relative flex h-3.5 w-16 items-center overflow-hidden rounded-sm border border-white/20 bg-black/40">
+      {/* Battery Body with slight outer glow */}
+      <div
+        className="relative flex h-2.5 w-10 items-center overflow-hidden rounded-[2px] border border-white/20 bg-black/40"
+        style={{ boxShadow: `0 0 6px ${displayColor}33` }}
+      >
         <div
           className="h-full rounded-[1px] transition-all duration-500"
-          style={{ width: `${pct}%`, background: displayColor, boxShadow: `0 0 6px ${displayColor}88` }}
+          style={{ width: `${pct}%`, background: displayColor, boxShadow: `0 0 6px ${displayColor}b3` }}
         />
       </div>
-      <div className="h-2 w-1 rounded-r-sm" style={{ background: "rgba(255,255,255,0.2)" }} />
-      <span className="text-[9px] font-bold" style={{ color: displayColor }}>
+      {/* Battery Terminal */}
+      <div className="-ml-0.5 h-1.5 w-[2px] rounded-r-[1px]" style={{ background: "rgba(255,255,255,0.2)" }} />
+      {/* Percentage Text with slight glow */}
+      <span
+        className="w-5 text-[8px] font-bold"
+        style={{ color: displayColor, textShadow: `0 0 4px ${displayColor}88` }}
+      >
         {pct}%
       </span>
     </div>
