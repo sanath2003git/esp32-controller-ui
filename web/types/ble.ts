@@ -4,6 +4,7 @@ import type {
   ColorQuestReadyMessage,
   ColorQuestResult,
   ColorQuestTaskMessage,
+  ColorQuestTaskResultMessage,
 } from "@/types/colourQuest";
 
 export type RobotDeviceInfo = {
@@ -108,6 +109,7 @@ export type BleMessage =
   | ResponseMessage
   | ColorQuestResult
   | ColorQuestTaskMessage
+  | ColorQuestTaskResultMessage
   | ColorQuestReadyMessage
   | ColorQuestErrorMessage;
 
@@ -200,13 +202,13 @@ export function parseBleMessage(value: unknown): BleMessage | null {
 
   if (value.type === "response") {
     if (
-      value.game === "color-quest" &&
+      (value.game === "color-quest" || value.game === "colour-quest") &&
       typeof value.score === "number" &&
       Number.isFinite(value.score) &&
       value.score >= 0 &&
       value.score <= 1
     ) {
-      return value as ColorQuestResult;
+      return { ...value, game: "color-quest" } as ColorQuestResult;
     }
 
     if (
@@ -219,18 +221,20 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     return null;
   }
 
-  if (value.type === "task" && value.game === "color-quest") {
-    if (
-      typeof value.index === "number" &&
-      typeof value.target === "string" &&
-      Array.isArray(value.options)
-    ) {
-      return value as ColorQuestTaskMessage;
+  if (value.type === "task" && (value.game === "color-quest" || value.game === "colour-quest")) {
+    if (typeof value.index === "number") {
+      return { ...value, game: "color-quest" } as ColorQuestTaskMessage;
     }
   }
 
-  if (value.type === "ready" && value.game === "color-quest") {
-    return value as ColorQuestReadyMessage;
+  if (value.type === "task_result" && (value.game === "color-quest" || value.game === "colour-quest")) {
+    if (typeof value.index === "number" && typeof value.correct === "boolean") {
+      return { ...value, game: "color-quest" } as ColorQuestTaskResultMessage;
+    }
+  }
+
+  if (value.type === "ready" && (value.game === "color-quest" || value.game === "colour-quest")) {
+    return { ...value, game: "color-quest" } as ColorQuestReadyMessage;
   }
 
   if (value.type === "error" && typeof value.message === "string") {

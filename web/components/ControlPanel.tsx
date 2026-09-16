@@ -23,8 +23,8 @@ type ControlPanelMode = "free-ride" | "training" | "challenge";
 
 type ActiveTaskInfo = {
   index: number;
-  target: string;
-  options: string[];
+  target?: string;
+  options?: string[];
 };
 
 type ControlPanelProps = {
@@ -211,6 +211,14 @@ export default function ControlPanel({
       Math.abs(dx) < 0.08 &&
       Math.abs(dy) < 0.08
     ) {
+      if (activeMovementDirection.current !== null) {
+        if (!isColorQuestActive) {
+          void stop().catch((error: unknown) => {
+            console.error("[CONTROL PANEL] Stop command failed", error);
+          });
+        }
+        activeMovementDirection.current = null;
+      }
       return;
     }
 
@@ -254,15 +262,17 @@ export default function ControlPanel({
   };
 
   const handleJoystickRelease = () => {
-    activeMovementDirection.current = null;
+    if (activeMovementDirection.current !== null) {
+      activeMovementDirection.current = null;
 
-    if (!isColorQuestActive) {
-      void stop().catch((error: unknown) => {
-        console.error(
-          "[CONTROL PANEL] Stop command failed",
-          error,
-        );
-      });
+      if (!isColorQuestActive) {
+        void stop().catch((error: unknown) => {
+          console.error(
+            "[CONTROL PANEL] Stop command failed",
+            error,
+          );
+        });
+      }
     }
   };
 
@@ -480,19 +490,11 @@ export default function ControlPanel({
             <span className="flex items-center gap-1">
               <Target size={14} /> Task {activeTask.index + 1} / 10
             </span>
-            <span className="uppercase tracking-wider text-white/60">Target LED</span>
+            <span className="uppercase tracking-wider text-white/60">Colour Quest</span>
           </div>
-          <div className="mt-1 text-lg font-black uppercase tracking-wider text-white">
-            Match: <span className="text-accent">{activeTask.target}</span>
+          <div className="mt-1 text-sm font-bold text-white">
+            Use Joystick or Region Buttons to submit answer
           </div>
-          {activeTask.options.length >= 4 && (
-            <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-medium text-white/70">
-              <span>U: {activeTask.options[0]}</span>
-              <span>R: {activeTask.options[1]}</span>
-              <span>D: {activeTask.options[2]}</span>
-              <span>L: {activeTask.options[3]}</span>
-            </div>
-          )}
         </div>
       )}
 

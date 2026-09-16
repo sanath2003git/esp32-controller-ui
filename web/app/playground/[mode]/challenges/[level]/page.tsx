@@ -201,6 +201,12 @@ export default function ChallengeLevelPage() {
     }
   };
 
+  const [taskFeedback, setTaskFeedback] = useState<{
+    correct: boolean;
+    timeout?: boolean;
+    correctCount: number;
+  } | null>(null);
+
   // BLE message listener
   useEffect(() => {
     if (gameState !== "playing" || !lastMessage) return;
@@ -208,13 +214,26 @@ export default function ChallengeLevelPage() {
     if (lastMessage.type === "task" && (lastMessage.game === "color-quest" || lastMessage.game === "colour-quest")) {
       const taskData = {
         index: lastMessage.index,
-        phase: (lastMessage.phase as "memorize" | "answer") || "answer",
+        phase: (lastMessage.phase as "memorize" | "answer") || "memorize",
         input: lastMessage.input || "region",
         target: lastMessage.target,
         options: lastMessage.options,
       };
       setTimeout(() => {
         setActiveTask(taskData);
+        setTaskFeedback(null);
+      }, 0);
+    } else if (
+      lastMessage.type === "task_result" &&
+      (lastMessage.game === "color-quest" || lastMessage.game === "colour-quest")
+    ) {
+      const feedback = {
+        correct: lastMessage.correct,
+        timeout: lastMessage.timeout,
+        correctCount: lastMessage.correctCount ?? 0,
+      };
+      setTimeout(() => {
+        setTaskFeedback(feedback);
       }, 0);
     } else if (lastMessage.type === "error") {
       const msg = lastMessage.message;
@@ -290,7 +309,7 @@ export default function ChallengeLevelPage() {
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
         {/* Header Section */}
-        <section className="rounded-2xl border border-white/10 bg-surface p-5 shadow-lg">
+        {/* <section className="rounded-2xl border border-white/10 bg-surface p-5 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
               Level {levelMeta.id}
@@ -318,7 +337,7 @@ export default function ChallengeLevelPage() {
               Concept: {levelMeta.concept}
             </p>
           )}
-        </section>
+        </section> */}
 
         {/* Lock warning if locked */}
         {!isLoadingProgress && !isUnlocked && (
@@ -384,11 +403,27 @@ export default function ChallengeLevelPage() {
                 Task {activeTask.index + 1} / 10
               </span>
               <span className="uppercase tracking-wider font-semibold text-white/80">
-                {activeTask.phase === "memorize" ? "Phase 1: Memorize" : "Phase 2: Answer"}
+                {activeTask.phase === "memorize" ? "Phase 1: Memorize (0-5s)" : "Phase 2: Answer (5-10s)"}
               </span>
             </div>
 
-            {activeTask.phase === "memorize" ? (
+            {taskFeedback ? (
+              <div
+                className={`mb-4 rounded-xl border p-4 font-bold text-sm ${
+                  taskFeedback.correct
+                    ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+                    : taskFeedback.timeout
+                    ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                    : "border-rose-500/40 bg-rose-500/15 text-rose-300"
+                }`}
+              >
+                {taskFeedback.correct
+                  ? `CORRECT! Score: ${taskFeedback.correctCount}/10`
+                  : taskFeedback.timeout
+                  ? `TIMEOUT! Score: ${taskFeedback.correctCount}/10`
+                  : `WRONG! Score: ${taskFeedback.correctCount}/10`}
+              </div>
+            ) : activeTask.phase === "memorize" ? (
               <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300">
                 <div className="flex items-center justify-center gap-2 font-bold text-sm mb-1">
                   <Eye size={18} className="animate-pulse" /> Memorize Phase!
@@ -403,7 +438,7 @@ export default function ChallengeLevelPage() {
                   <HelpCircle size={18} /> Answer Phase!
                 </div>
                 <p className="text-xs text-emerald-200/80">
-                  LEDs are off. Select the matching region below!
+                  LEDs are off. Input accepted for 5 more seconds!
                 </p>
               </div>
             )}

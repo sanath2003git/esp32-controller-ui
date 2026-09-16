@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { Bluetooth, Cpu } from "lucide-react";
-import { useState } from "react";
+
 
 import { useBleContext } from "@/context/BleContext";
 import type { RobotState } from "@/types/robot";

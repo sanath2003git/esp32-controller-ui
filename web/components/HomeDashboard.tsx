@@ -7,19 +7,15 @@ import { createPortal } from "react-dom";
 import {
   BarChart2,
   Brain,
-  CheckCircle2,
   ChevronRight,
   Clock,
-  Clock3,
   Gamepad2,
   Heart,
   Lightbulb,
   Maximize2,
   Minimize2,
   Navigation,
-  SmilePlus,
   Star,
-  Swords,
   Trophy,
   X,
   Zap,
@@ -207,7 +203,6 @@ function ChallengeCarousel() {
   useEffect(() => {
     startAuto();
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const goTo = (i: number) => {
@@ -378,11 +373,14 @@ export default function HomeDashboard() {
 
   /* Auto-switch expression based on connection status */
   useEffect(() => {
-    if (isConnected) {
-      setSelectedExpression(0); // Happy
-    } else {
-      setSelectedExpression(9); // Sleep
-    }
+    const timer = setTimeout(() => {
+      if (isConnected) {
+        setSelectedExpression(0); // Happy
+      } else {
+        setSelectedExpression(9); // Sleep
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, [isConnected]);
 
   /* Hide/show AppHeader + BottomNav during fullscreen */

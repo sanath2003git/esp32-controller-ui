@@ -25,26 +25,28 @@
 
   Response examples:
   {"type":"response","status":"ok","command":"display_text"}
-  {"type":"response","status":"error","command":"display_text","message":"Text too long"}
+  {"type":"response","status":"error","command":"display_text","message":"Text
+  too long"}
 
   Notes:
   - Text is UTF-8 JSON. The OLED font is ASCII-only.
   - Use named bitmap emojis instead of Unicode emoji characters.
-  - BLE uses Nordic UART Service (NUS): service 6E400001, RX 6E400002, TX 6E400003.
+  - BLE uses Nordic UART Service (NUS): service 6E400001, RX 6E400002, TX
+  6E400003.
   - Messages are newline-delimited JSON.
   - Existing movement, RGB, buzzer, telemetry, and sensor logic is preserved.
-  - Colour Quest runs on the robot for 6 levels x 10 tasks.
+  - Colour Quest runs on the robot for 6 levels x 10 tasks. Each task has a 5s display + 5s answer window.
 */
 
+#include <Adafruit_GFX.h>
+#include <Adafruit_NeoPixel.h>
+#include <Adafruit_SSD1306.h>
+#include <ArduinoJson.h>
+#include <BLE2902.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
-#include <BLE2902.h>
-#include <ArduinoJson.h>
-#include <Adafruit_NeoPixel.h>
 #include <Wire.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_SSD1306.h>
 #include <math.h>
 #include <string.h>
 
@@ -59,14 +61,11 @@
 // BLE UUIDs
 // ========================================
 
-#define NUS_SERVICE_UUID \
-  "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
 
-#define NUS_CHAR_RX_UUID \
-  "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_CHAR_RX_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
 
-#define NUS_CHAR_TX_UUID \
-  "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
+#define NUS_CHAR_TX_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 // ========================================
 // PIN MAP
@@ -114,9 +113,9 @@
 // I2C DEVICE ADDRESSES
 // ========================================
 
-#define ADDR_MPU6050   0x68
-#define ADDR_QMC5883P  0x2C
-#define ADDR_OLED      0x3C
+#define ADDR_MPU6050 0x68
+#define ADDR_QMC5883P 0x2C
+#define ADDR_OLED 0x3C
 
 #define OLED_WIDTH 128
 #define OLED_HEIGHT 64
@@ -130,9 +129,9 @@ bool oledPresent = false;
 // ========================================
 
 #define MUX_CH_FRONT_RIGHT 9
-#define MUX_CH_FRONT_LEFT  11
-#define MUX_CH_REAR_RIGHT  12
-#define MUX_CH_REAR_LEFT   14
+#define MUX_CH_FRONT_LEFT 11
+#define MUX_CH_REAR_RIGHT 12
+#define MUX_CH_REAR_LEFT 14
 
 #define IR_OBSTACLE_THRESHOLD 2000
 
@@ -147,30 +146,24 @@ struct GameColor {
   uint8_t b;
 };
 
-Adafruit_NeoPixel strip(
-  NUM_STRIP_PIXELS,
-  PIN_STRIP,
-  NEO_GRB + NEO_KHZ800
-);
+Adafruit_NeoPixel strip(NUM_STRIP_PIXELS, PIN_STRIP, NEO_GRB + NEO_KHZ800);
 
 // Physical WS2812 region mapping supplied for the Elxie robot.
-// One logical region may wrap around the physical end of the strip.
-const uint8_t RIGHT_PIXELS[]  = {25,26,27,28,29,0,1,2,3,4};
-const uint8_t FRONT_PIXELS[]  = {5,6,7,8,9,10};
-const uint8_t LEFT_PIXELS[]   = {11,12,13,14,15,16};
-const uint8_t BACK_PIXELS[]   = {17,18,19,20,21,22,23,24};
+// The RIGHT region wraps around the physical end of the 30-pixel strip.
+const uint8_t RIGHT_PIXELS[] = {6, 7, 8};
 
-#define RIGHT_PIXEL_COUNT  (sizeof(RIGHT_PIXELS) / sizeof(RIGHT_PIXELS[0]))
-#define FRONT_PIXEL_COUNT  (sizeof(FRONT_PIXELS) / sizeof(FRONT_PIXELS[0]))
-#define LEFT_PIXEL_COUNT   (sizeof(LEFT_PIXELS) / sizeof(LEFT_PIXELS[0]))
-#define BACK_PIXEL_COUNT   (sizeof(BACK_PIXELS) / sizeof(BACK_PIXELS[0]))
+const uint8_t FRONT_PIXELS[] = {27, 28};
 
-enum StripRegion {
-  REGION_FRONT,
-  REGION_BACK,
-  REGION_LEFT,
-  REGION_RIGHT
-};
+const uint8_t LEFT_PIXELS[] = {18, 19, 20};
+
+const uint8_t BACK_PIXELS[] = {11, 12};
+
+#define RIGHT_PIXEL_COUNT (sizeof(RIGHT_PIXELS) / sizeof(RIGHT_PIXELS[0]))
+#define FRONT_PIXEL_COUNT (sizeof(FRONT_PIXELS) / sizeof(FRONT_PIXELS[0]))
+#define LEFT_PIXEL_COUNT (sizeof(LEFT_PIXELS) / sizeof(LEFT_PIXELS[0]))
+#define BACK_PIXEL_COUNT (sizeof(BACK_PIXELS) / sizeof(BACK_PIXELS[0]))
+
+enum StripRegion { REGION_FRONT, REGION_BACK, REGION_LEFT, REGION_RIGHT };
 
 void setStripColor(uint8_t r, uint8_t g, uint8_t b) {
   for (int i = 0; i < NUM_STRIP_PIXELS; i++) {
@@ -179,8 +172,8 @@ void setStripColor(uint8_t r, uint8_t g, uint8_t b) {
   strip.show();
 }
 
-void setRegionPixels(const uint8_t *pixels, size_t count,
-                     uint8_t r, uint8_t g, uint8_t b) {
+void setRegionPixels(const uint8_t *pixels, size_t count, uint8_t r, uint8_t g,
+                     uint8_t b) {
   for (size_t i = 0; i < count; i++) {
     strip.setPixelColor(pixels[i], strip.Color(r, g, b));
   }
@@ -188,38 +181,32 @@ void setRegionPixels(const uint8_t *pixels, size_t count,
 
 void setRegionColor(StripRegion region, uint8_t r, uint8_t g, uint8_t b) {
   switch (region) {
-    case REGION_FRONT:
-      setRegionPixels(FRONT_PIXELS, FRONT_PIXEL_COUNT, r, g, b);
-      break;
-    case REGION_BACK:
-      setRegionPixels(BACK_PIXELS, BACK_PIXEL_COUNT, r, g, b);
-      break;
-    case REGION_LEFT:
-      setRegionPixels(LEFT_PIXELS, LEFT_PIXEL_COUNT, r, g, b);
-      break;
-    case REGION_RIGHT:
-      setRegionPixels(RIGHT_PIXELS, RIGHT_PIXEL_COUNT, r, g, b);
-      break;
+  case REGION_FRONT:
+    setRegionPixels(FRONT_PIXELS, FRONT_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_BACK:
+    setRegionPixels(BACK_PIXELS, BACK_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_LEFT:
+    setRegionPixels(LEFT_PIXELS, LEFT_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_RIGHT:
+    setRegionPixels(RIGHT_PIXELS, RIGHT_PIXEL_COUNT, r, g, b);
+    break;
   }
 }
 
-void clearStripBuffer() {
-  strip.clear();
-}
+void clearStripBuffer() { strip.clear(); }
 
 void showRegionColors(const GameColor colors[4]) {
   clearStripBuffer();
 
   // Direction/index mapping:
   // 0 = front, 1 = right, 2 = back, 3 = left.
-  setRegionColor(REGION_FRONT,
-                 colors[0].r, colors[0].g, colors[0].b);
-  setRegionColor(REGION_RIGHT,
-                 colors[1].r, colors[1].g, colors[1].b);
-  setRegionColor(REGION_BACK,
-                 colors[2].r, colors[2].g, colors[2].b);
-  setRegionColor(REGION_LEFT,
-                 colors[3].r, colors[3].g, colors[3].b);
+  setRegionColor(REGION_FRONT, colors[0].r, colors[0].g, colors[0].b);
+  setRegionColor(REGION_RIGHT, colors[1].r, colors[1].g, colors[1].b);
+  setRegionColor(REGION_BACK, colors[2].r, colors[2].g, colors[2].b);
+  setRegionColor(REGION_LEFT, colors[3].r, colors[3].g, colors[3].b);
 
   strip.show();
 }
@@ -232,12 +219,7 @@ void setAllRegionsColor(uint8_t r, uint8_t g, uint8_t b) {
 // OLED
 // ========================================
 
-Adafruit_SSD1306 display(
-  OLED_WIDTH,
-  OLED_HEIGHT,
-  &Wire,
-  -1
-);
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 
 void oledInit() {
   if (!oledPresent) {
@@ -263,14 +245,16 @@ void oledInit() {
 }
 
 void oledClear() {
-  if (!oledPresent) return;
+  if (!oledPresent)
+    return;
 
   display.clearDisplay();
   display.display();
 }
 
-bool isAsciiText(const char* text) {
-  if (text == nullptr) return false;
+bool isAsciiText(const char *text) {
+  if (text == nullptr)
+    return false;
 
   for (size_t i = 0; text[i] != '\0'; i++) {
     if ((uint8_t)text[i] > 127) {
@@ -281,11 +265,15 @@ bool isAsciiText(const char* text) {
   return true;
 }
 
-bool displayText(const char* text, int line) {
-  if (!oledPresent) return false;
-  if (text == nullptr) return false;
-  if (!isAsciiText(text)) return false;
-  if (line < 0 || line > 7) return false;
+bool displayText(const char *text, int line) {
+  if (!oledPresent)
+    return false;
+  if (text == nullptr)
+    return false;
+  if (!isAsciiText(text))
+    return false;
+  if (line < 0 || line > 7)
+    return false;
 
   display.clearDisplay();
   display.setTextSize(1);
@@ -316,74 +304,78 @@ bool displayText(const char* text, int line) {
 
 // Replace the bitmap declarations in the firmware with:
 
-const uint8_t emojiHappy[] PROGMEM = {
-  0x3C, 0x42, 0xA5, 0x81, 0xA5, 0x99, 0x42, 0x3C
-};
+const uint8_t emojiHappy[] PROGMEM = {0x3C, 0x42, 0xA5, 0x81,
+                                      0xA5, 0x99, 0x42, 0x3C};
 
-const uint8_t emojiSad[] PROGMEM = {
-  0x3C, 0x42, 0xA5, 0x81, 0x99, 0xA5, 0x42, 0x3C
-};
+const uint8_t emojiSad[] PROGMEM = {0x3C, 0x42, 0xA5, 0x81,
+                                    0x99, 0xA5, 0x42, 0x3C};
 
-const uint8_t emojiHeart[] PROGMEM = {
-  0x00, 0x66, 0xFF, 0xFF, 0x7E, 0x3C, 0x18, 0x00
-};
+const uint8_t emojiHeart[] PROGMEM = {0x00, 0x66, 0xFF, 0xFF,
+                                      0x7E, 0x3C, 0x18, 0x00};
 
-const uint8_t emojiStar[] PROGMEM = {
-  0x18, 0x18, 0xFF, 0x7E, 0xFF, 0x18, 0x18, 0x00
-};
+const uint8_t emojiStar[] PROGMEM = {0x18, 0x18, 0xFF, 0x7E,
+                                     0xFF, 0x18, 0x18, 0x00};
 
-const uint8_t emojiCheck[] PROGMEM = {
-  0x00, 0x01, 0x03, 0x06, 0xCC, 0x78, 0x30, 0x00
-};
+const uint8_t emojiCheck[] PROGMEM = {0x00, 0x01, 0x03, 0x06,
+                                      0xCC, 0x78, 0x30, 0x00};
 
-const uint8_t emojiCross[] PROGMEM = {
-  0x81, 0x42, 0x24, 0x18, 0x18, 0x24, 0x42, 0x81
-};
+const uint8_t emojiCross[] PROGMEM = {0x81, 0x42, 0x24, 0x18,
+                                      0x18, 0x24, 0x42, 0x81};
 
-const uint8_t emojiWarning[] PROGMEM = {
-  0x18, 0x3C, 0x7E, 0xFF, 0x18, 0x18, 0x00, 0x18
-};
+const uint8_t emojiWarning[] PROGMEM = {0x18, 0x3C, 0x7E, 0xFF,
+                                        0x18, 0x18, 0x00, 0x18};
 
-const uint8_t emojiRobot[] PROGMEM = {
-  0x3C, 0x7E, 0xDB, 0xFF, 0xFF, 0x24, 0x24, 0x00
-};
+const uint8_t emojiRobot[] PROGMEM = {0x3C, 0x7E, 0xDB, 0xFF,
+                                      0xFF, 0x24, 0x24, 0x00};
 
-const uint8_t emojiBattery[] PROGMEM = {
-  0x7E, 0x42, 0x42, 0x42, 0x42, 0x42, 0x42, 0x7E
-};
+const uint8_t emojiBattery[] PROGMEM = {0x7E, 0x42, 0x42, 0x42,
+                                        0x42, 0x42, 0x42, 0x7E};
 
-const uint8_t emojiSleep[] PROGMEM = {
-  0x00, 0x66, 0x00, 0x0C, 0x18, 0x30, 0x60, 0x00
-};
+const uint8_t emojiSleep[] PROGMEM = {0x00, 0x66, 0x00, 0x0C,
+                                      0x18, 0x30, 0x60, 0x00};
 
-const uint8_t emojiWifi[] PROGMEM = {
-  0x00, 0x18, 0x24, 0x42, 0x81, 0x18, 0x18, 0x00
-};
+const uint8_t emojiWifi[] PROGMEM = {0x00, 0x18, 0x24, 0x42,
+                                     0x81, 0x18, 0x18, 0x00};
 
-const uint8_t* getEmojiBitmap(const char* emoji) {
-  if (emoji == nullptr) return nullptr;
+const uint8_t *getEmojiBitmap(const char *emoji) {
+  if (emoji == nullptr)
+    return nullptr;
 
-  if (strcmp(emoji, "happy") == 0) return emojiHappy;
-  if (strcmp(emoji, "smile") == 0) return emojiHappy;
-  if (strcmp(emoji, "sad") == 0) return emojiSad;
-  if (strcmp(emoji, "heart") == 0) return emojiHeart;
-  if (strcmp(emoji, "star") == 0) return emojiStar;
-  if (strcmp(emoji, "check") == 0) return emojiCheck;
-  if (strcmp(emoji, "cross") == 0) return emojiCross;
-  if (strcmp(emoji, "warning") == 0) return emojiWarning;
-  if (strcmp(emoji, "robot") == 0) return emojiRobot;
-  if (strcmp(emoji, "battery") == 0) return emojiBattery;
-  if (strcmp(emoji, "sleep") == 0) return emojiSleep;
-  if (strcmp(emoji, "wifi") == 0) return emojiWifi;
+  if (strcmp(emoji, "happy") == 0)
+    return emojiHappy;
+  if (strcmp(emoji, "smile") == 0)
+    return emojiHappy;
+  if (strcmp(emoji, "sad") == 0)
+    return emojiSad;
+  if (strcmp(emoji, "heart") == 0)
+    return emojiHeart;
+  if (strcmp(emoji, "star") == 0)
+    return emojiStar;
+  if (strcmp(emoji, "check") == 0)
+    return emojiCheck;
+  if (strcmp(emoji, "cross") == 0)
+    return emojiCross;
+  if (strcmp(emoji, "warning") == 0)
+    return emojiWarning;
+  if (strcmp(emoji, "robot") == 0)
+    return emojiRobot;
+  if (strcmp(emoji, "battery") == 0)
+    return emojiBattery;
+  if (strcmp(emoji, "sleep") == 0)
+    return emojiSleep;
+  if (strcmp(emoji, "wifi") == 0)
+    return emojiWifi;
 
   return nullptr;
 }
 
-bool displayEmoji(const char* emoji, const char* text) {
-  if (!oledPresent) return false;
+bool displayEmoji(const char *emoji, const char *text) {
+  if (!oledPresent)
+    return false;
 
-  const uint8_t* bitmap = getEmojiBitmap(emoji);
-  if (bitmap == nullptr) return false;
+  const uint8_t *bitmap = getEmojiBitmap(emoji);
+  if (bitmap == nullptr)
+    return false;
 
   display.clearDisplay();
   display.drawBitmap(0, 0, bitmap, 8, 8, SSD1306_WHITE);
@@ -425,12 +417,7 @@ volatile bool havePendingLine = false;
 // COLOUR QUEST GAME ENGINE
 // ========================================
 
-enum GameState {
-  GS_IDLE,
-  GS_SHOWING,
-  GS_WAIT_INPUT,
-  GS_FEEDBACK
-};
+enum GameState { GS_IDLE, GS_SHOWING, GS_WAIT_INPUT, GS_FEEDBACK };
 
 GameState gameState = GS_IDLE;
 
@@ -438,24 +425,53 @@ GameState gameState = GS_IDLE;
 #define COLOR_QUEST_MAX_LEVEL 6
 #define COLOR_QUEST_TASKS 10
 
+// Colour Quest uses the same physical region mapping as the main strip.
+const uint8_t *CQ_RIGHT_PIXELS = RIGHT_PIXELS;
+const uint8_t *CQ_BACK_PIXELS = BACK_PIXELS;
+const uint8_t *CQ_LEFT_PIXELS = LEFT_PIXELS;
+const uint8_t *CQ_FRONT_PIXELS = FRONT_PIXELS;
+
+#define CQ_RIGHT_PIXEL_COUNT RIGHT_PIXEL_COUNT
+#define CQ_FRONT_PIXEL_COUNT FRONT_PIXEL_COUNT
+#define CQ_LEFT_PIXEL_COUNT LEFT_PIXEL_COUNT
+#define CQ_BACK_PIXEL_COUNT BACK_PIXEL_COUNT
+
+void setCQRegionColor(StripRegion region, uint8_t r, uint8_t g, uint8_t b) {
+  switch (region) {
+  case REGION_FRONT:
+    setRegionPixels(CQ_FRONT_PIXELS, CQ_FRONT_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_BACK:
+    setRegionPixels(CQ_BACK_PIXELS, CQ_BACK_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_LEFT:
+    setRegionPixels(CQ_LEFT_PIXELS, CQ_LEFT_PIXEL_COUNT, r, g, b);
+    break;
+  case REGION_RIGHT:
+    setRegionPixels(CQ_RIGHT_PIXELS, CQ_RIGHT_PIXEL_COUNT, r, g, b);
+    break;
+  }
+}
+
+void setCQStripColor(uint8_t r, uint8_t g, uint8_t b) {
+  clearStripBuffer();
+  setCQRegionColor(REGION_FRONT, r, g, b);
+  setCQRegionColor(REGION_RIGHT, r, g, b);
+  setCQRegionColor(REGION_BACK, r, g, b);
+  setCQRegionColor(REGION_LEFT, r, g, b);
+  strip.show();
+}
+
 const GameColor COLOR_PALETTE[] = {
-  { "red",      255,   0,   0 },
-  { "green",      0, 255,   0 },
-  { "blue",       0,   0, 255 },
-  { "yellow",  255, 220,   0 },
-  { "cyan",       0, 255, 255 },
-  { "magenta", 255,   0, 255 },
-  { "orange",  255, 120,   0 },
-  { "purple",  150,   0, 255 }
-};
+    {"red", 255, 0, 0},      {"green", 0, 255, 0},   {"blue", 0, 0, 255},
+    {"yellow", 255, 220, 0}, {"cyan", 0, 255, 255},  {"magenta", 255, 0, 255},
+    {"orange", 255, 120, 0}, {"purple", 150, 0, 255}};
 
 #define COLOR_PALETTE_N (sizeof(COLOR_PALETTE) / sizeof(COLOR_PALETTE[0]))
 
 // Four answer regions used by the web controller.
 // 0 = FRONT, 1 = RIGHT, 2 = BACK, 3 = LEFT.
-const char *const REGION_NAMES[4] = {
-  "front", "right", "back", "left"
-};
+const char *const REGION_NAMES[4] = {"front", "right", "back", "left"};
 
 int colorOption[4] = {0, 1, 2, 3};
 int colorTargetDirection = 0;
@@ -466,16 +482,16 @@ int challengeCorrectCount = 0;
 
 unsigned long challengeFeedbackUntil = 0;
 unsigned long challengeShowUntil = 0;
+unsigned long challengeGameDeadline = 0;
 bool challengeAnswerCorrect = false;
 
 // The game owns the robot only while a challenge is active.
 // Persistent progression, stars and unlocks remain app-side.
-void challengeStopOutputs() {
-  setStripColor(0, 0, 0);
-}
+void challengeStopOutputs() { setStripColor(0, 0, 0); }
 
 void challengeShowIdle() {
-  if (!oledPresent) return;
+  if (!oledPresent)
+    return;
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -494,29 +510,31 @@ const GameColor &colorByIndex(int index) {
 }
 
 void challengeShowTaskPrompt() {
-  if (!oledPresent) return;
+  if (!oledPresent)
+    return;
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
   display.setTextSize(1);
 
   display.setCursor(0, 0);
-  display.printf("CQ L%d  T%d/%d",
-                 challengeLevel,
-                 challengeTaskIndex + 1,
+  display.printf("CQ L%d  T%d/%d", challengeLevel, challengeTaskIndex + 1,
                  COLOR_QUEST_TASKS);
 
   display.setCursor(0, 16);
-  display.println("Remember the");
+  display.println("Find the PRIMARY");
   display.println("colour region.");
 
-  display.setCursor(0, 50);
-  display.println("Choose: F R B L");
+  display.setCursor(0, 48);
+  display.println("5s SHOW + 5s ANSWER");
+  display.setCursor(0, 58);
+  display.println("F  R  B  L");
   display.display();
 }
 
 void challengeShowFeedback(bool correct) {
-  if (!oledPresent) return;
+  if (!oledPresent)
+    return;
 
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
@@ -525,49 +543,45 @@ void challengeShowFeedback(bool correct) {
   display.println(correct ? "CORRECT" : "WRONG");
 
   display.setTextSize(1);
-  display.setCursor(32, 48);
-  display.printf("%d/%d", challengeCorrectCount, COLOR_QUEST_TASKS);
+  display.setCursor(24, 44);
+  display.printf("Score: %d/%d", challengeCorrectCount,
+                 COLOR_QUEST_TASKS);
+  display.setCursor(8, 56);
+  display.println("Next task...");
   display.display();
 }
 
 const char *challengeLevelName(int level) {
   switch (level) {
-    case 1: return "primary-memory";
-    case 2: return "fast-primary";
-    case 3: return "secondary-spot";
-    case 4: return "fast-secondary";
-    case 5: return "hue-tint";
-    case 6: return "ultimate";
-    default: return "unknown";
+  case 1:
+    return "primary-memory";
+  case 2:
+    return "fast-primary";
+  case 3:
+    return "secondary-spot";
+  case 4:
+    return "fast-secondary";
+  case 5:
+    return "hue-tint";
+  case 6:
+    return "ultimate";
+  default:
+    return "unknown";
   }
 }
 
-// Display duration for the visual memory phase.
-// L1 is deliberately comfortable; later levels become progressively faster.
+// Every Colour Quest task has the same 10-second response window:
+// 0-5 s: all four coloured regions are visible.
+// 5-10 s: LEDs are turned off, but the web controller may still answer.
+// A response received at any point during the full 10 s is evaluated.
 unsigned long challengeDisplayDuration(int level) {
-  switch (level) {
-    case 1: return 1800;
-    case 2: return 900;
-    case 3: return 1500;
-    case 4: return 750;
-    case 5: return 1100;
-    case 6: return 600;
-    default: return 1000;
-  }
+  (void)level;
+  return 5000;
 }
 
-// Answer timeout after the LEDs go dark.
-// Later levels are progressively faster.
 unsigned long challengeAnswerTimeout(int level) {
-  switch (level) {
-    case 1: return 5000;
-    case 2: return 3500;
-    case 3: return 4500;
-    case 4: return 2800;
-    case 5: return 3500;
-    case 6: return 2200;
-    default: return 4000;
-  }
+  (void)level;
+  return 5000;
 }
 
 // Choose a random set of four distinct colour indices from a supplied pool.
@@ -588,74 +602,60 @@ void chooseDistinctColors(const int *pool, int poolSize) {
 // Build the actual four region colours for the current level.
 //
 // L1: one primary + three secondary. Target = the only primary.
-// L2: same visual structure as L1, but much faster.
+// L2: same primary-vs-secondary recognition with a higher presentation challenge.
 // L3: one secondary + three primary. Target = the only secondary.
-// L4: same secondary-vs-primary discrimination under a shorter time.
-// L5: four hue/tint variants. Target is one exact variant.
-// L6: four closely related extended colours with the shortest timing.
+// L4: same secondary-vs-primary recognition with a higher presentation challenge.
+// L5: four hue/tint variants. Target = one exact variant.
+// L6: four different extended colours. Target = one exact region.
 //
 // For every level, colorTargetDirection identifies the physical region
 // whose displayed colour must be selected by the user.
 void challengeBuildTask() {
-  static const int PRIMARY[]   = {0, 1, 2};       // red, green, blue
-  static const int SECONDARY[] = {3, 4, 5};       // yellow, cyan, magenta
-  static const int EXTENDED[]  = {0,1,2,3,4,5,6,7};
+  static const int PRIMARY[] = {0, 1, 2};   // red, green, blue
+  static const int SECONDARY[] = {3, 4, 5}; // yellow, cyan, magenta
+  static const int EXTENDED[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
-  if (challengeLevel <= 2) {
-    // Exactly one primary and three secondary colours.
-    // Select one primary target and fill the other regions with
-    // the three secondary colours.
-    int primary = PRIMARY[random(3)];
+  if (challengeLevel <= 4) {
+    int targetColor;
+    int distractorColors[3];
 
-    int secondaryOrder[3] = {0, 1, 2};
-    for (int i = 2; i > 0; i--) {
-      int j = random(i + 1);
-      int t = secondaryOrder[i];
-      secondaryOrder[i] = secondaryOrder[j];
-      secondaryOrder[j] = t;
+    if (challengeLevel <= 2) {
+      // L1 & L2: exactly one primary target plus the three secondary colours.
+      // This guarantees that no distractor is a shade/tint of the target,
+      // and no second primary colour can be mistaken for the target class.
+      targetColor = PRIMARY[random(3)];
+      distractorColors[0] = SECONDARY[0]; // yellow
+      distractorColors[1] = SECONDARY[1]; // cyan
+      distractorColors[2] = SECONDARY[2]; // magenta
+    } else {
+      // L3 & L4: exactly one secondary target plus all three primaries.
+      targetColor = SECONDARY[random(3)];
+      distractorColors[0] = PRIMARY[0]; // red
+      distractorColors[1] = PRIMARY[1]; // green
+      distractorColors[2] = PRIMARY[2]; // blue
     }
 
-    int primarySlot = random(4);
-    int secondaryCursor = 0;
+    // Shuffle the three distractor colours so their positions are random.
+    for (int i = 2; i > 0; i--) {
+      int j = random(i + 1);
+      int t = distractorColors[i];
+      distractorColors[i] = distractorColors[j];
+      distractorColors[j] = t;
+    }
+
+    int targetSlot = random(4);
+    int distractorCursor = 0;
 
     for (int slot = 0; slot < 4; slot++) {
-      if (slot == primarySlot) {
-        colorOption[slot] = primary;
+      if (slot == targetSlot) {
+        colorOption[slot] = targetColor;
       } else {
-        colorOption[slot] = SECONDARY[secondaryOrder[secondaryCursor++]];
+        colorOption[slot] = distractorColors[distractorCursor++];
       }
     }
 
-    colorTargetDirection = primarySlot;
-  }
-  else if (challengeLevel <= 4) {
-    // Exactly one secondary and three primary colours.
-    // This implements "spot the secondary colour", with L4 using
-    // the same discrimination task under a faster timer.
-    int secondary = SECONDARY[random(3)];
-
-    int primaryOrder[3] = {0, 1, 2};
-    for (int i = 2; i > 0; i--) {
-      int j = random(i + 1);
-      int t = primaryOrder[i];
-      primaryOrder[i] = primaryOrder[j];
-      primaryOrder[j] = t;
-    }
-
-    int secondarySlot = random(4);
-    int primaryCursor = 0;
-
-    for (int slot = 0; slot < 4; slot++) {
-      if (slot == secondarySlot) {
-        colorOption[slot] = secondary;
-      } else {
-        colorOption[slot] = PRIMARY[primaryOrder[primaryCursor++]];
-      }
-    }
-
-    colorTargetDirection = secondarySlot;
-  }
-  else if (challengeLevel == 5) {
+    colorTargetDirection = targetSlot;
+  } else if (challengeLevel == 5) {
     // Advanced hue/tint recognition.
     // Use a controlled family of close colours so the player must
     // distinguish hue/tint rather than simply primary vs secondary.
@@ -663,15 +663,10 @@ void challengeBuildTask() {
     // These are explicit LED RGB values, not claims about a calibrated
     // colour space. Actual appearance depends on the WS2812 LEDs.
     static const GameColor HUE_TINTS[8] = {
-      {"red",        255,   0,   0},
-      {"red-orange", 255,  70,   0},
-      {"orange",     255, 120,   0},
-      {"orange-red", 255,  35,   0},
-      {"blue",         0,   0, 255},
-      {"blue-cyan",    0, 120, 255},
-      {"cyan-blue",    0, 200, 255},
-      {"purple-blue", 90,   0, 255}
-    };
+        {"red", 255, 0, 0},         {"red-orange", 255, 70, 0},
+        {"orange", 255, 120, 0},    {"orange-red", 255, 35, 0},
+        {"blue", 0, 0, 255},        {"blue-cyan", 0, 120, 255},
+        {"cyan-blue", 0, 200, 255}, {"purple-blue", 90, 0, 255}};
 
     int family = random(2) == 0 ? 0 : 4;
     int start = family;
@@ -699,8 +694,7 @@ void challengeBuildTask() {
     // Keep the generated family available through challenge rendering.
     // The target direction is enough for scoring.
     (void)HUE_TINTS;
-  }
-  else {
+  } else {
     // L6: ultimate challenge. Four different extended colours.
     // The target is random and the presentation window is shortest.
     chooseDistinctColors(EXTENDED, sizeof(EXTENDED) / sizeof(EXTENDED[0]));
@@ -711,15 +705,10 @@ void challengeBuildTask() {
 // Return the actual colour used by a task slot.
 GameColor challengeTaskColor(int slot) {
   static const GameColor HUE_TINTS[8] = {
-    {"red",        255,   0,   0},
-    {"red-orange", 255,  70,   0},
-    {"orange",     255, 120,   0},
-    {"orange-red", 255,  35,   0},
-    {"blue",         0,   0, 255},
-    {"blue-cyan",    0, 120, 255},
-    {"cyan-blue",    0, 200, 255},
-    {"purple-blue", 90,   0, 255}
-  };
+      {"red", 255, 0, 0},         {"red-orange", 255, 70, 0},
+      {"orange", 255, 120, 0},    {"orange-red", 255, 35, 0},
+      {"blue", 0, 0, 255},        {"blue-cyan", 0, 120, 255},
+      {"cyan-blue", 0, 200, 255}, {"purple-blue", 90, 0, 255}};
 
   if (challengeLevel == 5) {
     return HUE_TINTS[colorOption[slot]];
@@ -739,18 +728,21 @@ void challengeIlluminateTask() {
   clearStripBuffer();
 
   // Slots correspond to FRONT, RIGHT, BACK, LEFT.
-  setRegionColor(REGION_FRONT,
-                 taskColors[0].r, taskColors[0].g, taskColors[0].b);
-  setRegionColor(REGION_RIGHT,
-                 taskColors[1].r, taskColors[1].g, taskColors[1].b);
-  setRegionColor(REGION_BACK,
-                 taskColors[2].r, taskColors[2].g, taskColors[2].b);
-  setRegionColor(REGION_LEFT,
-                 taskColors[3].r, taskColors[3].g, taskColors[3].b);
+  setCQRegionColor(REGION_FRONT, taskColors[0].r, taskColors[0].g,
+                   taskColors[0].b);
+  setCQRegionColor(REGION_RIGHT, taskColors[1].r, taskColors[1].g,
+                   taskColors[1].b);
+  setCQRegionColor(REGION_BACK, taskColors[2].r, taskColors[2].g,
+                   taskColors[2].b);
+  setCQRegionColor(REGION_LEFT, taskColors[3].r, taskColors[3].g,
+                   taskColors[3].b);
 
   strip.show();
 
-  challengeShowUntil = millis() + challengeDisplayDuration(challengeLevel);
+  unsigned long now = millis();
+  challengeShowUntil = now + challengeDisplayDuration(challengeLevel);
+  challengeGameDeadline = now + challengeDisplayDuration(challengeLevel) +
+                          challengeAnswerTimeout(challengeLevel);
   challengeShowTaskPrompt();
   gameState = GS_SHOWING;
 }
@@ -784,6 +776,24 @@ void challengeCreateTask() {
 void challengeBeginAnswerPhase() {
   challengeStopOutputs();
 
+  if (oledPresent) {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.printf("CQ L%d  T%d/%d", challengeLevel, challengeTaskIndex + 1,
+                   COLOR_QUEST_TASKS);
+    display.setTextSize(2);
+    display.setCursor(22, 18);
+    display.println("ANSWER");
+    display.setTextSize(1);
+    display.setCursor(0, 48);
+    display.println("Choose: F R B L");
+    display.setCursor(0, 58);
+    display.println("5 seconds left");
+    display.display();
+  }
+
   JsonDocument phase;
   phase["type"] = "task";
   phase["game"] = "color-quest";
@@ -798,12 +808,13 @@ void challengeBeginAnswerPhase() {
   sendJson(phase);
 
   gameState = GS_WAIT_INPUT;
+  // challengeGameDeadline was set when the task started. This phase gets
+  // exactly the remaining 5 seconds of the task's 10-second total window.
   challengeShowUntil = millis() + challengeAnswerTimeout(challengeLevel);
 }
 
 void challengeStartLevel(int level) {
-  if (level < COLOR_QUEST_MIN_LEVEL ||
-      level > COLOR_QUEST_MAX_LEVEL) {
+  if (level < COLOR_QUEST_MIN_LEVEL || level > COLOR_QUEST_MAX_LEVEL) {
     sendError("invalid color-quest level");
     return;
   }
@@ -817,12 +828,9 @@ void challengeStartLevel(int level) {
   challengeFeedbackUntil = 0;
   challengeShowUntil = 0;
 
-  Serial.printf(
-    "Starting Colour Quest level %d (%s), %d tasks\n",
-    challengeLevel,
-    challengeLevelName(challengeLevel),
-    COLOR_QUEST_TASKS
-  );
+  Serial.printf("Starting Colour Quest level %d (%s), %d tasks\n",
+                challengeLevel, challengeLevelName(challengeLevel),
+                COLOR_QUEST_TASKS);
 
   tone(PIN_BUZZER, 1800, 80);
   challengeCreateTask();
@@ -831,8 +839,7 @@ void challengeStartLevel(int level) {
 void challengeFinishLevel() {
   challengeStopOutputs();
 
-  float score =
-    (float)challengeCorrectCount / (float)COLOR_QUEST_TASKS;
+  float score = (float)challengeCorrectCount / (float)COLOR_QUEST_TASKS;
 
   if (score < 0.0f || score > 1.0f) {
     sendError("computed score out of range");
@@ -850,15 +857,28 @@ void challengeFinishLevel() {
   result["tasks"] = COLOR_QUEST_TASKS;
   sendJson(result);
 
-  Serial.printf(
-    "Colour Quest L%d complete: %d/%d, score=%.2f\n",
-    challengeLevel,
-    challengeCorrectCount,
-    COLOR_QUEST_TASKS,
-    score
-  );
+  Serial.printf("Colour Quest L%d complete: %d/%d, score=%.2f\n",
+                challengeLevel, challengeCorrectCount, COLOR_QUEST_TASKS,
+                score);
 
   tone(PIN_BUZZER, score >= 0.8f ? 2400 : 900, 150);
+
+  if (oledPresent) {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.printf("LEVEL %d COMPLETE", challengeLevel);
+    display.setTextSize(2);
+    display.setCursor(24, 18);
+    display.printf("%d/%d", challengeCorrectCount, COLOR_QUEST_TASKS);
+    display.setTextSize(1);
+    display.setCursor(0, 46);
+    display.printf("Score: %d%%", (int)round(score * 100.0f));
+    display.setCursor(0, 57);
+    display.println("Web app saves progress");
+    display.display();
+  }
 
   gameState = GS_IDLE;
   challengeLevel = 0;
@@ -883,34 +903,42 @@ void challengeAbort() {
 }
 
 int regionNameToDirection(const char *region) {
-  if (region == nullptr) return -1;
+  if (region == nullptr)
+    return -1;
 
-  if (strcasecmp(region, "front") == 0) return 0;
-  if (strcasecmp(region, "right") == 0) return 1;
-  if (strcasecmp(region, "back") == 0) return 2;
-  if (strcasecmp(region, "left") == 0) return 3;
+  if (strcasecmp(region, "front") == 0)
+    return 0;
+  if (strcasecmp(region, "right") == 0)
+    return 1;
+  if (strcasecmp(region, "back") == 0)
+    return 2;
+  if (strcasecmp(region, "left") == 0)
+    return 3;
 
   // Also accept controller direction names as a convenience.
-  if (strcasecmp(region, "up") == 0) return 0;
-  if (strcasecmp(region, "down") == 0) return 2;
+  if (strcasecmp(region, "up") == 0)
+    return 0;
+  if (strcasecmp(region, "down") == 0)
+    return 2;
 
   return -1;
 }
 
 void challengeAnswerDirection(int direction) {
-  if (gameState != GS_WAIT_INPUT) return;
-  if (direction < 0 || direction > 3) return;
+  if (gameState != GS_WAIT_INPUT && gameState != GS_SHOWING)
+    return;
+  if (direction < 0 || direction > 3)
+    return;
 
-  challengeAnswerCorrect =
-    direction == colorTargetDirection;
+  challengeAnswerCorrect = direction == colorTargetDirection;
 
   if (challengeAnswerCorrect) {
     challengeCorrectCount++;
     tone(PIN_BUZZER, 2400, 100);
-    setStripColor(0, 80, 0);
+    setCQStripColor(0, 80, 0);
   } else {
     tone(PIN_BUZZER, 500, 250);
-    setStripColor(80, 0, 0);
+    setCQStripColor(80, 0, 0);
   }
 
   challengeShowFeedback(challengeAnswerCorrect);
@@ -947,7 +975,8 @@ int joystickToDirection(int x, int y) {
 }
 
 void handleChallengeInput(JsonDocument &doc) {
-  if (gameState != GS_WAIT_INPUT) return;
+  if (gameState != GS_WAIT_INPUT && gameState != GS_SHOWING)
+    return;
 
   if (doc.containsKey("region")) {
     const char *region = doc["region"] | "";
@@ -967,10 +996,14 @@ void handleChallengeInput(JsonDocument &doc) {
 
     int direction = -1;
 
-    if      (strcasecmp(dir, "up") == 0)    direction = 0;
-    else if (strcasecmp(dir, "right") == 0) direction = 1;
-    else if (strcasecmp(dir, "down") == 0)  direction = 2;
-    else if (strcasecmp(dir, "left") == 0)  direction = 3;
+    if (strcasecmp(dir, "up") == 0)
+      direction = 0;
+    else if (strcasecmp(dir, "right") == 0)
+      direction = 1;
+    else if (strcasecmp(dir, "down") == 0)
+      direction = 2;
+    else if (strcasecmp(dir, "left") == 0)
+      direction = 3;
 
     if (direction < 0) {
       sendError("invalid input direction");
@@ -998,7 +1031,8 @@ void handleChallengeInput(JsonDocument &doc) {
 }
 
 void sendJson(const JsonDocument &doc) {
-  if (!deviceConnected || bleTxCharacteristic == nullptr) return;
+  if (!deviceConnected || bleTxCharacteristic == nullptr)
+    return;
 
   String payload;
   serializeJson(doc, payload);
@@ -1010,10 +1044,8 @@ void sendJson(const JsonDocument &doc) {
 
   for (size_t offset = 0; offset < payload.length(); offset += CHUNK_SIZE) {
     size_t length = min(CHUNK_SIZE, payload.length() - offset);
-    bleTxCharacteristic->setValue(
-      (uint8_t *)(payload.c_str() + offset),
-      length
-    );
+    bleTxCharacteristic->setValue((uint8_t *)(payload.c_str() + offset),
+                                  length);
     bleTxCharacteristic->notify();
     delay(6);
   }
@@ -1030,7 +1062,8 @@ void sendError(const char *message) {
 }
 
 void sendDeviceInfo() {
-  if (!deviceConnected) return;
+  if (!deviceConnected)
+    return;
 
   String macAddress = BLEDevice::getAddress().toString().c_str();
   macAddress.toUpperCase();
@@ -1051,11 +1084,8 @@ void sendDeviceInfo() {
   sendJson(response);
 }
 
-void sendResponse(
-  const char *command,
-  bool success,
-  const char *message = nullptr
-) {
+void sendResponse(const char *command, bool success,
+                  const char *message = nullptr) {
   JsonDocument response;
 
   response["type"] = "response";
@@ -1070,7 +1100,8 @@ void sendResponse(
 }
 
 void handleCommandLine(const String &line) {
-  if (line.length() == 0) return;
+  if (line.length() == 0)
+    return;
 
   Serial.print("RX: ");
   Serial.println(line);
@@ -1307,13 +1338,15 @@ class RxCharacteristicCallbacks : public BLECharacteristicCallbacks {
   void onWrite(BLECharacteristic *characteristic) override {
     String value = characteristic->getValue();
 
-    if (value.length() == 0) return;
+    if (value.length() == 0)
+      return;
 
     for (size_t i = 0; i < value.length(); i++) {
       char ch = value[i];
 
       if (ch == '\n' || ch == '\r') {
-        if (rxLineBuffer.length() == 0) continue;
+        if (rxLineBuffer.length() == 0)
+          continue;
 
         // Only one pending line is needed for the low-rate command protocol.
         // If a line is already pending, process the latest complete command.
@@ -1337,7 +1370,8 @@ class RxCharacteristicCallbacks : public BLECharacteristicCallbacks {
 // ========================================
 
 void sendLiveTelemetry() {
-  if (!deviceConnected || !clientReady) return;
+  if (!deviceConnected || !clientReady)
+    return;
 
   // During Colour Quest, telemetry remains optional and does not control
   // the game state. The robot is still authoritative for task scoring.
@@ -1350,16 +1384,16 @@ void sendLiveTelemetry() {
   telemetry["distance"]["front"] = (frontCm < 0) ? -1 : frontCm;
 
   telemetry["obstacle"]["frontLeft"] =
-    readMuxChannel(MUX_CH_FRONT_LEFT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_FRONT_LEFT) > IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["frontRight"] =
-    readMuxChannel(MUX_CH_FRONT_RIGHT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_FRONT_RIGHT) > IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["rearLeft"] =
-    readMuxChannel(MUX_CH_REAR_LEFT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_REAR_LEFT) > IR_OBSTACLE_THRESHOLD;
 
   telemetry["obstacle"]["rearRight"] =
-    readMuxChannel(MUX_CH_REAR_RIGHT) > IR_OBSTACLE_THRESHOLD;
+      readMuxChannel(MUX_CH_REAR_RIGHT) > IR_OBSTACLE_THRESHOLD;
 
   telemetry["motion"]["sudden"] = detectSuddenMotion();
   telemetry["pit"]["detected"] = false;
@@ -1402,13 +1436,11 @@ void motorsStop() {
   digitalWrite(PIN_STBY, LOW);
 }
 
-void motorsEnable() {
-  digitalWrite(PIN_STBY, HIGH);
-}
+void motorsEnable() { digitalWrite(PIN_STBY, HIGH); }
 
 const int DEFAULT_SPEED = 180;
 
-void handleMove(const char* direction) {
+void handleMove(const char *direction) {
   motorsEnable();
 
   if (strcmp(direction, "forward") == 0) {
@@ -1447,7 +1479,8 @@ long readSonarCm() {
   digitalWrite(PIN_TRIG, LOW);
 
   long duration = pulseIn(PIN_ECHO, HIGH, 30000);
-  if (duration == 0) return -1;
+  if (duration == 0)
+    return -1;
 
   return duration / 58;
 }
@@ -1480,13 +1513,9 @@ int readMuxChannel(uint8_t channel) {
 volatile long encoderLeftCount = 0;
 volatile long encoderRightCount = 0;
 
-void IRAM_ATTR onEncoderLeft() {
-  encoderLeftCount++;
-}
+void IRAM_ATTR onEncoderLeft() { encoderLeftCount++; }
 
-void IRAM_ATTR onEncoderRight() {
-  encoderRightCount++;
-}
+void IRAM_ATTR onEncoderRight() { encoderRightCount++; }
 
 void encodersInit() {
   pinMode(PIN_ENC_LEFT, INPUT_PULLUP);
@@ -1508,9 +1537,12 @@ void i2cScan() {
     if (Wire.endTransmission() == 0) {
       Serial.printf("  Found device at 0x%02X\n", addr);
 
-      if (addr == ADDR_MPU6050)  mpu6050Present = true;
-      if (addr == ADDR_QMC5883P) qmc5883Present = true;
-      if (addr == ADDR_OLED)     oledPresent = true;
+      if (addr == ADDR_MPU6050)
+        mpu6050Present = true;
+      if (addr == ADDR_QMC5883P)
+        qmc5883Present = true;
+      if (addr == ADDR_OLED)
+        oledPresent = true;
     }
   }
 
@@ -1524,7 +1556,8 @@ void i2cScan() {
 // ========================================
 
 void mpu6050Init() {
-  if (!mpu6050Present) return;
+  if (!mpu6050Present)
+    return;
 
   Wire.beginTransmission(ADDR_MPU6050);
   Wire.write(0x6B);
@@ -1533,15 +1566,18 @@ void mpu6050Init() {
 }
 
 bool mpu6050ReadAccel(int16_t &ax, int16_t &ay, int16_t &az) {
-  if (!mpu6050Present) return false;
+  if (!mpu6050Present)
+    return false;
 
   Wire.beginTransmission(ADDR_MPU6050);
   Wire.write(0x3B);
 
-  if (Wire.endTransmission(false) != 0) return false;
+  if (Wire.endTransmission(false) != 0)
+    return false;
 
   Wire.requestFrom((int)ADDR_MPU6050, 6);
-  if (Wire.available() < 6) return false;
+  if (Wire.available() < 6)
+    return false;
 
   ax = (Wire.read() << 8) | Wire.read();
   ay = (Wire.read() << 8) | Wire.read();
@@ -1554,7 +1590,8 @@ long lastAccelMag = 0;
 
 bool detectSuddenMotion() {
   int16_t ax, ay, az;
-  if (!mpu6050ReadAccel(ax, ay, az)) return false;
+  if (!mpu6050ReadAccel(ax, ay, az))
+    return false;
 
   long mag = (long)ax * ax + (long)ay * ay + (long)az * az;
   long delta = abs(mag - lastAccelMag);
@@ -1568,7 +1605,8 @@ bool detectSuddenMotion() {
 // ========================================
 
 void qmc5883Init() {
-  if (!qmc5883Present) return;
+  if (!qmc5883Present)
+    return;
 
   Wire.beginTransmission(ADDR_QMC5883P);
   Wire.write(0x0B);
@@ -1582,15 +1620,18 @@ void qmc5883Init() {
 }
 
 uint8_t qmc5883ReadHeadingByte() {
-  if (!qmc5883Present) return 127;
+  if (!qmc5883Present)
+    return 127;
 
   Wire.beginTransmission(ADDR_QMC5883P);
   Wire.write(0x00);
 
-  if (Wire.endTransmission(false) != 0) return 127;
+  if (Wire.endTransmission(false) != 0)
+    return 127;
 
   Wire.requestFrom((int)ADDR_QMC5883P, 6);
-  if (Wire.available() < 6) return 127;
+  if (Wire.available() < 6)
+    return 127;
 
   int16_t x = Wire.read() | (Wire.read() << 8);
   int16_t y = Wire.read() | (Wire.read() << 8);
@@ -1599,7 +1640,8 @@ uint8_t qmc5883ReadHeadingByte() {
   Wire.read();
 
   float headingRad = atan2((float)y, (float)x);
-  if (headingRad < 0) headingRad += 2 * PI;
+  if (headingRad < 0)
+    headingRad += 2 * PI;
 
   float headingDeg = headingRad * 180.0 / PI;
 
@@ -1650,32 +1692,24 @@ void setup() {
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());
 
-  BLEService *service =
-    bleServer->createService(NUS_SERVICE_UUID);
+  BLEService *service = bleServer->createService(NUS_SERVICE_UUID);
 
   // ESP32 -> Web App
   bleTxCharacteristic = service->createCharacteristic(
-    NUS_CHAR_TX_UUID,
-    BLECharacteristic::PROPERTY_NOTIFY
-  );
+      NUS_CHAR_TX_UUID, BLECharacteristic::PROPERTY_NOTIFY);
 
   bleTxCharacteristic->addDescriptor(new BLE2902());
 
   // Web App -> ESP32
   bleRxCharacteristic = service->createCharacteristic(
-    NUS_CHAR_RX_UUID,
-    BLECharacteristic::PROPERTY_WRITE |
-    BLECharacteristic::PROPERTY_WRITE_NR
-  );
+      NUS_CHAR_RX_UUID,
+      BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
 
-  bleRxCharacteristic->setCallbacks(
-    new RxCharacteristicCallbacks()
-  );
+  bleRxCharacteristic->setCallbacks(new RxCharacteristicCallbacks());
 
   service->start();
 
-  BLEAdvertising *advertising =
-    BLEDevice::getAdvertising();
+  BLEAdvertising *advertising = BLEDevice::getAdvertising();
 
   advertising->addServiceUUID(NUS_SERVICE_UUID);
   advertising->setScanResponse(true);
@@ -1685,15 +1719,9 @@ void setup() {
   Serial.print("Device name: ");
   Serial.println(DEVICE_NAME);
 
-  Serial.println(
-    "NUS Service: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-  );
-  Serial.println(
-    "NUS RX:      6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-  );
-  Serial.println(
-    "NUS TX:      6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
-  );
+  Serial.println("NUS Service: 6E400001-B5A3-F393-E0A9-E50E24DCCA9E");
+  Serial.println("NUS RX:      6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
+  Serial.println("NUS TX:      6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
 
   challengeShowIdle();
   tone(PIN_BUZZER, 1600, 80);
@@ -1719,15 +1747,15 @@ void loop() {
 
   // Colour Quest is a non-blocking state machine:
   // SHOWING -> WAIT_INPUT -> FEEDBACK -> next task / finish.
-  if (gameState == GS_SHOWING &&
-      (long)(millis() - challengeShowUntil) >= 0) {
+  if (gameState == GS_SHOWING && (long)(millis() - challengeShowUntil) >= 0) {
     challengeBeginAnswerPhase();
   }
 
-  if (gameState == GS_WAIT_INPUT &&
-      (long)(millis() - challengeShowUntil) >= 0) {
-    // No answer before the timeout counts as a failed task.
+  if ((gameState == GS_SHOWING || gameState == GS_WAIT_INPUT) &&
+      (long)(millis() - challengeGameDeadline) >= 0) {
+    // No answer during the full 10-second task window counts as a failed task.
     challengeAnswerCorrect = false;
+    challengeStopOutputs();
     tone(PIN_BUZZER, 500, 250);
     setStripColor(80, 0, 0);
     challengeShowFeedback(false);
@@ -1770,8 +1798,7 @@ void loop() {
     wasDeviceConnected = true;
   }
 
-  if (deviceConnected &&
-      clientReady &&
+  if (deviceConnected && clientReady &&
       millis() - lastTelemetry >= TELEMETRY_INTERVAL) {
 
     lastTelemetry = millis();

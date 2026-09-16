@@ -45,13 +45,24 @@ export type ColorQuestResult = {
 
 export type ColorQuestTaskMessage = {
   type: "task";
-  game: "color-quest";
+  game: "color-quest" | "colour-quest";
   level?: number;
   index: number;
-  phase: "memorize" | "answer";
-  input: "region" | string;
+  phase?: "memorize" | "answer";
+  input?: "region" | string;
   target?: string;
   options?: string[];
+  regions?: string[];
+};
+
+export type ColorQuestTaskResultMessage = {
+  type: "task_result";
+  game: "color-quest" | "colour-quest";
+  level?: number;
+  index: number;
+  correct: boolean;
+  timeout?: boolean;
+  correctCount?: number;
 };
 
 export type ColorQuestReadyMessage = {
