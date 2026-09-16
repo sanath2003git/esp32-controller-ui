@@ -36,6 +36,8 @@ type BleContextValue = {
   move: (direction: MovementDirection) => Promise<void>;
   stop: () => Promise<void>;
   setColor: (color: RgbColor) => Promise<void>;
+  beep: (freq?: number, duration?: number) => Promise<void>;
+  setOledText: (text: string) => Promise<void>;
   disconnect: () => void;
 };
 
@@ -158,6 +160,20 @@ export function BleProvider({ children }: { children: ReactNode }) {
     [send],
   );
 
+  const beep = useCallback(
+    async (freq = 2000, duration = 100) => {
+      await send({ command: "buzzer", freq, duration });
+    },
+    [send],
+  );
+
+  const setOledText = useCallback(
+    async (text: string) => {
+      await send({ command: "oled_text", text });
+    },
+    [send],
+  );
+
   const disconnect = useCallback(() => {
     clientRef.current?.disconnect();
     clientRef.current = null;
@@ -180,6 +196,8 @@ export function BleProvider({ children }: { children: ReactNode }) {
         move,
         stop,
         setColor,
+        beep,
+        setOledText,
         disconnect,
       }}
     >

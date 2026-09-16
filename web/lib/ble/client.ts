@@ -8,7 +8,8 @@ declare global {
       requestDevice(
         options:
           | {
-              filters: Array<{ services: string[] }>;
+              filters: Array<{ name?: string; services?: string[] }>;
+              optionalServices?: string[];
             }
           | {
               acceptAllDevices: boolean;
@@ -60,21 +61,25 @@ declare global {
 // -------------
 
 import {
-  BLE_CHARACTERISTIC_UUID,
+  BLE_DEVICE_NAME,
+  BLE_RX_CHARACTERISTIC_UUID,
   BLE_SERVICE_UUID,
+  BLE_TX_CHARACTERISTIC_UUID,
 } from "@/lib/ble/constants";
 import { parseBleMessage, type BleMessage } from "@/types/ble";
 
 export type BleMessageHandler = (message: BleMessage) => void;
 export type BleDisconnectHandler = () => void;
 
-// BLE Client
+// BLE Client (Nordic UART Service - NUS)
 // -------------
 export class BleClient {
   private device: BluetoothDevice | null = null;
-  private characteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private rxCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+  private txCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
   private messageHandler: BleMessageHandler | null = null;
   private disconnectHandler: BleDisconnectHandler | null = null;
+  private rxBuffer: string = "";
 
   // CONNECT
   async connect(
@@ -89,9 +94,14 @@ export class BleClient {
 
     this.messageHandler = onMessage;
     this.disconnectHandler = onDisconnect;
+    this.rxBuffer = "";
 
     this.device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true,
+      filters: [
+        {
+          name: BLE_DEVICE_NAME,
+        },
+      ],
       optionalServices: [BLE_SERVICE_UUID],
     });
 
@@ -105,14 +115,17 @@ export class BleClient {
       BLE_SERVICE_UUID
     );
 
-    this.characteristic =
-      await service.getCharacteristic(
-        BLE_CHARACTERISTIC_UUID
-      );
+    this.rxCharacteristic = await service.getCharacteristic(
+      BLE_RX_CHARACTERISTIC_UUID
+    );
 
-    await this.characteristic.startNotifications();
+    this.txCharacteristic = await service.getCharacteristic(
+      BLE_TX_CHARACTERISTIC_UUID
+    );
 
-    this.characteristic.addEventListener(
+    await this.txCharacteristic.startNotifications();
+
+    this.txCharacteristic.addEventListener(
       "characteristicvaluechanged",
       this.handleNotification
     );
@@ -131,16 +144,16 @@ export class BleClient {
     return this.device;
   }
 
-  // SEND
+  // SEND (Browser -> ESP32 via NUS RX Characteristic with newline framing)
   async send(message: unknown): Promise<void> {
-    if (!this.characteristic) {
+    if (!this.rxCharacteristic) {
       throw new Error("BLE device is not connected.");
     }
 
-    const json = JSON.stringify(message);
+    // Append newline framing required by ESP32 firmware parser
+    const json = JSON.stringify(message) + "\n";
     const data = new TextEncoder().encode(json);
-
-    await this.characteristic.writeValue(data);
+    await this.rxCharacteristic.writeValue(data);
   }
 
   // DISCONNECT
@@ -164,26 +177,35 @@ export class BleClient {
       return;
     }
 
-    const message = new TextDecoder().decode(
-      characteristic.value
-    );
+    const chunk = new TextDecoder().decode(characteristic.value);
+    this.rxBuffer += chunk;
 
-    console.log("[BLE RX]", message);
+    if (this.rxBuffer.includes("\n") || this.rxBuffer.includes("\r")) {
+      const lines = this.rxBuffer.split(/[\r\n]+/);
+      // Keep any trailing partial chunk in buffer
+      this.rxBuffer = lines.pop() ?? "";
 
-    try {
-      const parsed = parseBleMessage(JSON.parse(message));
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
 
-      if (!parsed) {
-        console.error("[BLE] Invalid message received");
-        return;
+        try {
+          const parsed = parseBleMessage(JSON.parse(trimmed));
+
+          if (!parsed) {
+            console.warn("[BLE] Unhandled message format:", trimmed);
+            continue;
+          }
+
+          this.messageHandler?.(parsed);
+        } catch (error) {
+          console.error(
+            "[BLE] Invalid JSON received:",
+            trimmed,
+            error
+          );
+        }
       }
-
-      this.messageHandler?.(parsed);
-    } catch (error) {
-      console.error(
-        "[BLE] Invalid JSON received:",
-        error
-      );
     }
   };
 
@@ -196,8 +218,8 @@ export class BleClient {
   };
 
   private cleanup(): void {
-    if (this.characteristic) {
-      this.characteristic.removeEventListener(
+    if (this.txCharacteristic) {
+      this.txCharacteristic.removeEventListener(
         "characteristicvaluechanged",
         this.handleNotification,
       );
@@ -210,9 +232,11 @@ export class BleClient {
       );
     }
 
-    this.characteristic = null;
+    this.rxCharacteristic = null;
+    this.txCharacteristic = null;
     this.device = null;
     this.messageHandler = null;
     this.disconnectHandler = null;
+    this.rxBuffer = "";
   }
 }

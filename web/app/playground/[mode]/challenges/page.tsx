@@ -7,14 +7,15 @@ import SubPageHeader from "@/components/SubPageHeader";
 import { getModeMeta } from "@/data/modes";
 import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
-import type { LevelProgress, UserGameProgressResponse } from "@/types/colourQuest";
+import { fetchAndSyncProgress } from "@/lib/progressStore";
+import type { LevelProgress } from "@/types/colourQuest";
 
 export default function ChallengesPage() {
   const params = useParams<{ mode: string }>();
   const modeMeta = getModeMeta(params.mode);
   const title = modeMeta?.title ?? "Challenge";
 
-  const isColourQuest = params.mode === "colour-quest";
+  const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const displayLevels = isColourQuest ? COLOUR_QUEST_LEVELS : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
@@ -22,16 +23,20 @@ export default function ChallengesPage() {
   useEffect(() => {
     if (!isColourQuest) return;
 
-    fetch("/api/progress?game=color-quest")
-      .then((res) => res.json())
-      .then((data: UserGameProgressResponse) => {
-        if (data.success && data.levels) {
+    let isMounted = true;
+    fetchAndSyncProgress("color-quest")
+      .then((data) => {
+        if (isMounted && data.levels) {
           setUserProgress(data.levels);
         }
       })
       .catch((err) => {
-        console.warn("[CHALLENGES] Progress fetch failed:", err);
+        console.warn("[CHALLENGES] Progress sync error:", err);
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, [isColourQuest]);
 
   return (

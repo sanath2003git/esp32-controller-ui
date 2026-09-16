@@ -32,6 +32,7 @@ export default function TrainingPage() {
         </section>
 
         <section className="mt-8">
+          <ControlPanel />
         </section>
       </div>
     </main>

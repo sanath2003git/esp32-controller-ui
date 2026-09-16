@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import ModeCard from "@/components/ModeCard";
-import type { UserGameProgressResponse } from "@/types/colourQuest";
+import { fetchAndSyncProgress } from "@/lib/progressStore";
 
 export default function Playground() {
   const [colourQuestProgress, setColourQuestProgress] = useState<{
@@ -12,10 +12,10 @@ export default function Playground() {
   } | null>(null);
 
   useEffect(() => {
-    fetch("/api/progress?game=color-quest")
-      .then((res) => res.json())
-      .then((data: UserGameProgressResponse) => {
-        if (data.success) {
+    let isMounted = true;
+    fetchAndSyncProgress("color-quest")
+      .then((data) => {
+        if (isMounted) {
           setColourQuestProgress({
             progressPercentage: data.progressPercentage,
             completedLevels: data.completedLevels,
@@ -26,6 +26,10 @@ export default function Playground() {
       .catch((err) => {
         console.warn("[PLAYGROUND] Failed to fetch game progress:", err);
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (

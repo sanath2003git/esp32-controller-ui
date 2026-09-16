@@ -9,24 +9,37 @@ import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import {
   calculateStars,
+  createColorQuestRegionCommand,
   createColorQuestStartCommand,
   getColourQuestLevel,
   isLevelUnlocked,
   isValidColorQuestResult,
 } from "@/lib/colourQuest";
+import {
+  fetchAndSyncProgress,
+  submitAndPersistLevelResult,
+} from "@/lib/progressStore";
 import type {
+  ColorQuestRegion,
   ColourQuestGameState,
   LevelProgress,
-  UserGameProgressResponse,
 } from "@/types/colourQuest";
-import { AlertCircle, Play, RefreshCw, Bluetooth, CheckCircle2 } from "lucide-react";
+import {
+  AlertCircle,
+  Play,
+  RefreshCw,
+  Bluetooth,
+  CheckCircle2,
+  Eye,
+  HelpCircle,
+} from "lucide-react";
 
 export default function ChallengeLevelPage() {
   const params = useParams<{ mode: string; level: string }>();
   const router = useRouter();
   const { status, send, lastMessage, openModal } = useBleContext();
 
-  const isColourQuest = params.mode === "colour-quest";
+  const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const modeMeta = getModeMeta(params.mode);
   const levelId = Number(params.level);
   const levelMeta = getColourQuestLevel(levelId);
@@ -46,6 +59,14 @@ export default function ChallengeLevelPage() {
     isNextUnlocked: boolean;
   } | null>(null);
 
+  const [activeTask, setActiveTask] = useState<{
+    index: number;
+    phase: "memorize" | "answer";
+    input: string;
+    target?: string;
+    options?: string[];
+  } | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userProgressMap, setUserProgressMap] = useState<Record<number, LevelProgress>>({});
   const [isLoadingProgress, setIsLoadingProgress] = useState(true);
@@ -57,10 +78,9 @@ export default function ChallengeLevelPage() {
     let isSubscribed = true;
 
     if (isColourQuest) {
-      fetch("/api/progress?game=color-quest")
-        .then((res) => res.json())
-        .then((data: UserGameProgressResponse) => {
-          if (isSubscribed && data.success && data.levels) {
+      fetchAndSyncProgress("color-quest")
+        .then((data) => {
+          if (isSubscribed && data.levels) {
             setUserProgressMap(data.levels);
           }
         })
@@ -113,6 +133,7 @@ export default function ChallengeLevelPage() {
 
     try {
       setErrorMessage(null);
+      setActiveTask(null);
       setGameState("starting");
       processedMessageRef.current = null;
 
@@ -121,14 +142,14 @@ export default function ChallengeLevelPage() {
 
       setGameState("playing");
 
-      // Set timeout for robot response (60 seconds)
+      // Set timeout for robot response (120 seconds for 10 tasks)
       clearTimeoutTimer();
       timeoutRef.current = setTimeout(() => {
         if (gameStateRef.current === "playing" || gameStateRef.current === "starting") {
           setGameState("error");
-          setErrorMessage("Robot response timed out (60s). Please verify your robot firmware.");
+          setErrorMessage("Robot response timed out (120s). Please verify your robot firmware.");
         }
-      }, 60000);
+      }, 120000);
     } catch (err) {
       console.error("[CHALLENGE START ERROR]", err);
       setGameState("error");
@@ -138,50 +159,25 @@ export default function ChallengeLevelPage() {
     }
   };
 
-  // Submit result to API
+  // Submit result to progress store & API
   const handleGameResult = useCallback(
     async (score: number) => {
       clearTimeoutTimer();
       setGameState("completed");
 
-      const localStars = calculateStars(score);
-
       try {
-        const res = await fetch("/api/progress/submit", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            game: "color-quest",
-            level: levelId,
-            score,
-          }),
+        const result = await submitAndPersistLevelResult("color-quest", levelId, score);
+        setUserProgressMap(result.levels);
+
+        setCurrentResult({
+          score,
+          stars: result.awardedStars,
+          bestScore: result.bestScore,
+          isNextUnlocked: result.isNextUnlocked,
         });
-
-        const data = await res.json();
-
-        if (data.success) {
-          const updatedLevels: Record<number, LevelProgress> = data.levels || {};
-          setUserProgressMap(updatedLevels);
-
-          const isNextUnlocked = isLevelUnlocked(levelId + 1, updatedLevels);
-
-          setCurrentResult({
-            score,
-            stars: data.awardedStars ?? localStars,
-            bestScore: data.bestScore ?? score,
-            isNextUnlocked,
-          });
-        } else {
-          // Fallback to local calculation if offline/unauthenticated
-          setCurrentResult({
-            score,
-            stars: localStars,
-            bestScore: score,
-            isNextUnlocked: localStars === 3,
-          });
-        }
       } catch (err) {
         console.warn("[SUBMIT RESULT ERROR]", err);
+        const localStars = calculateStars(score);
         setCurrentResult({
           score,
           stars: localStars,
@@ -195,12 +191,38 @@ export default function ChallengeLevelPage() {
     [clearTimeoutTimer, levelId]
   );
 
+  // Send region answer to firmware
+  const handleRegionAnswer = async (region: ColorQuestRegion) => {
+    if (gameState !== "playing" || status !== "connected") return;
+    try {
+      await send(createColorQuestRegionCommand(region));
+    } catch (err) {
+      console.warn("[REGION ANSWER ERROR]", err);
+    }
+  };
+
   // BLE message listener
   useEffect(() => {
     if (gameState !== "playing" || !lastMessage) return;
 
-    if (isValidColorQuestResult(lastMessage)) {
-      const messageKey = `${lastMessage.game}-${lastMessage.score}`;
+    if (lastMessage.type === "task" && (lastMessage.game === "color-quest" || lastMessage.game === "colour-quest")) {
+      const taskData = {
+        index: lastMessage.index,
+        phase: (lastMessage.phase as "memorize" | "answer") || "answer",
+        input: lastMessage.input || "region",
+        target: lastMessage.target,
+        options: lastMessage.options,
+      };
+      setTimeout(() => {
+        setActiveTask(taskData);
+      }, 0);
+    } else if (lastMessage.type === "error") {
+      const msg = lastMessage.message;
+      setTimeout(() => {
+        setErrorMessage(`Firmware error: ${msg}`);
+      }, 0);
+    } else if (isValidColorQuestResult(lastMessage)) {
+      const messageKey = `${lastMessage.game}-${lastMessage.score}-${lastMessage.level ?? levelId}`;
       if (processedMessageRef.current === messageKey) {
         return; // Prevent duplicate response processing
       }
@@ -208,7 +230,7 @@ export default function ChallengeLevelPage() {
 
       handleGameResult(lastMessage.score);
     }
-  }, [gameState, lastMessage, handleGameResult]);
+  }, [gameState, lastMessage, handleGameResult, levelId]);
 
   // Handle BLE disconnection while playing
   useEffect(() => {
@@ -262,7 +284,7 @@ export default function ChallengeLevelPage() {
     <main className="min-h-screen pb-16">
       <SubPageHeader
         title={`${modeMeta?.title ?? "Colour Quest"} \u00b7 Level ${levelMeta.id}`}
-        subtitle={`${levelMeta.difficulty} difficulty`}
+        subtitle={`${levelMeta.difficulty} difficulty \u00b7 ${levelMeta.timing} speed`}
         backHref={`/playground/${params.mode}/challenges`}
       />
 
@@ -273,9 +295,14 @@ export default function ChallengeLevelPage() {
             <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
               Level {levelMeta.id}
             </span>
-            <span className="text-xs font-semibold text-white/40">
-              {levelMeta.difficulty}
-            </span>
+            <div className="flex gap-2">
+              <span className="text-xs font-semibold text-white/40">
+                {levelMeta.difficulty}
+              </span>
+              <span className="text-xs font-semibold text-accent/80">
+                {levelMeta.timing}
+              </span>
+            </div>
           </div>
 
           <h2 className="mt-3 text-2xl font-black tracking-tight text-white">
@@ -286,9 +313,11 @@ export default function ChallengeLevelPage() {
             {levelMeta.description}
           </p>
 
-          <p className="mt-2 text-xs italic text-accent/80">
-            Concept: {levelMeta.concept}
-          </p>
+          {levelMeta.concept && (
+            <p className="mt-2 text-xs italic text-accent/80">
+              Concept: {levelMeta.concept}
+            </p>
+          )}
         </section>
 
         {/* Lock warning if locked */}
@@ -342,16 +371,82 @@ export default function ChallengeLevelPage() {
             </div>
           ) : gameState === "playing" ? (
             <div className="flex w-full items-center justify-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-400 font-bold text-sm">
-              <CheckCircle2 size={18} className="animate-pulse" /> Challenge active on robot! Complete the task...
+              <CheckCircle2 size={18} className="animate-pulse" /> Challenge active on robot! Match target region...
             </div>
           ) : null}
         </section>
 
-        {/* ALWAYS SHOW ControlPanel FOR PLAYING THE GAME (per requirement!) */}
+        {/* Active Task & Anti-Cheating Phase Flow Overlay */}
+        {gameState === "playing" && activeTask && (
+          <section className="mt-6 rounded-2xl border border-accent/30 bg-surface-light p-5 text-center shadow-xl">
+            <div className="flex items-center justify-between text-xs text-white/60 mb-3">
+              <span className="flex items-center gap-1.5 font-bold text-accent">
+                Task {activeTask.index + 1} / 10
+              </span>
+              <span className="uppercase tracking-wider font-semibold text-white/80">
+                {activeTask.phase === "memorize" ? "Phase 1: Memorize" : "Phase 2: Answer"}
+              </span>
+            </div>
+
+            {activeTask.phase === "memorize" ? (
+              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300">
+                <div className="flex items-center justify-center gap-2 font-bold text-sm mb-1">
+                  <Eye size={18} className="animate-pulse" /> Memorize Phase!
+                </div>
+                <p className="text-xs text-amber-200/80">
+                  Observe the 4 LED colours illuminated simultaneously on your robot!
+                </p>
+              </div>
+            ) : (
+              <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300">
+                <div className="flex items-center justify-center gap-2 font-bold text-sm mb-1">
+                  <HelpCircle size={18} /> Answer Phase!
+                </div>
+                <p className="text-xs text-emerald-200/80">
+                  LEDs are off. Select the matching region below!
+                </p>
+              </div>
+            )}
+
+            {/* Region Selection Buttons */}
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => handleRegionAnswer("front")}
+                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+              >
+                FRONT (Top)
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRegionAnswer("right")}
+                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+              >
+                RIGHT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRegionAnswer("left")}
+                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+              >
+                LEFT
+              </button>
+              <button
+                type="button"
+                onClick={() => handleRegionAnswer("back")}
+                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+              >
+                BACK (Bottom)
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ALWAYS SHOW ControlPanel FOR PLAYING THE GAME */}
         <section className="mt-8">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wider text-white/40">
-              Robot Controls
+              Robot Controls & Telemetry
             </span>
             {gameState === "playing" && (
               <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
@@ -359,7 +454,11 @@ export default function ChallengeLevelPage() {
               </span>
             )}
           </div>
-          <ControlPanel />
+          <ControlPanel
+            game={params.mode}
+            isGameActive={gameState === "playing"}
+            activeTask={activeTask ? { index: activeTask.index, target: activeTask.target || activeTask.phase, options: activeTask.options || [] } : null}
+          />
         </section>
 
         {/* Exit Button */}

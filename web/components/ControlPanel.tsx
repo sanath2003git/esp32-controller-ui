@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-
 import {
   ArrowDown,
   ArrowLeft,
@@ -12,6 +11,8 @@ import {
   Gauge,
   OctagonX,
   TriangleAlert,
+  Volume2,
+  Target,
 } from "lucide-react";
 
 import { useBleContext } from "@/context/BleContext";
@@ -19,8 +20,18 @@ import type { MovementDirection, RgbColor } from "@/types/ble";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
+type ActiveTaskInfo = {
+  index: number;
+  target: string;
+  options: string[];
+};
+
 type ControlPanelProps = {
   mode?: ControlPanelMode;
+  game?: string;
+  isGameActive?: boolean;
+  activeTask?: ActiveTaskInfo | null;
+  onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
 };
 
 type ObstaclePosition = "front-left" | "front-right" | "rear-left" | "rear-right";
@@ -91,13 +102,21 @@ function ObstacleIndicator({
   );
 }
 
-export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) {
-  const { status, telemetry, move, stop, setColor } = useBleContext();
+export default function ControlPanel({
+  mode = "free-ride",
+  game,
+  isGameActive = false,
+  activeTask,
+  onInputDirection,
+}: ControlPanelProps) {
+  const { status, telemetry, send, move, stop, setColor, beep } = useBleContext();
   const [alertToast, setAlertToast] = useState<AlertToast | null>(null);
   const previousAlerts = useRef({ sudden: false, pit: false });
   const isConnected = status === "connected";
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
+
+  const isColorQuestActive = (game === "color-quest" || mode === "challenge") && isGameActive;
 
   useEffect(() => {
     const sudden = telemetry?.motion.sudden ?? false;
@@ -122,10 +141,32 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
     return () => window.clearTimeout(timeoutId);
   }, [alertToast]);
 
-  const sendMove = (direction: MovementDirection) => {
-    void move(direction).catch((error: unknown) => {
-      console.error("[CONTROL PANEL] Movement command failed", error);
-    });
+  const dirToRegionMap: Record<"up" | "right" | "down" | "left", "front" | "right" | "back" | "left"> = {
+    up: "front",
+    right: "right",
+    down: "back",
+    left: "left",
+  };
+
+  const handleNavigationClick = (
+    dir: "up" | "right" | "down" | "left",
+    moveDir: MovementDirection
+  ) => {
+    if (!isConnected) return;
+
+    // Specifically for Colour Quest game when active, emit {"command":"input","region":...}
+    if (isColorQuestActive) {
+      const region = dirToRegionMap[dir];
+      void send({ command: "input", region }).catch((error: unknown) => {
+        console.error("[CONTROL PANEL] Colour Quest region input command failed", error);
+      });
+      onInputDirection?.(dir);
+    } else {
+      // For all other games/modes, send standard movement command
+      void move(moveDir).catch((error: unknown) => {
+        console.error("[CONTROL PANEL] Movement command failed", error);
+      });
+    }
   };
 
   const sendColor = (color: RgbColor) => {
@@ -134,16 +175,27 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
     });
   };
 
+  const handleBeepTest = () => {
+    void beep(2000, 150).catch((error: unknown) => {
+      console.error("[CONTROL PANEL] Beep command failed", error);
+    });
+  };
+
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
-      className=" overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
+      className="overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
             Robo Control
           </p>
+          {isColorQuestActive && (
+            <span className="text-[10px] font-bold uppercase text-emerald-400">
+              Colour Quest Mode Active
+            </span>
+          )}
         </div>
 
         <div
@@ -163,6 +215,29 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
             ? "Connecting to robot. Controls will unlock when ready."
             : "Robot disconnected. Connect to unlock controls."}
         </p>
+      )}
+
+      {/* Colour Quest Active Task HUD Overlay */}
+      {isColorQuestActive && activeTask && (
+        <div className="mt-4 rounded-2xl border border-primary/30 bg-primary/10 p-3.5 text-center">
+          <div className="flex items-center justify-between text-xs text-primary font-bold">
+            <span className="flex items-center gap-1">
+              <Target size={14} /> Task {activeTask.index + 1} / 10
+            </span>
+            <span className="uppercase tracking-wider text-white/60">Target LED</span>
+          </div>
+          <div className="mt-1 text-lg font-black uppercase tracking-wider text-white">
+            Match: <span className="text-accent">{activeTask.target}</span>
+          </div>
+          {activeTask.options.length >= 4 && (
+            <div className="mt-2 grid grid-cols-2 gap-1 text-[11px] font-medium text-white/70">
+              <span>U: {activeTask.options[0]}</span>
+              <span>R: {activeTask.options[1]}</span>
+              <span>D: {activeTask.options[2]}</span>
+              <span>L: {activeTask.options[3]}</span>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
@@ -244,16 +319,24 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
 
       <div className="mt-5 grid gap-5 sm:grid-cols-2">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            Navigation
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
+              Navigation
+            </p>
+            {isColorQuestActive && (
+              <span className="text-[10px] font-bold text-accent uppercase">
+                Sending Task Input
+              </span>
+            )}
+          </div>
+
           <div className="mx-auto mt-3 grid max-w-56 grid-cols-3 gap-2">
             <div />
             <button
               type="button"
-              aria-label="Move forward"
+              aria-label="Move forward or Up input"
               disabled={!isConnected}
-              onClick={() => sendMove("forward")}
+              onClick={() => handleNavigationClick("up", "forward")}
               className="control-button"
             >
               <ArrowUp size={22} />
@@ -261,9 +344,9 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
             <div />
             <button
               type="button"
-              aria-label="Turn left"
+              aria-label="Turn left or Left input"
               disabled={!isConnected}
-              onClick={() => sendMove("left")}
+              onClick={() => handleNavigationClick("left", "left")}
               className="control-button"
             >
               <ArrowLeft size={22} />
@@ -279,9 +362,9 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
             </button>
             <button
               type="button"
-              aria-label="Turn right"
+              aria-label="Turn right or Right input"
               disabled={!isConnected}
-              onClick={() => sendMove("right")}
+              onClick={() => handleNavigationClick("right", "right")}
               className="control-button"
             >
               <ArrowRight size={22} />
@@ -289,9 +372,9 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
             <div />
             <button
               type="button"
-              aria-label="Move backward"
+              aria-label="Move backward or Down input"
               disabled={!isConnected}
-              onClick={() => sendMove("backward")}
+              onClick={() => handleNavigationClick("down", "backward")}
               className="control-button"
             >
               <ArrowDown size={22} />
@@ -302,7 +385,7 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
 
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            RGB lights
+            RGB & Sound Test
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             {([
@@ -322,6 +405,15 @@ export default function ControlPanel({ mode = "free-ride" }: ControlPanelProps) 
                 {label}
               </button>
             ))}
+
+            <button
+              type="button"
+              disabled={!isConnected}
+              onClick={handleBeepTest}
+              className="col-span-2 flex min-h-10 items-center justify-center gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 text-xs font-bold text-amber-300 transition hover:bg-amber-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Volume2 size={16} /> Test Buzzer (Beep)
+            </button>
           </div>
         </div>
       </div>

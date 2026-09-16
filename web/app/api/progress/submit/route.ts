@@ -8,6 +8,7 @@ import {
   isLevelUnlocked,
   mergeBestScore,
   mergeBestStars,
+  normalizeGameSlug,
   normalizeStars,
 } from "@/lib/colourQuest";
 import type { LevelProgress } from "@/types/colourQuest";
@@ -24,7 +25,9 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { game, level, score } = body;
+    const rawGame = body.game;
+    const game = normalizeGameSlug(rawGame);
+    const { level, score } = body;
 
     if (
       game !== "color-quest" ||

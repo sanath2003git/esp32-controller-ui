@@ -1,3 +1,11 @@
+import type {
+  ColorQuestCommand,
+  ColorQuestErrorMessage,
+  ColorQuestReadyMessage,
+  ColorQuestResult,
+  ColorQuestTaskMessage,
+} from "@/types/colourQuest";
+
 export type RobotDeviceInfo = {
   deviceId: string;
   name: string;
@@ -33,11 +41,6 @@ export type MovementDirection =
 
 export type RgbColor = "red" | "green" | "blue" | "off";
 
-import type {
-  ColorQuestResult,
-  ColorQuestStartCommand,
-} from "@/types/colourQuest";
-
 export type MoveCommand = {
   command: "move";
   direction: MovementDirection;
@@ -54,11 +57,30 @@ export type ColorCommand = {
   b: number;
 };
 
+export type BuzzerCommand = {
+  command: "buzzer";
+  freq?: number;
+  duration?: number;
+};
+
+export type OledTextCommand = {
+  command: "oled_text";
+  text: string;
+};
+
+export type OledEmojiCommand = {
+  command: "oled_emoji";
+  emoji: string;
+};
+
 export type RobotCommand =
   | MoveCommand
   | StopCommand
   | ColorCommand
-  | ColorQuestStartCommand;
+  | BuzzerCommand
+  | OledTextCommand
+  | OledEmojiCommand
+  | ColorQuestCommand;
 
 export type DeviceInfoMessage = {
   type: "device_info";
@@ -84,7 +106,10 @@ export type BleMessage =
   | DeviceInfoMessage
   | TelemetryMessage
   | ResponseMessage
-  | ColorQuestResult;
+  | ColorQuestResult
+  | ColorQuestTaskMessage
+  | ColorQuestReadyMessage
+  | ColorQuestErrorMessage;
 
 const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   red: { r: 255, g: 0, b: 0 },
@@ -133,8 +158,7 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     return null;
   }
 
-  // The existing RGB proof-of-concept responds with status and command,
-  // but no message type. Normalize that established response for the context.
+  // Legacy response format
   if (typeof value.type !== "string") {
     if (typeof value.status !== "string" || typeof value.command !== "string") {
       return null;
@@ -193,6 +217,24 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     }
 
     return null;
+  }
+
+  if (value.type === "task" && value.game === "color-quest") {
+    if (
+      typeof value.index === "number" &&
+      typeof value.target === "string" &&
+      Array.isArray(value.options)
+    ) {
+      return value as ColorQuestTaskMessage;
+    }
+  }
+
+  if (value.type === "ready" && value.game === "color-quest") {
+    return value as ColorQuestReadyMessage;
+  }
+
+  if (value.type === "error" && typeof value.message === "string") {
+    return value as ColorQuestErrorMessage;
   }
 
   return null;

@@ -1,4 +1,6 @@
 import type {
+  ColorQuestInputRegionCommand,
+  ColorQuestRegion,
   ColorQuestResult,
   ColorQuestStartCommand,
 } from "@/types/colourQuest";
@@ -10,55 +12,74 @@ export type LevelMeta = {
   description: string;
   concept?: string;
   difficulty: LevelDifficulty;
+  timing?: string;
 };
 
 export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 1,
     title: "Level 1",
-    description: "Identify the primary colour shown by the robot.",
-    concept: "Single primary colour, select the shown colour",
+    description: "1 primary + 3 secondary colours.",
+    concept: "1 primary + 3 secondary colours",
     difficulty: "Easy",
+    timing: "Normal",
   },
   {
     id: 2,
     title: "Level 2",
-    description: "Fast primary colour identification.",
-    concept: "Single primary colour, select the shown colour",
+    description: "Same primary identification, but faster.",
+    concept: "Primary colour identification under speed",
     difficulty: "Easy",
+    timing: "Fast",
   },
   {
     id: 3,
     title: "Level 3",
-    description: "Spot the secondary colour among choices.",
-    concept: "Secondary colours, pick the odd one out",
+    description: "1 secondary + 3 primary colours.",
+    concept: "1 secondary + 3 primary colours",
     difficulty: "Medium",
+    timing: "Normal",
   },
   {
     id: 4,
     title: "Level 4",
-    description: "Pick the odd secondary colour out under speed.",
-    concept: "Secondary colours, pick the odd one out",
+    description: "Secondary identification under speed.",
+    concept: "Secondary colour identification under speed",
     difficulty: "Medium",
+    timing: "Faster",
   },
   {
     id: 5,
     title: "Level 5",
-    description: "Advanced hue and tint color recognition.",
-    concept: "Beyond primary/secondary",
+    description: "Hue/tint recognition using closely related colours.",
+    concept: "Hue and tint recognition",
     difficulty: "Hard",
+    timing: "Fast",
   },
   {
     id: 6,
     title: "Level 6",
-    description: "The ultimate colour gauntlet challenge.",
-    concept: "Beyond primary/secondary",
+    description: "Extended colour palette / ultimate challenge.",
+    concept: "Extended colour palette",
     difficulty: "Hard",
+    timing: "Fastest",
   },
 ];
 
 export function getColourQuestLevel(id: number): LevelMeta | undefined {
   return COLOUR_QUEST_LEVELS.find((l) => l.id === id);
+}
+
+/**
+ * Normalizes game slug to authoritative "color-quest" DB key
+ */
+export function normalizeGameSlug(slug: string): string {
+  if (!slug) return "color-quest";
+  const lower = slug.toLowerCase().trim();
+  if (lower === "colour-quest" || lower === "color-quest") {
+    return "color-quest";
+  }
+  return lower;
 }
 
 export function normalizeStars(stars: unknown): 0 | 1 | 2 | 3 {
@@ -70,11 +91,11 @@ export function normalizeStars(stars: unknown): 0 | 1 | 2 | 3 {
 
 /**
  * Calculates star rating for a score in range [0, 1].
- * Section 6 rules:
- * score >= 0.80 -> 3 stars
- * score >= 0.60 -> 2 stars
- * score >= 0.40 -> 1 star
- * score <  0.40 -> 0 stars
+ * Specification:
+ * 80%+ (>= 0.80) -> 3 stars
+ * 60%+ (>= 0.60) -> 2 stars
+ * 40%+ (>= 0.40) -> 1 star
+ * < 40%         -> 0 stars
  */
 export function calculateStars(score: number): 0 | 1 | 2 | 3 {
   if (score >= 0.8) return 3;
@@ -153,7 +174,7 @@ export function isValidColorQuestResult(val: unknown): val is ColorQuestResult {
   const obj = val as Record<string, unknown>;
   return (
     obj.type === "response" &&
-    obj.game === "color-quest" &&
+    (obj.game === "color-quest" || obj.game === "colour-quest") &&
     typeof obj.score === "number" &&
     Number.isFinite(obj.score) &&
     obj.score >= 0 &&
@@ -171,5 +192,17 @@ export function createColorQuestStartCommand(
     command: "challenge",
     game: "color-quest",
     level,
+  };
+}
+
+/**
+ * Creates a region input command payload for Colour Quest.
+ */
+export function createColorQuestRegionCommand(
+  region: ColorQuestRegion
+): ColorQuestInputRegionCommand {
+  return {
+    command: "input",
+    region,
   };
 }
