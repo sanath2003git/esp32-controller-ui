@@ -12,18 +12,19 @@ import {
 type ModeCardProps = {
   title: string;
   description: string;
-  icon: "game" | "memory" |"reflex"|"drive" | "challenge" | "training";
+  icon: "game" | "memory" | "reflex" | "drive" | "challenge" | "training";
   accent: "primary" | "accent" | "warning";
   href: string;
   progress?: number;
   completedLevels?: number;
   totalLevels?: number;
+  isComingSoon?: boolean;
 };
 
 const iconMap = {
   game: Palette,
-  memory:BrainCircuit,
-  reflex:TrafficCone,
+  memory: BrainCircuit,
+  reflex: TrafficCone,
   drive: Gamepad2,
   challenge: Trophy,
   training: Gauge,
@@ -56,6 +57,7 @@ export default function ModeCard({
   progress,
   completedLevels,
   totalLevels,
+  isComingSoon = false,
 }: ModeCardProps) {
   const Icon = iconMap[icon];
   const colors = accentMap[accent];
@@ -74,7 +76,14 @@ export default function ModeCard({
       </div>
 
       <div className="min-w-0 flex-1">
-        <h3 className="text-base font-bold">{title}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="text-base font-bold">{title}</h3>
+          {isComingSoon && (
+            <span className="rounded-full border border-white/15 bg-white/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white/60">
+              Coming Soon
+            </span>
+          )}
+        </div>
 
         <p className="mt-1 text-sm leading-5 text-white/45">
           {description}
