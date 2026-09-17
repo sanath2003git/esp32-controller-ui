@@ -65,7 +65,7 @@ function TrustModal({
           <svg width="90" height="82" viewBox="0 0 32 30" aria-label={`Trust ${pct}%`}>
             <defs>
               <clipPath id="trust-modal-clip">
-                <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
+                <rect x="0" y={27 - (25 * pct) / 100} width="32" height={(25 * pct) / 100} />
               </clipPath>
             </defs>
             <path
@@ -406,20 +406,7 @@ export default function HomeDashboard() {
     return () => window.removeEventListener("trustLevelChanged", onTrustChange);
   }, []);
 
-  // Listen for BLE touch events (throttled to 1 per second)
-  const lastHoldTimeRef = useRef<number>(0);
-  useEffect(() => {
-    if (lastMessage?.type === "telemetry" && lastMessage.telemetry.touch?.event) {
-      const evt = lastMessage.telemetry.touch.event;
-      if (evt === "hold" || evt === "single_tap" || evt === "double_tap") {
-        const now = Date.now();
-        if (now - lastHoldTimeRef.current > 1000) {
-          lastHoldTimeRef.current = now;
-          incrementTrustLevel(1);
-        }
-      }
-    }
-  }, [lastMessage]);
+
 
   /* Auto-switch expression based on connection status */
   useEffect(() => {
@@ -592,7 +579,7 @@ export default function HomeDashboard() {
                       <svg width="22" height="20" viewBox="0 0 32 30" aria-hidden="true">
                         <defs>
                           <clipPath id="pet-heart-clip">
-                            <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
+                            <rect x="0" y={27 - (25 * pct) / 100} width="32" height={(25 * pct) / 100} />
                           </clipPath>
                         </defs>
                         <path

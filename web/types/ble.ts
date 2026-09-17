@@ -199,6 +199,7 @@ export function parseBleMessage(value: unknown): BleMessage | null {
         obstacle: value.obstacle,
         motion: value.motion,
         pit: value.pit,
+        ...(value.touch === undefined ? {} : { touch: value.touch }),
         ...(value.timestamp === undefined ? {} : { timestamp: value.timestamp }),
       } as RobotTelemetry,
     };
