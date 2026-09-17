@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowLeft, Sparkles } from "lucide-react";
 import LevelCard from "@/components/LevelCard";
 import SubPageHeader from "@/components/SubPageHeader";
 import { getModeMeta } from "@/data/modes";
@@ -39,6 +41,45 @@ export default function ChallengesPage() {
     };
   }, [isColourQuest]);
 
+  if (!isColourQuest) {
+    return (
+      <main className="min-h-screen">
+        <SubPageHeader
+          title={`${title} \u00b7 Challenge`}
+          subtitle="Coming Soon"
+          backHref={`/playground/${params.mode}`}
+        />
+
+        <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
+          <div className="flex flex-col items-center rounded-3xl border border-border bg-surface p-6 text-center shadow-xl">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-accent/30 bg-accent/15 text-accent">
+              <Sparkles size={32} />
+            </div>
+
+            <span className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent/10 px-3 py-1 text-xs font-bold uppercase tracking-widest text-accent">
+              Under Development
+            </span>
+
+            <h3 className="mt-3 text-xl font-extrabold text-white">
+              {title} Challenges are Coming Soon!
+            </h3>
+
+            <p className="mt-2 text-sm leading-6 text-white/50">
+              Challenge mode for {title} is currently under development.
+            </p>
+
+            <Link
+              href={`/playground/${params.mode}`}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-white/10 px-4 py-3.5 text-sm font-bold text-white transition hover:bg-white/15 active:scale-[0.98]"
+            >
+              <ArrowLeft size={16} /> Back to game hub
+            </Link>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen">
       <SubPageHeader
@@ -56,9 +97,7 @@ export default function ChallengesPage() {
           </h2>
 
           <p className="mt-2 text-sm leading-6 text-white/50">
-            {isColourQuest
-              ? "Complete level challenges with your robot. Earn 3 stars to unlock the next level!"
-              : "Each level raises the difficulty. Beat it without a collision."}
+            Complete level challenges with your robot. Earn 3 stars to unlock the next level!
           </p>
         </section>
 
