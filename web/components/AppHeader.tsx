@@ -51,7 +51,7 @@ function BatteryBar({
 }
 
 export default function AppHeader() {
-  const { status, deviceInfo, openModal } = useBleContext();
+  const { status, deviceInfo, telemetry, openModal } = useBleContext();
 
   const robot: RobotState = {
     connectionStatus: status,
@@ -66,9 +66,8 @@ export default function AppHeader() {
 
   const isConnected = robot.connectionStatus === "connected";
 
-  // Mock battery values — replace with real telemetry when available
-  const robotBattery = 72;
-  const remoteBattery = 45;
+  const robotBattery = telemetry?.battery_percentage ?? 0;
+  const remoteBattery = 0;
 
   return (
     <header className="fixed inset-x-0 top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">

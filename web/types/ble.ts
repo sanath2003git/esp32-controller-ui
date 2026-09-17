@@ -15,6 +15,7 @@ export type RobotDeviceInfo = {
 };
 
 export type RobotTelemetry = {
+  battery_percentage?: number;
   direction: number;
   distance: {
     front: number | null;
@@ -139,9 +140,21 @@ function isRobotTelemetry(value: unknown): value is RobotTelemetry {
     return false;
   }
 
-  const { direction, distance, obstacle, motion, pit, touch, timestamp } = value;
+  const {
+    battery_percentage,
+    direction,
+    distance,
+    obstacle,
+    motion,
+    pit,
+    touch,
+    timestamp,
+  } = value;
 
   return (
+    (battery_percentage === undefined ||
+      (typeof battery_percentage === "number" &&
+        Number.isFinite(battery_percentage))) &&
     typeof direction === "number" &&
     isRecord(distance) &&
     (typeof distance.front === "number" || distance.front === null) &&
@@ -194,6 +207,9 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     return {
       type: "telemetry",
       telemetry: {
+        ...(value.battery_percentage === undefined
+          ? {}
+          : { battery_percentage: value.battery_percentage }),
         direction: value.direction,
         distance: value.distance,
         obstacle: value.obstacle,

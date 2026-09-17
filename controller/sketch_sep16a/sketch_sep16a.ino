@@ -4,24 +4,9 @@
 
   Frontend -> ESP32 JSON contract
 
-  Display text:
-  {"command":"display_text","text":"Hello","line":0}
-
-  Display multiple lines:
-  {"command":"display_text","text":"Robot Ready\nConnected","line":0}
-
-  Display named emoji:
-  {"command":"display_emoji","emoji":"happy"}
-
-  Display emoji with text:
-  {"command":"display_emoji","emoji":"happy","text":"Hello"}
-
-  Clear display:
-  {"command":"display_clear"}
-
-  Supported emoji names:
-  happy, sad, angry, surprised, heart, star, check, cross,
-  warning, robot, battery, smile, sleep, wifi
+  OLED display is controlled locally by the firmware. On startup it shows a
+  welcome message, then an animated fullscreen happy face while idle. During
+  Colour Quest, the game engine owns the OLED.
 
   Response examples:
   {"type":"response","status":"ok","command":"display_text"}
@@ -55,7 +40,7 @@
 // ========================================
 
 #define DEVICE_NAME "Elxie-CQ"
-#define FIRMWARE_VERSION "2.0.0"
+#define FIRMWARE_VERSION "2.1.0"
 
 // ========================================
 // BLE UUIDs
@@ -100,6 +85,10 @@ const int DEFAULT_SPEED = 180;
 
 // Touch (TTP223)
 #define PIN_TOUCH 12
+
+// Battery percentage sense input (analog).
+// ADC reading 0..4095 is mapped to 0..100 percent.
+#define PIN_BATTERY 7
 
 // Buzzer
 #define PIN_BUZZER 13
@@ -231,7 +220,7 @@ Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
 
 void oledInit() {
   if (!oledPresent) {
-    Serial.println("OLED not detected. Display commands disabled.");
+    Serial.println("OLED not detected. Local OLED display disabled.");
     return;
   }
 
@@ -241,162 +230,79 @@ void oledInit() {
     return;
   }
 
+  // Startup welcome message.
   display.clearDisplay();
   display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("MAINBOT");
-  display.println("OLED Ready");
+  display.setTextSize(2);
+  display.setCursor(8, 14);
+  display.println("Welcome");
+  display.setCursor(22, 38);
+  display.println("Elxie!");
   display.display();
 
   Serial.println("OLED initialized.");
 }
 
-void oledClear() {
+// Draw a large happy face using the full 128x64 OLED area.
+void drawHappyFace(uint8_t frame) {
   if (!oledPresent)
     return;
 
   display.clearDisplay();
-  display.display();
-}
 
-bool isAsciiText(const char *text) {
-  if (text == nullptr)
-    return false;
+  // Face outline.
+  display.drawCircle(64, 32, 30, SSD1306_WHITE);
 
-  for (size_t i = 0; text[i] != '\0'; i++) {
-    if ((uint8_t)text[i] > 127) {
-      return false;
-    }
+  // Eyes: one frame blinks, the other frames are open.
+  if (frame == 2) {
+    display.drawLine(46, 24, 54, 24, SSD1306_WHITE);
+    display.drawLine(74, 24, 82, 24, SSD1306_WHITE);
+  } else {
+    display.fillCircle(50, 24, 4, SSD1306_WHITE);
+    display.fillCircle(78, 24, 4, SSD1306_WHITE);
   }
 
-  return true;
-}
-
-bool displayText(const char *text, int line) {
-  if (!oledPresent)
-    return false;
-  if (text == nullptr)
-    return false;
-  if (!isAsciiText(text))
-    return false;
-  if (line < 0 || line > 7)
-    return false;
-
-  display.clearDisplay();
-  display.setTextSize(1);
-  display.setTextColor(SSD1306_WHITE);
-  display.setCursor(0, line * 8);
-  display.println(text);
-  display.display();
-
-  return true;
-}
-
-// ========================================
-// BITMAP EMOJIS
-// ========================================
-
-/*
-  CORRECTIONS TO THE CODE BEFORE
-
-  1. The OLED is assumed to be 128x64, which is the common
-     resolution for a 0.96 inch SSD1306 module.
-
-  2. The bitmap arrays above contain 16 bytes for an 8x8 image.
-     Replace them with the following 8-byte versions.
-
-  3. Only the emoji names with actual bitmap implementations
-     should be advertised as supported.
-*/
-
-// Replace the bitmap declarations in the firmware with:
-
-const uint8_t emojiHappy[] PROGMEM = {0x3C, 0x42, 0xA5, 0x81,
-                                      0xA5, 0x99, 0x42, 0x3C};
-
-const uint8_t emojiSad[] PROGMEM = {0x3C, 0x42, 0xA5, 0x81,
-                                    0x99, 0xA5, 0x42, 0x3C};
-
-const uint8_t emojiHeart[] PROGMEM = {0x00, 0x66, 0xFF, 0xFF,
-                                      0x7E, 0x3C, 0x18, 0x00};
-
-const uint8_t emojiStar[] PROGMEM = {0x18, 0x18, 0xFF, 0x7E,
-                                     0xFF, 0x18, 0x18, 0x00};
-
-const uint8_t emojiCheck[] PROGMEM = {0x00, 0x01, 0x03, 0x06,
-                                      0xCC, 0x78, 0x30, 0x00};
-
-const uint8_t emojiCross[] PROGMEM = {0x81, 0x42, 0x24, 0x18,
-                                      0x18, 0x24, 0x42, 0x81};
-
-const uint8_t emojiWarning[] PROGMEM = {0x18, 0x3C, 0x7E, 0xFF,
-                                        0x18, 0x18, 0x00, 0x18};
-
-const uint8_t emojiRobot[] PROGMEM = {0x3C, 0x7E, 0xDB, 0xFF,
-                                      0xFF, 0x24, 0x24, 0x00};
-
-const uint8_t emojiBattery[] PROGMEM = {0x7E, 0x42, 0x42, 0x42,
-                                        0x42, 0x42, 0x42, 0x7E};
-
-const uint8_t emojiSleep[] PROGMEM = {0x00, 0x66, 0x00, 0x0C,
-                                      0x18, 0x30, 0x60, 0x00};
-
-const uint8_t emojiWifi[] PROGMEM = {0x00, 0x18, 0x24, 0x42,
-                                     0x81, 0x18, 0x18, 0x00};
-
-const uint8_t *getEmojiBitmap(const char *emoji) {
-  if (emoji == nullptr)
-    return nullptr;
-
-  if (strcmp(emoji, "happy") == 0)
-    return emojiHappy;
-  if (strcmp(emoji, "smile") == 0)
-    return emojiHappy;
-  if (strcmp(emoji, "sad") == 0)
-    return emojiSad;
-  if (strcmp(emoji, "heart") == 0)
-    return emojiHeart;
-  if (strcmp(emoji, "star") == 0)
-    return emojiStar;
-  if (strcmp(emoji, "check") == 0)
-    return emojiCheck;
-  if (strcmp(emoji, "cross") == 0)
-    return emojiCross;
-  if (strcmp(emoji, "warning") == 0)
-    return emojiWarning;
-  if (strcmp(emoji, "robot") == 0)
-    return emojiRobot;
-  if (strcmp(emoji, "battery") == 0)
-    return emojiBattery;
-  if (strcmp(emoji, "sleep") == 0)
-    return emojiSleep;
-  if (strcmp(emoji, "wifi") == 0)
-    return emojiWifi;
-
-  return nullptr;
-}
-
-bool displayEmoji(const char *emoji, const char *text) {
-  if (!oledPresent)
-    return false;
-
-  const uint8_t *bitmap = getEmojiBitmap(emoji);
-  if (bitmap == nullptr)
-    return false;
-
-  display.clearDisplay();
-  display.drawBitmap(0, 0, bitmap, 8, 8, SSD1306_WHITE);
-
-  if (text != nullptr && isAsciiText(text)) {
-    display.setTextSize(1);
-    display.setTextColor(SSD1306_WHITE);
-    display.setCursor(16, 2);
-    display.println(text);
+  // Animated smile.
+  if (frame == 1) {
+    display.drawLine(46, 40, 50, 44, SSD1306_WHITE);
+    display.drawLine(50, 44, 56, 47, SSD1306_WHITE);
+    display.drawLine(56, 47, 64, 48, SSD1306_WHITE);
+    display.drawLine(64, 48, 72, 47, SSD1306_WHITE);
+    display.drawLine(72, 47, 78, 44, SSD1306_WHITE);
+    display.drawLine(78, 44, 82, 40, SSD1306_WHITE);
+  } else {
+    display.drawLine(44, 40, 49, 45, SSD1306_WHITE);
+    display.drawLine(49, 45, 56, 49, SSD1306_WHITE);
+    display.drawLine(56, 49, 64, 51, SSD1306_WHITE);
+    display.drawLine(64, 51, 72, 49, SSD1306_WHITE);
+    display.drawLine(72, 49, 79, 45, SSD1306_WHITE);
+    display.drawLine(79, 45, 84, 40, SSD1306_WHITE);
   }
 
   display.display();
-  return true;
+}
+
+unsigned long lastIdleFaceFrame = 0;
+uint8_t idleFaceFrame = 0;
+
+void updateIdleDisplay() {
+  if (!oledPresent)
+    return;
+
+  unsigned long now = millis();
+  if (now - lastIdleFaceFrame < 500)
+    return;
+
+  lastIdleFaceFrame = now;
+  idleFaceFrame = (idleFaceFrame + 1) % 3;
+  drawHappyFace(idleFaceFrame);
+}
+
+// Single entry point used whenever the game returns to idle.
+void challengeShowIdle() {
+  lastIdleFaceFrame = 0;
+  idleFaceFrame = 0;
+  drawHappyFace(idleFaceFrame);
 }
 
 // ========================================
@@ -496,22 +402,6 @@ bool challengeAnswerCorrect = false;
 // The game owns the robot only while a challenge is active.
 // Persistent progression, stars and unlocks remain app-side.
 void challengeStopOutputs() { setStripColor(0, 0, 0); }
-
-void challengeShowIdle() {
-  if (!oledPresent)
-    return;
-
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(1);
-  display.setCursor(0, 0);
-  display.println("COLOUR QUEST");
-  display.println(deviceConnected ? "BLE: connected" : "BLE: advertising");
-  display.println();
-  display.println("Waiting for");
-  display.println("challenge...");
-  display.display();
-}
 
 const GameColor &colorByIndex(int index) {
   return COLOR_PALETTE[index % COLOR_PALETTE_N];
@@ -1217,79 +1107,6 @@ void handleCommandLine(const String &line) {
     sendResponse("buzz", true);
   }
 
-  else if (strcmp(command, "display_clear") == 0) {
-    if (!oledPresent) {
-      sendResponse("display_clear", false, "OLED not available");
-      return;
-    }
-
-    oledClear();
-    sendResponse("display_clear", true);
-  }
-
-  else if (strcmp(command, "display_text") == 0) {
-    const char *text = doc["text"];
-
-    if (text == nullptr) {
-      sendResponse("display_text", false, "Missing text");
-      return;
-    }
-
-    int line = doc["line"] | 0;
-
-    if (!oledPresent) {
-      sendResponse("display_text", false, "OLED not available");
-      return;
-    }
-
-    if (!isAsciiText(text)) {
-      sendResponse("display_text", false, "Use ASCII text only");
-      return;
-    }
-
-    if (line < 0 || line > 7) {
-      sendResponse("display_text", false, "Invalid line");
-      return;
-    }
-
-    if (displayText(text, line)) {
-      sendResponse("display_text", true);
-    } else {
-      sendResponse("display_text", false, "Display update failed");
-    }
-  }
-
-  else if (strcmp(command, "display_emoji") == 0) {
-    const char *emoji = doc["emoji"];
-    const char *text = doc["text"];
-
-    if (emoji == nullptr) {
-      sendResponse("display_emoji", false, "Missing emoji");
-      return;
-    }
-
-    if (!oledPresent) {
-      sendResponse("display_emoji", false, "OLED not available");
-      return;
-    }
-
-    if (getEmojiBitmap(emoji) == nullptr) {
-      sendResponse("display_emoji", false, "Unknown emoji");
-      return;
-    }
-
-    if (text != nullptr && !isAsciiText(text)) {
-      sendResponse("display_emoji", false, "Use ASCII text only");
-      return;
-    }
-
-    if (displayEmoji(emoji, text)) {
-      sendResponse("display_emoji", true);
-    } else {
-      sendResponse("display_emoji", false, "Display update failed");
-    }
-  }
-
   else {
     sendResponse(command, false, "Unknown command");
   }
@@ -1432,6 +1249,11 @@ String consumeTouchEvent() {
 // LIVE TELEMETRY
 // ========================================
 
+int readBatteryPercentage() {
+  int raw = analogRead(PIN_BATTERY);
+  return constrain((raw * 100L) / 4095L, 0, 100);
+}
+
 void sendLiveTelemetry() {
   if (!deviceConnected || !clientReady)
     return;
@@ -1441,6 +1263,7 @@ void sendLiveTelemetry() {
   JsonDocument telemetry;
 
   telemetry["type"] = "telemetry";
+  telemetry["battery_percentage"] = readBatteryPercentage();
   telemetry["direction"] = qmc5883ReadHeadingByte();
 
   long frontCm = readSonarCm();
@@ -1752,6 +1575,8 @@ void setup() {
   encodersInit();
 
   pinMode(PIN_TOUCH, INPUT);
+  pinMode(PIN_BATTERY, INPUT);
+  analogReadResolution(12);
   pinMode(PIN_BUZZER, OUTPUT);
 
   strip.begin();
@@ -1901,6 +1726,10 @@ void loop() {
   }
   
   updateTouchState();
+
+  // OLED is locally owned: show the happy face whenever no game is active.
+  if (gameState == GS_IDLE)
+    updateIdleDisplay();
 
   delay(5);
 }
