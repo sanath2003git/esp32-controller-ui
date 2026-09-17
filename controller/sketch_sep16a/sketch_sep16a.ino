@@ -575,13 +575,13 @@ const char *challengeLevelName(int level) {
 // 5-10 s: LEDs are turned off, but the web controller may still answer.
 // A response received at any point during the full 10 s is evaluated.
 unsigned long challengeDisplayDuration(int level) {
-  (void)level;
-  return 5000;
+  if (level % 2 != 0) return 5000;
+  return 2500;
 }
 
 unsigned long challengeAnswerTimeout(int level) {
-  (void)level;
-  return 5000;
+  if (level % 2 != 0) return 5000;
+  return 2500;
 }
 
 // Choose a random set of four distinct colour indices from a supplied pool.
@@ -655,65 +655,41 @@ void challengeBuildTask() {
     }
 
     colorTargetDirection = targetSlot;
-  } else if (challengeLevel == 5) {
-    // Advanced hue/tint recognition.
-    // Use a controlled family of close colours so the player must
-    // distinguish hue/tint rather than simply primary vs secondary.
-    //
-    // These are explicit LED RGB values, not claims about a calibrated
-    // colour space. Actual appearance depends on the WS2812 LEDs.
-    static const GameColor HUE_TINTS[8] = {
-        {"red", 255, 0, 0},         {"red-orange", 255, 70, 0},
-        {"orange", 255, 120, 0},    {"orange-red", 255, 35, 0},
-        {"blue", 0, 0, 255},        {"blue-cyan", 0, 120, 255},
-        {"cyan-blue", 0, 200, 255}, {"purple-blue", 90, 0, 255}};
-
-    int family = random(2) == 0 ? 0 : 4;
-    int start = family;
-    int targetOffset = random(4);
-
-    // Four related colours from one family.
-    for (int slot = 0; slot < 4; slot++) {
-      int idx = start + slot;
-      colorOption[slot] = idx;
-
-      // COLOR_PALETTE does not contain these variants, so they are
-      // rendered through the task-local RGB table below.
-      (void)idx;
-    }
-
-    colorTargetDirection = targetOffset;
-
-    // Store the task-local colours in the shared palette slots through
-    // a separate static array handled by challengeRenderTask().
-    // colorOption encodes 0..3 for the selected family.
-    for (int slot = 0; slot < 4; slot++) {
-      colorOption[slot] = start + slot;
-    }
-
-    // Keep the generated family available through challenge rendering.
-    // The target direction is enough for scoring.
-    (void)HUE_TINTS;
   } else {
-    // L6: ultimate challenge. Four different extended colours.
-    // The target is random and the presentation window is shortest.
-    chooseDistinctColors(EXTENDED, sizeof(EXTENDED) / sizeof(EXTENDED[0]));
-    colorTargetDirection = random(4);
+    // Hard modes (L5 & L6): Target is a tertiary color (orange or purple).
+    // Distractors are randomly selected from primary/secondary colors.
+    static const int TERTIARY[] = {6, 7};
+    
+    int targetColor = TERTIARY[random(2)];
+    
+    int distractorColors[3];
+    bool used[6] = {false};
+    for (int i = 0; i < 3; i++) {
+      int selected;
+      do {
+        selected = random(6);
+      } while (used[selected]);
+      used[selected] = true;
+      distractorColors[i] = selected; // primary/secondary are indices 0-5
+    }
+    
+    int targetSlot = random(4);
+    int distractorCursor = 0;
+    
+    for (int slot = 0; slot < 4; slot++) {
+      if (slot == targetSlot) {
+        colorOption[slot] = targetColor;
+      } else {
+        colorOption[slot] = distractorColors[distractorCursor++];
+      }
+    }
+    
+    colorTargetDirection = targetSlot;
   }
 }
 
 // Return the actual colour used by a task slot.
 GameColor challengeTaskColor(int slot) {
-  static const GameColor HUE_TINTS[8] = {
-      {"red", 255, 0, 0},         {"red-orange", 255, 70, 0},
-      {"orange", 255, 120, 0},    {"orange-red", 255, 35, 0},
-      {"blue", 0, 0, 255},        {"blue-cyan", 0, 120, 255},
-      {"cyan-blue", 0, 200, 255}, {"purple-blue", 90, 0, 255}};
-
-  if (challengeLevel == 5) {
-    return HUE_TINTS[colorOption[slot]];
-  }
-
   return colorByIndex(colorOption[slot]);
 }
 
