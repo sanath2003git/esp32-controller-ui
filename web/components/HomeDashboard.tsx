@@ -5,24 +5,23 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  BarChart2,
-  Brain,
+  BrainCircuit,
   ChevronRight,
-  Clock,
   Gamepad2,
   Heart,
   Lightbulb,
   Maximize2,
   Minimize2,
-  Navigation,
+  Palette,
   Star,
+  TrafficCone,
   Trophy,
   X,
-  Zap,
 } from "lucide-react";
 
 import { useBleContext } from "@/context/BleContext";
 import ColorWheelModal from "@/components/ColorWheelModal";
+import { fetchAndSyncProgress, getTrustLevel, incrementTrustLevel } from "@/lib/progressStore";
 
 /* ─── Trust tips ──────────────────────────────────── */
 const TRUST_TIPS = [
@@ -66,7 +65,7 @@ function TrustModal({
           <svg width="90" height="82" viewBox="0 0 32 30" aria-label={`Trust ${pct}%`}>
             <defs>
               <clipPath id="trust-modal-clip">
-                <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
+                <rect x="0" y={27 - (25 * pct) / 100} width="32" height={(25 * pct) / 100} />
               </clipPath>
             </defs>
             <path
@@ -79,7 +78,6 @@ function TrustModal({
               d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
               fill={tier.color}
               clipPath="url(#trust-modal-clip)"
-              style={{ filter: `drop-shadow(0 0 8px ${tier.color}bb)` }}
             />
           </svg>
         </div>
@@ -129,49 +127,61 @@ const EXPRESSIONS = [
 
 type ExpressionId = (typeof EXPRESSIONS)[number]["id"];
 
-/* ─── Challenge progress data ─────────────────────── */
-const CHALLENGES = [
+type ChallengeData = {
+  id: string;
+  name: string;
+  icon: any;
+  accent: string;
+  done: number;
+  total: number;
+  score: number;
+  stars?: number;
+  playTime?: string | null;
+};
+
+const INITIAL_CHALLENGES: ChallengeData[] = [
   {
     id: "colour-quest",
     name: "Colour Quest",
-    icon: Gamepad2,
-    accent: "#ffc857",
-    done: 6,
-    total: 10,
-    score: 320,
+    icon: Palette,
+    accent: "#7c5cff",
+    done: 0,
+    total: 6,
+    score: 0,
+    stars: 0,
     playTime: null,
   },
   {
     id: "echo-memory",
     name: "Echo Memory",
-    icon: Brain,
-    accent: "#7c5cff",
-    done: 7,
+    icon: BrainCircuit,
+    accent: "#00e5ff",
+    done: 0,
     total: 10,
-    score: 580,
-    playTime: "20m",
+    score: 0,
+    playTime: null,
   },
   {
     id: "driving-pro",
     name: "Driving Pro",
-    icon: Navigation,
-    accent: "#00e5ff",
-    done: 4,
+    icon: Gamepad2,
+    accent: "#ffc857",
+    done: 0,
     total: 10,
-    score: 210,
+    score: 0,
     playTime: null,
   },
   {
     id: "reflex-dash",
     name: "Reflex Dash",
-    icon: Zap,
-    accent: "#ff4d67",
-    done: 2,
+    icon: TrafficCone,
+    accent: "#ffc857",
+    done: 0,
     total: 10,
-    score: 150,
+    score: 0,
     playTime: null,
   },
-] as const;
+];
 
 /* ─── Mood map ────────────────────────────────────── */
 const MOOD_LABELS: Record<ExpressionId, string> = {
@@ -191,12 +201,39 @@ const MOOD_LABELS: Record<ExpressionId, string> = {
 /* ─── Today's Progress & Carousel ──────────────────────────── */
 function ChallengeCarousel() {
   const [active, setActive] = useState(0);
+  const [challenges, setChallenges] = useState<ChallengeData[]>(INITIAL_CHALLENGES);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetchAndSyncProgress("color-quest").then((data) => {
+      if (isMounted && data.success) {
+        let totalScore = 0;
+        let totalStars = 0;
+        if (data.levels) {
+          for (const lvl of Object.values(data.levels)) {
+            totalScore += lvl.bestScore;
+            totalStars += lvl.stars;
+          }
+        }
+        setChallenges(prev => prev.map(c => 
+          c.id === "colour-quest" 
+            ? { ...c, done: data.completedLevels, total: data.totalLevels, score: totalScore, stars: totalStars }
+            : c
+        ));
+      }
+    }).catch(err => console.warn("[HOME] Failed to fetch colour quest progress", err));
+    return () => { isMounted = false; };
+  }, []);
+
+  const overallStars = challenges.reduce((sum, c) => sum + (c.stars || 0), 0);
+  const overallGamesDone = challenges.filter((c) => c.done > 0).length;
+  const overallGamesTotal = challenges.length;
 
   const startAuto = () => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     intervalRef.current = setInterval(() => {
-      setActive((p) => (p + 1) % CHALLENGES.length);
+      setActive((p) => (p + 1) % challenges.length);
     }, 4000);
   };
 
@@ -210,7 +247,7 @@ function ChallengeCarousel() {
     startAuto();
   };
 
-  const ch = CHALLENGES[active];
+  const ch = challenges[active];
   const Icon = ch.icon;
   const pct = Math.round((ch.done / ch.total) * 100);
 
@@ -292,7 +329,7 @@ function ChallengeCarousel() {
 
         {/* Right Arrow Button */}
         <button
-          onClick={() => goTo((active + 1) % CHALLENGES.length)}
+          onClick={() => goTo((active + 1) % challenges.length)}
           aria-label="Next game"
           className="ml-1 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 active:scale-95"
         >
@@ -302,7 +339,7 @@ function ChallengeCarousel() {
 
       {/* Dots */}
       <div className="mt-3 mb-5 flex justify-center gap-1.5">
-        {CHALLENGES.map((c, i) => (
+        {challenges.map((c, i) => (
           <button
             key={c.id}
             type="button"
@@ -317,38 +354,22 @@ function ChallengeCarousel() {
         ))}
       </div>
 
-      {/* Bottom Summary (2x2 grid for mobile) */}
-      <div className="mt-2 grid grid-cols-2 gap-3 border-t border-border/60 pt-4 sm:grid-cols-4">
+      {/* Bottom Summary (2 columns) */}
+      <div className="mt-2 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
         {/* Total Stars */}
-        <div className="flex items-center gap-2.5">
-          <Star size={20} className="shrink-0 text-warning drop-shadow-[0_0_6px_rgba(255,200,87,0.5)]" />
-          <div className="flex flex-col">
-            <span className="text-sm font-black leading-tight text-white">12</span>
-            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Total Stars<br />earned today</span>
+        <div className="flex items-center justify-center gap-2.5">
+          <Star size={24} className="shrink-0 text-warning drop-shadow-[0_0_6px_rgba(255,200,87,0.5)]" />
+          <div className="flex flex-col text-left">
+            <span className="text-sm font-black leading-tight text-white">{overallStars}</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45 mt-0.5">Total Stars<br />earned</span>
           </div>
         </div>
         {/* Games Played */}
-        <div className="flex items-center gap-2.5">
-          <Gamepad2 size={20} className="shrink-0 text-[#7c5cff] drop-shadow-[0_0_6px_rgba(124,92,255,0.5)]" />
-          <div className="flex flex-col">
-            <span className="text-sm font-black leading-tight text-white">4/4</span>
-            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Games Played<br />today</span>
-          </div>
-        </div>
-        {/* Play Time */}
-        <div className="flex items-center gap-2.5">
-          <Clock size={20} className="shrink-0 text-accent drop-shadow-[0_0_6px_rgba(0,229,255,0.5)]" />
-          <div className="flex flex-col">
-            <span className="text-sm font-black leading-tight text-white">20m</span>
-            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Total Play Time<br />today</span>
-          </div>
-        </div>
-        {/* Best Score */}
-        <div className="flex items-center gap-2.5">
-          <BarChart2 size={20} className="shrink-0 text-success drop-shadow-[0_0_6px_rgba(53,229,154,0.5)]" />
-          <div className="flex flex-col">
-            <span className="text-sm font-black leading-tight text-white">1,250</span>
-            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45">Best Score<br />overall</span>
+        <div className="flex items-center justify-center gap-2.5">
+          <Gamepad2 size={24} className="shrink-0 text-[#7c5cff] drop-shadow-[0_0_6px_rgba(124,92,255,0.5)]" />
+          <div className="flex flex-col text-left">
+            <span className="text-sm font-black leading-tight text-white">{overallGamesDone}/{overallGamesTotal}</span>
+            <span className="text-[8px] uppercase leading-tight tracking-wider text-white/45 mt-0.5">Games Played<br />today</span>
           </div>
         </div>
       </div>
@@ -358,7 +379,7 @@ function ChallengeCarousel() {
 
 /* ─── Main component ──────────────────────────────── */
 export default function HomeDashboard() {
-  const { status, send, openModal } = useBleContext();
+  const { status, send, openModal, lastMessage } = useBleContext();
   const router = useRouter();
 
   const isConnected = status === "connected";
@@ -370,6 +391,22 @@ export default function HomeDashboard() {
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [petFullscreen, setPetFullscreen] = useState(false);
   const [trustOpen, setTrustOpen] = useState(false);
+  
+  const [trustLevel, setTrustLevel] = useState(50);
+
+  // Initialize and listen for trust changes
+  useEffect(() => {
+    setTrustLevel(getTrustLevel());
+    
+    const onTrustChange = (e: Event) => {
+      const ce = e as CustomEvent<number>;
+      setTrustLevel(ce.detail);
+    };
+    window.addEventListener("trustLevelChanged", onTrustChange);
+    return () => window.removeEventListener("trustLevelChanged", onTrustChange);
+  }, []);
+
+
 
   /* Auto-switch expression based on connection status */
   useEffect(() => {
@@ -405,9 +442,7 @@ export default function HomeDashboard() {
     setExpressionAnimating(true);
     setTimeout(() => setExpressionAnimating(false), 700);
     try {
-      // Custom command — extend as needed with your firmware protocol
-      await send({ command: "move", direction: "forward" } as Parameters<typeof send>[0]);
-      // TODO: replace with real expression command when firmware supports it
+      await send({ command: "oled_emoji", emoji_id: id } as Parameters<typeof send>[0]);
     } catch {
       // silently ignore when disconnected
     }
@@ -423,7 +458,7 @@ export default function HomeDashboard() {
     if (!isConnected) {
       openModal();
     } else {
-      router.push("/playground/free-drive");
+      router.push("/rc-mode");
     }
   };
 
@@ -525,13 +560,13 @@ export default function HomeDashboard() {
 
               {/* Trust Level button */}
               {(() => {
-                const pct = 58;
+                const pct = trustLevel;
                 const tier =
                   pct >= 67
-                    ? { label: "Best Friend", color: "#35e59a" }
+                    ? { label: "High Trust",   color: "#35e59a" }
                     : pct >= 34
-                    ? { label: "Unsure",      color: "#ffc857" }
-                    : { label: "Broken Bond", color: "#ff4d67" };
+                    ? { label: "Medium Trust", color: "#ffc857" }
+                    : { label: "Low Trust",    color: "#ff4d67" };
                 return (
                   <div className="flex flex-col items-center gap-1">
                     <button
@@ -544,7 +579,7 @@ export default function HomeDashboard() {
                       <svg width="22" height="20" viewBox="0 0 32 30" aria-hidden="true">
                         <defs>
                           <clipPath id="pet-heart-clip">
-                            <rect x="0" y={30 - (30 * pct) / 100} width="32" height={(30 * pct) / 100} />
+                            <rect x="0" y={27 - (25 * pct) / 100} width="32" height={(25 * pct) / 100} />
                           </clipPath>
                         </defs>
                         <path
@@ -557,7 +592,6 @@ export default function HomeDashboard() {
                           d="M16 27 C16 27 2 18 2 9.5 C2 5.36 5.36 2 9.5 2 C12.04 2 14.28 3.28 16 5.34 C17.72 3.28 19.96 2 22.5 2 C26.64 2 30 5.36 30 9.5 C30 18 16 27 16 27Z"
                           fill={tier.color}
                           clipPath="url(#pet-heart-clip)"
-                          style={{ filter: `drop-shadow(0 0 5px ${tier.color}aa)` }}
                         />
                       </svg>
                     </button>
@@ -700,13 +734,13 @@ export default function HomeDashboard() {
 
       {/* Trust modal — portalled to body, rendered at section level so close btn works */}
       {trustOpen && (() => {
-        const pct = 58;
+        const pct = trustLevel;
         const tier =
           pct >= 67
-            ? { label: "Best Friend", color: "#35e59a" }
+            ? { label: "High Trust",   color: "#35e59a" }
             : pct >= 34
-            ? { label: "Unsure",      color: "#ffc857" }
-            : { label: "Broken Bond", color: "#ff4d67" };
+            ? { label: "Medium Trust", color: "#ffc857" }
+            : { label: "Low Trust",    color: "#ff4d67" };
         return (
           <TrustModal
             pct={pct}

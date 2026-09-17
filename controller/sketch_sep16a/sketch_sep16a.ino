@@ -1388,6 +1388,73 @@ class RxCharacteristicCallbacks : public BLECharacteristicCallbacks {
 // ========================================
 // LIVE TELEMETRY
 // ========================================
+// TOUCH SENSOR LOGIC
+// ========================================
+
+unsigned long touchPressTime = 0;
+unsigned long touchReleaseTime = 0;
+bool isTouching = false;
+int tapCount = 0;
+String currentTouchEvent = "none";
+bool holdTriggered = false;
+
+void updateTouchState() {
+  bool currentTouch = digitalRead(PIN_TOUCH) == HIGH;
+  unsigned long now = millis();
+
+  // If newly touched
+  if (currentTouch && !isTouching) {
+    isTouching = true;
+    touchPressTime = now;
+    holdTriggered = false;
+  }
+  
+  // If newly released
+  if (!currentTouch && isTouching) {
+    isTouching = false;
+    touchReleaseTime = now;
+    
+    unsigned long duration = now - touchPressTime;
+    if (duration < 1000) {
+      tapCount++;
+    } else {
+      // It was a hold that just ended
+      currentTouchEvent = "none";
+    }
+  }
+
+  // Handle tap counting timeout (wait 300ms for a second tap)
+  if (!isTouching && tapCount > 0 && (now - touchReleaseTime > 300)) {
+    if (tapCount == 1) {
+      currentTouchEvent = "single_tap";
+    } else if (tapCount >= 2) {
+      currentTouchEvent = "double_tap";
+    }
+    tapCount = 0;
+  }
+
+  // Handle continuous hold
+  if (isTouching && !holdTriggered && (now - touchPressTime > 1000)) {
+    currentTouchEvent = "hold";
+    holdTriggered = true; // prevent re-triggering constantly if we only want one hold event
+  }
+  
+  // Clear tap events after they've been sent in telemetry (cleared in sendLiveTelemetry)
+}
+
+String consumeTouchEvent() {
+  String event = currentTouchEvent;
+  // Only clear the event if it's a tap. Hold persists while touching.
+  if (event == "single_tap" || event == "double_tap") {
+    currentTouchEvent = "none";
+  }
+  // If holding but released, it is cleared in updateTouchState
+  return event;
+}
+
+// ========================================
+// LIVE TELEMETRY
+// ========================================
 
 void sendLiveTelemetry() {
   if (!deviceConnected || !clientReady)
@@ -1420,6 +1487,8 @@ void sendLiveTelemetry() {
   telemetry["motion"]["sudden"] = detectSuddenMotion();
   telemetry["pit"]["detected"] = false;
   telemetry["timestamp"] = millis();
+  
+  telemetry["touch"]["event"] = consumeTouchEvent();
 
   sendJson(telemetry);
 }
@@ -1854,6 +1923,8 @@ void loop() {
     // Keep existing telemetry functionality.
     sendLiveTelemetry();
   }
+  
+  updateTouchState();
 
   delay(5);
 }

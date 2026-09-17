@@ -31,6 +31,9 @@ export type RobotTelemetry = {
   pit: {
     detected: boolean;
   };
+  touch?: {
+    event: "none" | "single_tap" | "double_tap" | "hold";
+  };
   timestamp?: number;
 };
 
@@ -71,7 +74,7 @@ export type OledTextCommand = {
 
 export type OledEmojiCommand = {
   command: "oled_emoji";
-  emoji: string;
+  emoji_id: number;
 };
 
 export type RobotCommand =
@@ -136,7 +139,7 @@ function isRobotTelemetry(value: unknown): value is RobotTelemetry {
     return false;
   }
 
-  const { direction, distance, obstacle, motion, pit, timestamp } = value;
+  const { direction, distance, obstacle, motion, pit, touch, timestamp } = value;
 
   return (
     typeof direction === "number" &&
@@ -151,6 +154,7 @@ function isRobotTelemetry(value: unknown): value is RobotTelemetry {
     typeof motion.sudden === "boolean" &&
     isRecord(pit) &&
     typeof pit.detected === "boolean" &&
+    (touch === undefined || (isRecord(touch) && typeof touch.event === "string")) &&
     (timestamp === undefined || typeof timestamp === "number")
   );
 }
@@ -195,6 +199,7 @@ export function parseBleMessage(value: unknown): BleMessage | null {
         obstacle: value.obstacle,
         motion: value.motion,
         pit: value.pit,
+        ...(value.touch === undefined ? {} : { touch: value.touch }),
         ...(value.timestamp === undefined ? {} : { timestamp: value.timestamp }),
       } as RobotTelemetry,
     };

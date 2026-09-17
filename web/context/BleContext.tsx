@@ -4,10 +4,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
+import { incrementTrustLevel } from "@/lib/progressStore";
 
 import { BleClient } from "@/lib/ble/client";
 import {
@@ -21,6 +23,9 @@ import {
 } from "@/types/ble";
 
 type BleStatus = "disconnected" | "connecting" | "connected";
+
+const TRUST_DECAY_INTERVAL_MS = 30000; // 30 seconds
+const TRUST_DECAY_AMOUNT = -3; // 3 percent
 
 type BleContextValue = {
   status: BleStatus;
@@ -46,6 +51,8 @@ const BleContext = createContext<BleContextValue | null>(null);
 export function BleProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<BleClient | null>(null);
   const statusRef = useRef<BleStatus>("disconnected");
+  const lastHoldTimeRef = useRef<number>(Date.now());
+  const lastDecayTimeRef = useRef<number>(Date.now());
 
   const [status, setStatus] = useState<BleStatus>("disconnected");
   const [deviceName, setDeviceName] = useState<string | null>(null);
@@ -53,6 +60,37 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const [telemetry, setTelemetry] = useState<RobotTelemetry | null>(null);
   const [lastMessage, setLastMessage] = useState<BleMessage | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(true);
+
+  // Decay trust if there is no touch input for a prolonged period
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Date.now();
+      const timeSinceLastTouch = now - lastHoldTimeRef.current;
+      const timeSinceLastDecay = now - lastDecayTimeRef.current;
+      
+      // If it's been at least 30s since last touch, AND at least 30s since last decay
+      if (timeSinceLastTouch >= TRUST_DECAY_INTERVAL_MS && timeSinceLastDecay >= TRUST_DECAY_INTERVAL_MS) {
+        lastDecayTimeRef.current = now;
+        incrementTrustLevel(TRUST_DECAY_AMOUNT);
+      }
+    }, 1000); // check every second
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // Process touch trust globally whenever a new telemetry message arrives
+  useEffect(() => {
+    if (lastMessage?.type === "telemetry" && lastMessage.telemetry.touch?.event) {
+      const evt = lastMessage.telemetry.touch.event;
+      if (evt === "hold" || evt === "single_tap" || evt === "double_tap") {
+        const now = Date.now();
+        if (now - lastHoldTimeRef.current > 1000) {
+          lastHoldTimeRef.current = now;
+          incrementTrustLevel(1);
+        }
+      }
+    }
+  }, [lastMessage]);
 
   const openModal = useCallback(() => {
     setIsModalOpen(true);

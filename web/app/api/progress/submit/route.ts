@@ -36,9 +36,9 @@ export async function POST(request: Request) {
       level > 6 ||
       typeof score !== "number" ||
       !Number.isFinite(score) ||
-      score < 0 ||
-      score > 1
+      score < 0
     ) {
+      console.error("[PROGRESS SUBMIT] Validation failed for payload:", { game, level, score });
       return NextResponse.json(
         { success: false, error: "Invalid payload parameters" },
         { status: 400 }
@@ -47,12 +47,6 @@ export async function POST(request: Request) {
 
     const db = await getDatabase();
     const collection = db.collection("user_level_progress");
-
-    // Create unique index if it doesn't exist
-    await collection.createIndex(
-      { userId: 1, game: 1, level: 1 },
-      { unique: true }
-    );
 
     // Fetch existing levels to check if target level is unlocked
     const existingRecords = await collection

@@ -32,6 +32,11 @@ import {
   CheckCircle2,
   Eye,
   HelpCircle,
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Gamepad2,
 } from "lucide-react";
 
 export default function ChallengeLevelPage() {
@@ -264,6 +269,9 @@ export default function ChallengeLevelPage() {
   }, [gameState, status, clearTimeoutTimer]);
 
   const handleExit = () => {
+    if (gameState === "playing" || gameState === "starting") {
+      void send({ command: "abort" }).catch((e) => console.error("[ABORT ERROR]", e));
+    }
     clearTimeoutTimer();
     router.push(`/playground/${params.mode}/challenges`);
   };
@@ -309,35 +317,52 @@ export default function ChallengeLevelPage() {
 
       <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
         {/* Header Section */}
-        {/* <section className="rounded-2xl border border-white/10 bg-surface p-5 shadow-lg">
-          <div className="flex items-center justify-between">
-            <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
-              Level {levelMeta.id}
-            </span>
-            <div className="flex gap-2">
+        <section className="rounded-2xl border border-white/10 bg-surface p-5 shadow-lg flex flex-col items-center text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/20 text-primary mb-4 shadow-inner shadow-primary/20">
+             <Gamepad2 size={32} />
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white">
+             {modeMeta?.title || "Colour Quest"}
+          </h1>
+          
+          <div className="mt-4 flex flex-col items-start space-y-2 text-sm text-left bg-black/20 rounded-xl p-4 w-full border border-white/5">
+            <p className="text-white/80">
+              <span className="inline-block w-6 text-center mr-2 text-lg">🤖</span>
+              <strong>Watch</strong> the colourful LEDs light up on your robot!
+            </p>
+            <p className="text-white/80">
+              <span className="inline-block w-6 text-center mr-2 text-lg">🧠</span>
+              <strong>Memorize</strong> where each colour is located!
+            </p>
+            <p className="text-white/80">
+              <span className="inline-block w-6 text-center mr-2 text-lg">🎮</span>
+              <strong>Match</strong> the target colour using your D-Pad arrows!
+            </p>
+          </div>
+
+          <div className="mt-6 w-full border-t border-white/10 pt-5 text-left">
+            <div className="flex items-center justify-between">
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+                Level {levelMeta.id}
+              </span>
               <span className="text-xs font-semibold text-white/40">
                 {levelMeta.difficulty}
               </span>
-              <span className="text-xs font-semibold text-accent/80">
-                {levelMeta.timing}
-              </span>
             </div>
-          </div>
 
-          <h2 className="mt-3 text-2xl font-black tracking-tight text-white">
-            {levelMeta.title}
-          </h2>
+            <h2 className="mt-3 text-xl font-bold tracking-tight text-white">
+              {levelMeta.title}
+            </h2>
 
-          <p className="mt-1 text-sm leading-6 text-white/60">
-            {levelMeta.description}
-          </p>
+            <p className="mt-1 text-sm leading-6 text-white/60">
+              {levelMeta.description}
+            </p>
 
-          {levelMeta.concept && (
             <p className="mt-2 text-xs italic text-accent/80">
               Concept: {levelMeta.concept}
             </p>
-          )}
-        </section> */}
+          </div>
+        </section>
 
         {/* Lock warning if locked */}
         {!isLoadingProgress && !isUnlocked && (
@@ -443,58 +468,52 @@ export default function ChallengeLevelPage() {
               </div>
             )}
 
-            {/* Region Selection Buttons */}
-            <div className="grid grid-cols-2 gap-2 mt-2">
+            {/* Region Selection Buttons (D-Pad Layout) */}
+            <div className="mx-auto mt-6 grid max-w-[200px] grid-cols-3 gap-2">
+              <div />
               <button
                 type="button"
                 onClick={() => handleRegionAnswer("front")}
-                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Front (Top)"
               >
-                FRONT (Top)
+                <ArrowUp size={32} />
               </button>
-              <button
-                type="button"
-                onClick={() => handleRegionAnswer("right")}
-                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
-              >
-                RIGHT
-              </button>
+              <div />
+              
               <button
                 type="button"
                 onClick={() => handleRegionAnswer("left")}
-                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Left"
               >
-                LEFT
+                <ArrowLeft size={32} />
               </button>
+              <div />
+              <button
+                type="button"
+                onClick={() => handleRegionAnswer("right")}
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Right"
+              >
+                <ArrowRight size={32} />
+              </button>
+              
+              <div />
               <button
                 type="button"
                 onClick={() => handleRegionAnswer("back")}
-                className="flex items-center justify-center gap-2 rounded-xl border border-primary/40 bg-primary/20 py-3 text-sm font-bold text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Back (Bottom)"
               >
-                BACK (Bottom)
+                <ArrowDown size={32} />
               </button>
+              <div />
             </div>
           </section>
         )}
 
-        {/* ALWAYS SHOW ControlPanel FOR PLAYING THE GAME */}
-        <section className="mt-8">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-white/40">
-              Robot Controls & Telemetry
-            </span>
-            {gameState === "playing" && (
-              <span className="text-xs font-semibold text-emerald-400 flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" /> Live
-              </span>
-            )}
-          </div>
-          <ControlPanel
-            game={params.mode}
-            isGameActive={gameState === "playing"}
-            activeTask={activeTask ? { index: activeTask.index, target: activeTask.target || activeTask.phase, options: activeTask.options || [] } : null}
-          />
-        </section>
+
 
         {/* Exit Button */}
         <button

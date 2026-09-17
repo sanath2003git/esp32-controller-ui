@@ -19,7 +19,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 1,
     title: "Level 1",
-    description: "1 primary + 3 secondary colours.",
+    description: "🍎 Find the basic colours among the mixed ones! Nice and easy.",
     concept: "1 primary + 3 secondary colours",
     difficulty: "Easy",
     timing: "Normal",
@@ -27,7 +27,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 2,
     title: "Level 2",
-    description: "Same primary identification, but faster.",
+    description: "⚡ Same as before, but you gotta be quick! Gotta go fast!",
     concept: "Primary colour identification under speed",
     difficulty: "Easy",
     timing: "Fast",
@@ -35,7 +35,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 3,
     title: "Level 3",
-    description: "1 secondary + 3 primary colours.",
+    description: "🍊 Now find the mixed colours hidden among the basics!",
     concept: "1 secondary + 3 primary colours",
     difficulty: "Medium",
     timing: "Normal",
@@ -43,7 +43,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 4,
     title: "Level 4",
-    description: "Secondary identification under speed.",
+    description: "🚀 Find the mixed colours, but at super speed! Don't blink!",
     concept: "Secondary colour identification under speed",
     difficulty: "Medium",
     timing: "Faster",
@@ -51,7 +51,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 5,
     title: "Level 5",
-    description: "Hue/tint recognition using closely related colours.",
+    description: "🕵️‍♂️ Tricky! Can you tell the difference between very similar shades?",
     concept: "Hue and tint recognition",
     difficulty: "Hard",
     timing: "Fast",
@@ -59,7 +59,7 @@ export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
   {
     id: 6,
     title: "Level 6",
-    description: "Extended colour palette / ultimate challenge.",
+    description: "👑 The Ultimate Boss Level! All colours, max speed. Good luck!",
     concept: "Extended colour palette",
     difficulty: "Hard",
     timing: "Fastest",
