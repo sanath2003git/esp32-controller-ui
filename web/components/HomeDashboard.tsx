@@ -406,14 +406,17 @@ export default function HomeDashboard() {
     return () => window.removeEventListener("trustLevelChanged", onTrustChange);
   }, []);
 
-  // Listen for BLE hold events (throttled to 1 per second)
+  // Listen for BLE touch events (throttled to 1 per second)
   const lastHoldTimeRef = useRef<number>(0);
   useEffect(() => {
-    if (lastMessage?.type === "telemetry" && lastMessage.touch?.event === "hold") {
-      const now = Date.now();
-      if (now - lastHoldTimeRef.current > 1000) {
-        lastHoldTimeRef.current = now;
-        incrementTrustLevel(1);
+    if (lastMessage?.type === "telemetry" && lastMessage.telemetry.touch?.event) {
+      const evt = lastMessage.telemetry.touch.event;
+      if (evt === "hold" || evt === "single_tap" || evt === "double_tap") {
+        const now = Date.now();
+        if (now - lastHoldTimeRef.current > 1000) {
+          lastHoldTimeRef.current = now;
+          incrementTrustLevel(1);
+        }
       }
     }
   }, [lastMessage]);
