@@ -78,7 +78,10 @@
 #define PIN_AIN2 20
 #define PIN_PWMB 21
 #define PIN_BIN1 47
-#define PIN_BIN2 45
+#define PIN_BIN2 48
+
+// Default motor PWM speed (0..255)
+const int DEFAULT_SPEED = 180;
 
 // Sonar (HC-SR04)
 #define PIN_TRIG 15
@@ -1043,16 +1046,25 @@ void sendJson(const JsonDocument &doc) {
   serializeJson(doc, payload);
   payload += "\n";
 
-  // Keep chunks small for compatibility with the default BLE ATT MTU.
-  // The web client must reassemble notifications until '\n'.
-  const size_t CHUNK_SIZE = 20;
+  // notify() only enqueues a packet - actual transmission is paced by the
+  // negotiated BLE connection interval (commonly 15-30ms+). Sending many
+  // small chunks back-to-back with a gap shorter than that interval lets
+  // the stack's internal notification queue fill up faster than the radio
+  // can drain it; on the ESP32 Bluedroid stack that tends to hard-reset
+  // the link rather than throttle gracefully. Requesting a larger MTU in
+  // setup() lets most messages fit in one or two notifications instead of
+  // ~10, and the wider per-chunk delay keeps us comfortably under typical
+  // connection-interval pacing even for centrals that only negotiate the
+  // legacy 23-byte MTU.
+  const size_t CHUNK_SIZE = 150;
+  const uint32_t CHUNK_DELAY_MS = 15;
 
   for (size_t offset = 0; offset < payload.length(); offset += CHUNK_SIZE) {
     size_t length = min(CHUNK_SIZE, payload.length() - offset);
     bleTxCharacteristic->setValue((uint8_t *)(payload.c_str() + offset),
                                   length);
     bleTxCharacteristic->notify();
-    delay(6);
+    delay(CHUNK_DELAY_MS);
   }
 
   Serial.print("TX: ");
@@ -1103,6 +1115,8 @@ void sendResponse(const char *command, bool success,
 
   sendJson(response);
 }
+
+void handleMove(const char *direction, int speed = DEFAULT_SPEED);
 
 void handleCommandLine(const String &line) {
   if (line.length() == 0)
@@ -1171,7 +1185,8 @@ void handleCommandLine(const String &line) {
       return;
     }
 
-    handleMove(direction);
+    int speed = constrain((int)(doc["speed"] | DEFAULT_SPEED), 0, 255);
+    handleMove(direction, speed);
     sendResponse("move", true);
   }
 
@@ -1445,23 +1460,42 @@ void motorsStop() {
 
 void motorsEnable() { digitalWrite(PIN_STBY, HIGH); }
 
-const int DEFAULT_SPEED = 180;
+// Motor A = RIGHT wheel
+// Motor B = LEFT wheel
+//
+// Requested movement behaviour:
+//   FRONT/FORWARD -> right forward + left forward
+//   RIGHT         -> right idle    + left forward
+//   BACK/BACKWARD -> right backward + left backward
+//   LEFT          -> right forward + left idle
+//
+// Speed is PWM, 0..255. A speed value can be supplied by the BLE command;
+// otherwise DEFAULT_SPEED is used.
+void handleMove(const char *direction, int speed) {
+  speed = constrain(speed, 0, 255);
 
-void handleMove(const char *direction) {
-  motorsEnable();
+  if (strcmp(direction, "forward") == 0 ||
+      strcmp(direction, "front") == 0) {
+    motorsEnable();
+    driveMotorA(speed, true);   // right wheel forward
+    driveMotorB(speed, true);   // left wheel forward
 
-  if (strcmp(direction, "forward") == 0) {
-    driveMotorA(DEFAULT_SPEED, true);
-    driveMotorB(DEFAULT_SPEED, true);
-  } else if (strcmp(direction, "backward") == 0) {
-    driveMotorA(DEFAULT_SPEED, false);
-    driveMotorB(DEFAULT_SPEED, false);
+  } else if (strcmp(direction, "backward") == 0 ||
+             strcmp(direction, "back") == 0) {
+    motorsEnable();
+    driveMotorA(speed, false);  // right wheel backward
+    driveMotorB(speed, false);  // left wheel backward
+
   } else if (strcmp(direction, "right") == 0) {
-    driveMotorA(DEFAULT_SPEED, true);
-    driveMotorB(DEFAULT_SPEED, false);
+    motorsEnable();
+    driveMotorA(0, true);       // right wheel idle
+    driveMotorB(speed, true);   // left wheel forward
+
   } else if (strcmp(direction, "left") == 0) {
-    driveMotorA(DEFAULT_SPEED, false);
-    driveMotorB(DEFAULT_SPEED, true);
+    motorsEnable();
+    driveMotorA(speed, true);   // right wheel forward
+    driveMotorB(0, true);       // left wheel idle
+
   } else {
     Serial.print("Unknown movement direction: ");
     Serial.println(direction);
@@ -1695,6 +1729,13 @@ void setup() {
   // ========================================
 
   BLEDevice::init(DEVICE_NAME);
+
+  // Request a larger ATT MTU so most JSON messages fit in one or two
+  // notifications instead of ~10 tiny 20-byte ones. The actual negotiated
+  // size is min(this, whatever the central supports) - Chrome's Web
+  // Bluetooth stack generally accepts a large MTU, but this degrades
+  // gracefully on centrals that don't.
+  BLEDevice::setMTU(247);
 
   bleServer = BLEDevice::createServer();
   bleServer->setCallbacks(new ServerCallbacks());

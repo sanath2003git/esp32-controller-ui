@@ -71,6 +71,21 @@ import { parseBleMessage, type BleMessage } from "@/types/ble";
 export type BleMessageHandler = (message: BleMessage) => void;
 export type BleDisconnectHandler = () => void;
 
+const MAX_QUEUE_LENGTH = 8;
+
+// A hard floor on the gap between GATT writes. Coalescing + hysteresis
+// upstream cut down *how many* writes get queued, but this guarantees the
+// peripheral always gets a minimum breathing room between operations
+// regardless of how fast the app produces them - useful if the ESP32's
+// main loop is doing blocking work (motor PWM, etc.) between BLE stack
+// services and a too-fast write cadence contributes to a supervision
+// timeout / dropped connection.
+const MIN_WRITE_INTERVAL_MS = 40;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 type QueuedWrite = {
   data: BufferSource;
   /**
@@ -94,6 +109,7 @@ export class BleClient {
   private rxBuffer: string = "";
   private writeQueue: QueuedWrite[] = [];
   private isWriting = false;
+  private lastWriteAt = 0;
 
   // CONNECT
   async connect(
@@ -187,6 +203,17 @@ export class BleClient {
       }
 
       this.writeQueue.push({ data, coalesceKey, resolve, reject });
+
+      // Belt-and-suspenders: even non-coalesced commands (buzzer, OLED
+      // text, colour-quest input) shouldn't be allowed to build an
+      // unbounded backlog if the link is slow or stalled. Drop the oldest
+      // queued write rather than let the queue - and the delay before the
+      // robot reacts - grow without limit.
+      while (this.writeQueue.length > MAX_QUEUE_LENGTH) {
+        const dropped = this.writeQueue.shift();
+        dropped?.reject(new Error("BLE write queue overflow; command dropped."));
+      }
+
       void this.flushWriteQueue();
     });
   }
@@ -195,10 +222,26 @@ export class BleClient {
     if (
       typeof message === "object" &&
       message !== null &&
-      "command" in message &&
-      message.command === "color"
+      "command" in message
     ) {
-      return "color";
+      const command = (message as { command?: unknown }).command;
+
+      if (command === "color") {
+        return "color";
+      }
+
+      // Joystick drag can flip direction (or hit the dead zone and call
+      // stop) far faster than a GATT write completes, especially right at
+      // the boundary between two axes where pointer jitter makes the
+      // dominant axis flicker. Without coalescing, every intermediate
+      // direction still gets written to the device one at a time, and a
+      // burst of contradictory move/stop commands is a good way to stall
+      // a write or overrun the ESP32's BLE stack and trigger a disconnect.
+      // Only the newest motion command matters, so treat move+stop as one
+      // coalescing group.
+      if (command === "move" || command === "stop") {
+        return "motion";
+      }
     }
 
     return undefined;
@@ -221,8 +264,14 @@ export class BleClient {
           continue;
         }
 
+        const sinceLastWrite = performance.now() - this.lastWriteAt;
+        if (sinceLastWrite < MIN_WRITE_INTERVAL_MS) {
+          await delay(MIN_WRITE_INTERVAL_MS - sinceLastWrite);
+        }
+
         try {
           await characteristic.writeValue(write.data);
+          this.lastWriteAt = performance.now();
           write.resolve();
         } catch (error) {
           write.reject(
