@@ -53,6 +53,11 @@ type AlertToast = {
   tone: "warning" | "danger";
 };
 
+// How much more one axis must dominate the other before the joystick
+// switches its reported movement direction. >1 adds hysteresis so the
+// direction doesn't flap back and forth when dragging near the diagonal.
+const AXIS_SWITCH_MARGIN = 1.2;
+
 const modeLabel: Record<ControlPanelMode, string> = {
   "free-ride": "Free ride",
   training: "Training",
@@ -222,14 +227,37 @@ export default function ControlPanel({
       return;
     }
 
-    const nextDirection: MovementDirection =
-      Math.abs(dy) >= Math.abs(dx)
-        ? dy > 0
-          ? "forward"
-          : "backward"
-        : dx > 0
-          ? "right"
-          : "left";
+    // When dragging near the diagonal (|dx| ~= |dy|), ordinary pointer
+    // jitter can flip which axis is "dominant" many times a second,
+    // producing a rapid forward/right/forward/right... flood of BLE move
+    // commands that can stall a write or overwhelm the robot's BLE stack.
+    // Require the new axis to clearly beat the *current* axis before
+    // switching, so a direction that's already active "sticks" through
+    // small jitter around the boundary.
+    const absDx = Math.abs(dx);
+    const absDy = Math.abs(dy);
+    const current = activeMovementDirection.current;
+    const currentAxisIsVertical =
+      current === "forward" || current === "backward";
+    const currentAxisIsHorizontal =
+      current === "right" || current === "left";
+
+    let useVerticalAxis: boolean;
+    if (currentAxisIsVertical) {
+      useVerticalAxis = absDy * AXIS_SWITCH_MARGIN >= absDx;
+    } else if (currentAxisIsHorizontal) {
+      useVerticalAxis = absDy > absDx * AXIS_SWITCH_MARGIN;
+    } else {
+      useVerticalAxis = absDy >= absDx;
+    }
+
+    const nextDirection: MovementDirection = useVerticalAxis
+      ? dy > 0
+        ? "forward"
+        : "backward"
+      : dx > 0
+        ? "right"
+        : "left";
 
     if (
       activeMovementDirection.current ===

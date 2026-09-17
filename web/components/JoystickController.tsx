@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
 
 import { Gamepad2 } from "lucide-react";
 
@@ -62,15 +62,22 @@ export default function JoystickController({
   const [direction, setDirection] = useState<JoystickDirection>({ dx: 0, dy: 0 });
   const [isDragging, setIsDragging] = useState(false);
 
-  const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+  // Pointer events (especially from trackpads/precise mice) can arrive far
+  // faster than the app needs to react - and far faster than a BLE write
+  // can complete downstream. Coalesce them to one update per animation
+  // frame instead of processing every raw event.
+  const rafRef = useRef<number | null>(null);
+  const pendingPointRef = useRef<{ x: number; y: number } | null>(null);
+
+  const applyPoint = (clientX: number, clientY: number) => {
     const pad = padRef.current;
     if (!pad) return;
 
     const bounds = pad.getBoundingClientRect();
     const radius = Math.min(bounds.width, bounds.height) / 2;
     const maxTravel = radius * MAX_TRAVEL_RATIO;
-    const rawX = event.clientX - bounds.left - bounds.width / 2;
-    const rawY = event.clientY - bounds.top - bounds.height / 2;
+    const rawX = clientX - bounds.left - bounds.width / 2;
+    const rawY = clientY - bounds.top - bounds.height / 2;
     const distance = Math.hypot(rawX, rawY);
     const scale = distance > maxTravel && distance > 0 ? maxTravel / distance : 1;
     const nextDirection = {
@@ -82,9 +89,38 @@ export default function JoystickController({
     onDirectionChange?.(nextDirection);
   };
 
+  const updateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    // Immediate update on pointerdown so the thumb doesn't feel laggy on
+    // the initial touch; subsequent moves are throttled below.
+    applyPoint(event.clientX, event.clientY);
+  };
+
+  const scheduleUpdateFromPointer = (event: PointerEvent<HTMLDivElement>) => {
+    pendingPointRef.current = { x: event.clientX, y: event.clientY };
+
+    if (rafRef.current !== null) return;
+
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = null;
+      const point = pendingPointRef.current;
+      if (point) applyPoint(point.x, point.y);
+    });
+  };
+
+  const cancelScheduledUpdate = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingPointRef.current = null;
+  };
+
+  useEffect(() => cancelScheduledUpdate, []);
+
   const finishInteraction = (pointerId: number) => {
     if (activePointerId.current !== pointerId) return;
 
+    cancelScheduledUpdate();
     activePointerId.current = null;
     setIsDragging(false);
     setDirection({ dx: 0, dy: 0 });
@@ -105,7 +141,7 @@ export default function JoystickController({
     if (disabled || activePointerId.current !== event.pointerId) return;
 
     event.preventDefault();
-    updateFromPointer(event);
+    scheduleUpdateFromPointer(event);
   };
 
   const handlePointerEnd = (event: PointerEvent<HTMLDivElement>) => {
@@ -115,8 +151,12 @@ export default function JoystickController({
     finishInteraction(event.pointerId);
   };
 
-  const thumbOffsetX = direction.dx * MAX_TRAVEL_RATIO * 100;
-  const thumbOffsetY = -direction.dy * MAX_TRAVEL_RATIO * 100;
+  // `left` and `top` percentages are relative to the full pad diameter, while
+  // `maxTravel` is relative to its radius. Using 100 here doubled the visual
+  // movement: the thumb reached its limit when the finger was only halfway
+  // there. Convert the radius ratio to a diameter percentage instead.
+  const thumbOffsetX = direction.dx * MAX_TRAVEL_RATIO * 50;
+  const thumbOffsetY = -direction.dy * MAX_TRAVEL_RATIO * 50;
 
   return (
     <section
@@ -186,7 +226,7 @@ export default function JoystickController({
               isDragging
                 ? "border-primary bg-primary shadow-[0_0_22px_rgba(124,92,255,0.5)]"
                 : "border-primary/55 bg-surface-light"
-            } ${isDragging ? "transition-none" : "transition-[left,top] duration-[180ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]"}`}
+            } ${isDragging ? "transition-[left,top] duration-75 ease-out" : "transition-[left,top] duration-[180ms] ease-[cubic-bezier(0.215,0.61,0.355,1)]"}`}
             style={{ left: `${50 + thumbOffsetX}%`, top: `${50 + thumbOffsetY}%` }}
           >
             <span className={`h-1.5 w-1.5 rounded-full ${isDragging ? "bg-white" : "bg-primary/80"}`} />
