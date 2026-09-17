@@ -78,6 +78,13 @@ export default function ChallengeLevelPage() {
 
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const processedMessageRef = useRef<string | null>(null);
+  const regionSelectionRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (gameState === "playing" && activeTask) {
+      regionSelectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [gameState, activeTask]);
 
   useEffect(() => {
     let isSubscribed = true;
@@ -319,12 +326,12 @@ export default function ChallengeLevelPage() {
         {/* Header Section */}
         <section className="rounded-2xl border border-white/10 bg-surface p-5 shadow-lg flex flex-col items-center text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-primary/20 text-primary mb-4 shadow-inner shadow-primary/20">
-             <Gamepad2 size={32} />
+            <Gamepad2 size={32} />
           </div>
           <h1 className="text-2xl font-black tracking-tight text-white">
-             {modeMeta?.title || "Colour Quest"}
+            {modeMeta?.title || "Colour Quest"}
           </h1>
-          
+
           <div className="mt-4 flex flex-col items-start space-y-2 text-sm text-left bg-black/20 rounded-xl p-4 w-full border border-white/5">
             <p className="text-white/80">
               <span className="inline-block w-6 text-center mr-2 text-lg">🤖</span>
@@ -401,11 +408,10 @@ export default function ChallengeLevelPage() {
               type="button"
               disabled={!isUnlocked}
               onClick={handleStartLevel}
-              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-4 text-base font-bold transition-all ${
-                isUnlocked
+              className={`flex w-full items-center justify-center gap-2 rounded-2xl px-4 py-4 text-base font-bold transition-all ${isUnlocked
                   ? "bg-primary text-black hover:bg-primary/90 active:scale-[0.98] shadow-lg shadow-primary/20"
                   : "bg-white/10 text-white/30 cursor-not-allowed"
-              }`}
+                }`}
             >
               <Play size={20} fill="currentColor" /> Start Level {levelId}
             </button>
@@ -422,7 +428,10 @@ export default function ChallengeLevelPage() {
 
         {/* Active Task & Anti-Cheating Phase Flow Overlay */}
         {gameState === "playing" && activeTask && (
-          <section className="mt-6 rounded-2xl border border-accent/30 bg-surface-light p-5 text-center shadow-xl">
+          <section
+            ref={regionSelectionRef}
+            className="mt-6 scroll-mt-24 rounded-2xl border border-accent/30 bg-surface-light p-5 text-center shadow-xl"
+          >
             <div className="flex items-center justify-between text-xs text-white/60 mb-3">
               <span className="flex items-center gap-1.5 font-bold text-accent">
                 Task {activeTask.index + 1} / 10
@@ -434,19 +443,18 @@ export default function ChallengeLevelPage() {
 
             {taskFeedback ? (
               <div
-                className={`mb-4 rounded-xl border p-4 font-bold text-sm ${
-                  taskFeedback.correct
+                className={`mb-4 rounded-xl border p-4 font-bold text-sm ${taskFeedback.correct
                     ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
                     : taskFeedback.timeout
-                    ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
-                    : "border-rose-500/40 bg-rose-500/15 text-rose-300"
-                }`}
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
+                      : "border-rose-500/40 bg-rose-500/15 text-rose-300"
+                  }`}
               >
                 {taskFeedback.correct
                   ? `CORRECT! Score: ${taskFeedback.correctCount}/10`
                   : taskFeedback.timeout
-                  ? `TIMEOUT! Score: ${taskFeedback.correctCount}/10`
-                  : `WRONG! Score: ${taskFeedback.correctCount}/10`}
+                    ? `TIMEOUT! Score: ${taskFeedback.correctCount}/10`
+                    : `WRONG! Score: ${taskFeedback.correctCount}/10`}
               </div>
             ) : activeTask.phase === "memorize" ? (
               <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300">
@@ -480,7 +488,7 @@ export default function ChallengeLevelPage() {
                 <ArrowUp size={32} />
               </button>
               <div />
-              
+
               <button
                 type="button"
                 onClick={() => handleRegionAnswer("left")}
@@ -498,7 +506,7 @@ export default function ChallengeLevelPage() {
               >
                 <ArrowRight size={32} />
               </button>
-              
+
               <div />
               <button
                 type="button"
