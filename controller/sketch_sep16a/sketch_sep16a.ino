@@ -1,26 +1,73 @@
 /*
-  MAINBOT firmware
-  OLED support: SSD1306 0.96 inch, 128x64, I2C address 0x3C
+  ============================================================
+  ELXIE FIRMWARE — MERGED BUILD  (ESP32-S3)
+  Combines:
+    - BLE (Nordic UART Service) web-app control + Colour Quest
+      game engine                                   ["File 1"]
+    - ESP-NOW physical remote control with an
+      Unlinked / RC / Pet mode state machine         ["File 2"]
+  ============================================================
 
-  Frontend -> ESP32 JSON contract
+  CONTROL ARBITRATION (as requested):
+    - The ESP-NOW remote drives the robot by default (its own
+      Unlinked -> RC -> Pet state machine, wandering, petting
+      reaction, etc. all run as in file 2).
+    - The instant a BLE web-app client connects
+      (deviceConnected == true), ESP-NOW input stops being
+      acted on. ESP-NOW packets are still received (so the link
+      timer stays warm) but are ignored for driving/mode
+      purposes; motors and the strip are force-stopped at the
+      moment of connection.
+    - The instant BLE disconnects, control reverts cleanly to
+      the ESP-NOW state machine (it starts again from a fresh
+      "just relinked" condition).
+    - Only one side ever drives the motors/strip at a time.
 
-  OLED display is controlled locally by the firmware. On startup it shows a
-  welcome message, then an animated fullscreen happy face while idle. During
-  Colour Quest, the game engine owns the OLED.
+  MERGE DECISIONS (as confirmed):
+    1. Mux select pins: file 1's mapping (S0=4, S1=5, S2=6, S3=17).
+    2. IR sensors: 8 total.
+         - 4 "corner" channels (9, 15, 11, 14) — file 1's original
+           telemetry sensors. Also reused as ESP-NOW's "side"
+           obstacle sensors (same physical sensors).
+         - 4 "bottom" channels (10, 8, 12, 13) — new, used ONLY by
+           the ESP-NOW state machine for edge/drop safety. They are
+           NOT added to the BLE telemetry JSON schema.
+    3. Battery: file 1's simple ADC-percentage model
+       (raw/4095*100). New addition: a beep alert + a small
+       battery icon on the OLED once percentage <= 35%, clearing
+       once it rises back to >= 40% (hysteresis so it doesn't
+       chatter), repeating every ~60s while low.
+    4. Motors: file 1's analogWrite-based driveMotorA/driveMotorB
+       primitives throughout. No ledc, no slew-rate ramping —
+       ESP-NOW's wander/petting/RC-drive logic has been rewritten
+       onto these primitives directly.
+    5. Buzzer: file 1's tone()/noTone() throughout. All of file
+       2's ledc-based beep effects (petting trill, ask-chirp,
+       wander chirp, low-batt jingle) have been re-implemented as
+       tone() calls behind a tiny shared "buzzer free at" gate so
+       they can't stomp on each other or on Colour Quest's tones.
+    6. OLED: file 1's animated happy-face idle screen + Colour
+       Quest screens only. File 2's mood-face system is dropped
+       entirely. A small low-battery icon is overlaid on whichever
+       of those screens is currently showing.
+    7. Device name: ELXIE.
 
-  Response examples:
-  {"type":"response","status":"ok","command":"display_text"}
-  {"type":"response","status":"error","command":"display_text","message":"Text
-  too long"}
+  *** PLEASE VERIFY ON FIRST TEST ***
+  File 1 documents "Motor A = RIGHT wheel, Motor B = LEFT wheel".
+  That mapping is used as ground truth throughout this merge,
+  including for the ESP-NOW RC joystick's left/right assignment
+  (search "VERIFY" below — two lines). If pushing the physical
+  joystick left makes the robot turn right (or vice versa) in RC
+  mode, swap those two lines. Nothing else depends on this.
 
-  Notes:
-  - Text is UTF-8 JSON. The OLED font is ASCII-only.
-  - Use named bitmap emojis instead of Unicode emoji characters.
-  - BLE uses Nordic UART Service (NUS): service 6E400001, RX 6E400002, TX
-  6E400003.
-  - Messages are newline-delimited JSON.
-  - Existing movement, RGB, buzzer, telemetry, and sensor logic is preserved.
-  - Colour Quest runs on the robot for 6 levels x 10 tasks. Each task has a 5s display + 5s answer window.
+  Also note: BLE and ESP-NOW are run concurrently on the same
+  radio (ESP-NOW rides Wi-Fi station mode, BLE rides the
+  Bluetooth controller). This is a supported ESP32 coexistence
+  pattern for low-rate control traffic like this, but if you
+  notice BLE hiccups while the ESP-NOW remote is actively
+  streaming packets, that's the radio-sharing trade-off to be
+  aware of.
+  ============================================================
 */
 
 #include <Adafruit_GFX.h>
@@ -31,25 +78,43 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <WiFi.h>
 #include <Wire.h>
+#include <esp_now.h>
+#include <esp_wifi.h>
 #include <math.h>
 #include <string.h>
+
+// ========================================
+// SHARED TYPE DEFINITIONS
+// Must appear before any functions so the Arduino
+// preprocessor can generate valid prototypes.
+// ========================================
+
+struct GameColor {
+  const char *name;
+  uint8_t r;
+  uint8_t g;
+  uint8_t b;
+};
+
+enum StripRegion { REGION_FRONT, REGION_BACK, REGION_LEFT, REGION_RIGHT };
+
+enum WanderState { WS_CRUISE, WS_BACK, WS_TURN, WS_PAUSE };
 
 // ========================================
 // DEVICE
 // ========================================
 
-#define DEVICE_NAME "Elxie-CQ"
-#define FIRMWARE_VERSION "2.1.0"
+#define DEVICE_NAME "ELXIE"
+#define FIRMWARE_VERSION "3.0.0"
 
 // ========================================
 // BLE UUIDs
 // ========================================
 
 #define NUS_SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"
-
 #define NUS_CHAR_RX_UUID "6E400002-B5A3-F393-E0A9-E50E24DCCA9E"
-
 #define NUS_CHAR_TX_UUID "6E400003-B5A3-F393-E0A9-E50E24DCCA9E"
 
 // ========================================
@@ -65,7 +130,7 @@
 #define PIN_BIN1 47
 #define PIN_BIN2 48
 
-// Default motor PWM speed (0..255)
+// Default motor PWM speed (0..255) for BLE "move" commands.
 const int DEFAULT_SPEED = 180;
 
 // Sonar (HC-SR04)
@@ -102,6 +167,13 @@ const int DEFAULT_SPEED = 180;
 #define PIN_ENC_RIGHT 40
 
 // ========================================
+// ESP-NOW REMOTE
+// ========================================
+
+// NOTE: confirm this matches the remote's ACTUAL printed MAC.
+uint8_t REMOTE_MAC[6] = {0x18, 0xfe, 0x34, 0xf5, 0xe8, 0x66};
+
+// ========================================
 // I2C DEVICE ADDRESSES
 // ========================================
 
@@ -117,10 +189,11 @@ bool qmc5883Present = false;
 bool oledPresent = false;
 
 // ========================================
-// IR MUX CHANNELS
+// IR MUX CHANNELS  (8 total)
 // ========================================
 
-// Corner sensors used for obstacle telemetry.
+// Corner sensors used for obstacle telemetry (file 1) AND reused
+// as the ESP-NOW "side" obstacle sensors (same physical sensors).
 // C1 = corner-front-left  -> CH9
 // C2 = corner-front-right -> CH15
 // C3 = corner-rear-left   -> CH11
@@ -129,38 +202,55 @@ bool oledPresent = false;
 #define MUX_CH_C2 15
 #define MUX_CH_C3 11
 #define MUX_CH_C4 14
+const uint8_t CORNER_CH[4] = {MUX_CH_C1, MUX_CH_C2, MUX_CH_C3, MUX_CH_C4};
+
+// Bottom / drop sensors — new, ESP-NOW mode only (edge safety).
+// Not part of the BLE telemetry schema.
+const uint8_t BOTTOM_CH[4] = {10, 8, 12, 13}; // FL, FR, RL, RR
 
 #define IR_OBSTACLE_THRESHOLD 4000
 
 // ========================================
+// SHARED BUZZER GATE (tone()-based, non-blocking)
+// ========================================
+// A single "free at" timestamp so Colour Quest tones, BLE "buzz"
+// command, and every ESP-NOW ambient effect (petting trill,
+// ask-chirp, wander chirp, low-battery jingle) can't stomp on
+// each other. tone(pin, freq, duration) is itself non-blocking.
+
+unsigned long buzzerFreeAt = 0;
+
+void playTone(int freq, int durationMs) {
+  tone(PIN_BUZZER, freq, durationMs);
+  buzzerFreeAt = millis() + durationMs;
+}
+
+bool buzzerBusy() { return (long)(millis() - buzzerFreeAt) < 0; }
+
+#define BUZZER_FREQ 2000 // generic chirp tone used by several ESP-NOW effects
+
+// OLED display object — declared here (ahead of its own section) because
+// drawBatteryOverlay(), below, needs to reference it, and unlike function
+// calls, Arduino does not auto-forward-declare global objects.
+Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
+
+// ========================================
 // EXTERNAL NEOPIXEL STRIP
 // ========================================
-
-struct GameColor {
-  const char *name;
-  uint8_t r;
-  uint8_t g;
-  uint8_t b;
-};
 
 Adafruit_NeoPixel strip(NUM_STRIP_PIXELS, PIN_STRIP, NEO_GRB + NEO_KHZ800);
 
 // Physical WS2812 region mapping supplied for the Elxie robot.
 // The RIGHT region wraps around the physical end of the 30-pixel strip.
 const uint8_t RIGHT_PIXELS[] = {6, 7, 8};
-
 const uint8_t FRONT_PIXELS[] = {27, 28};
-
 const uint8_t LEFT_PIXELS[] = {18, 19, 20};
-
 const uint8_t BACK_PIXELS[] = {11, 12};
 
 #define RIGHT_PIXEL_COUNT (sizeof(RIGHT_PIXELS) / sizeof(RIGHT_PIXELS[0]))
 #define FRONT_PIXEL_COUNT (sizeof(FRONT_PIXELS) / sizeof(FRONT_PIXELS[0]))
 #define LEFT_PIXEL_COUNT (sizeof(LEFT_PIXELS) / sizeof(LEFT_PIXELS[0]))
 #define BACK_PIXEL_COUNT (sizeof(BACK_PIXELS) / sizeof(BACK_PIXELS[0]))
-
-enum StripRegion { REGION_FRONT, REGION_BACK, REGION_LEFT, REGION_RIGHT };
 
 void setStripColor(uint8_t r, uint8_t g, uint8_t b) {
   for (int i = 0; i < NUM_STRIP_PIXELS; i++) {
@@ -213,10 +303,83 @@ void setAllRegionsColor(uint8_t r, uint8_t g, uint8_t b) {
 }
 
 // ========================================
-// OLED
+// BATTERY MONITOR  (file 1 percentage model + new low-batt alert)
 // ========================================
 
-Adafruit_SSD1306 display(OLED_WIDTH, OLED_HEIGHT, &Wire, -1);
+int readBatteryPercentage() {
+  int raw = analogRead(PIN_BATTERY);
+  return constrain((raw * 100L) / 4095L, 0, 100);
+}
+
+#define BATT_WARN_PCT 35
+#define BATT_CLEAR_PCT 40
+#define BATT_SAMPLE_MS 2000UL
+#define BATT_ALERT_PERIOD_MS 60000UL // re-alert cadence while low
+
+int batteryPercent = 100;
+bool batteryLow = false;
+unsigned long lastBattSampleMs = 0;
+unsigned long lastBattAlertMs = 0;
+bool battAlertPlaying = false;
+uint8_t battAlertStep = 0;
+unsigned long battAlertStepMs = 0;
+
+void serviceBattery() {
+  unsigned long now = millis();
+
+  if (now - lastBattSampleMs >= BATT_SAMPLE_MS) {
+    lastBattSampleMs = now;
+    batteryPercent = readBatteryPercentage();
+
+    if (!batteryLow && batteryPercent <= BATT_WARN_PCT) {
+      batteryLow = true;
+      lastBattAlertMs = now - BATT_ALERT_PERIOD_MS; // fire promptly
+    } else if (batteryLow && batteryPercent >= BATT_CLEAR_PCT) {
+      batteryLow = false;
+      battAlertPlaying = false;
+    }
+  }
+
+  if (!batteryLow)
+    return;
+
+  // Kick off a new 3-note descending jingle every ~60s, but never
+  // interrupt something else already using the buzzer.
+  if (!battAlertPlaying && (now - lastBattAlertMs >= BATT_ALERT_PERIOD_MS) &&
+      !buzzerBusy()) {
+    battAlertPlaying = true;
+    battAlertStep = 0;
+    battAlertStepMs = now;
+  }
+
+  if (battAlertPlaying) {
+    if (now - battAlertStepMs >= 150) {
+      battAlertStepMs = now;
+      const int notes[] = {1400, 1000, 700};
+      if (battAlertStep < 3) {
+        playTone(notes[battAlertStep], 140);
+        battAlertStep++;
+      } else {
+        battAlertPlaying = false;
+        lastBattAlertMs = now;
+      }
+    }
+  }
+}
+
+// Small low-battery glyph, top-right corner. Call right before any
+// display.display() on a screen that should reflect battery state.
+void drawBatteryOverlay() {
+  if (!oledPresent || !batteryLow)
+    return;
+  display.drawRect(112, 1, 14, 7, SSD1306_WHITE);
+  display.drawRect(126, 3, 2, 3, SSD1306_WHITE);
+  display.fillRect(114, 3, 3, 3, SSD1306_WHITE); // single bar = low
+}
+
+// ========================================
+// OLED
+// ========================================
 
 void oledInit() {
   if (!oledPresent) {
@@ -279,6 +442,7 @@ void drawHappyFace(uint8_t frame) {
     display.drawLine(79, 45, 84, 40, SSD1306_WHITE);
   }
 
+  drawBatteryOverlay();
   display.display();
 }
 
@@ -427,6 +591,7 @@ void challengeShowTaskPrompt() {
   display.println("5s SHOW + 5s ANSWER");
   display.setCursor(0, 58);
   display.println("F  R  B  L");
+  drawBatteryOverlay();
   display.display();
 }
 
@@ -442,10 +607,10 @@ void challengeShowFeedback(bool correct) {
 
   display.setTextSize(1);
   display.setCursor(24, 44);
-  display.printf("Score: %d/%d", challengeCorrectCount,
-                 COLOR_QUEST_TASKS);
+  display.printf("Score: %d/%d", challengeCorrectCount, COLOR_QUEST_TASKS);
   display.setCursor(8, 56);
   display.println("Next task...");
+  drawBatteryOverlay();
   display.display();
 }
 
@@ -473,12 +638,14 @@ const char *challengeLevelName(int level) {
 // 5-10 s: LEDs are turned off, but the web controller may still answer.
 // A response received at any point during the full 10 s is evaluated.
 unsigned long challengeDisplayDuration(int level) {
-  if (level % 2 != 0) return 5000;
+  if (level % 2 != 0)
+    return 5000;
   return 2500;
 }
 
 unsigned long challengeAnswerTimeout(int level) {
-  if (level % 2 != 0) return 5000;
+  if (level % 2 != 0)
+    return 5000;
   return 2500;
 }
 
@@ -500,33 +667,28 @@ void chooseDistinctColors(const int *pool, int poolSize) {
 // Build the actual four region colours for the current level.
 //
 // L1: one primary + three secondary. Target = the only primary.
-// L2: same primary-vs-secondary recognition with a higher presentation challenge.
-// L3: one secondary + three primary. Target = the only secondary.
-// L4: same secondary-vs-primary recognition with a higher presentation challenge.
-// L5: four hue/tint variants. Target = one exact variant.
-// L6: four different extended colours. Target = one exact region.
+// L2: same primary-vs-secondary recognition with a higher presentation
+// challenge. L3: one secondary + three primary. Target = the only secondary.
+// L4: same secondary-vs-primary recognition with a higher presentation
+// challenge. L5: four hue/tint variants. Target = one exact variant. L6: four
+// different extended colours. Target = one exact region.
 //
 // For every level, colorTargetDirection identifies the physical region
 // whose displayed colour must be selected by the user.
 void challengeBuildTask() {
   static const int PRIMARY[] = {0, 1, 2};   // red, green, blue
   static const int SECONDARY[] = {3, 4, 5}; // yellow, cyan, magenta
-  static const int EXTENDED[] = {0, 1, 2, 3, 4, 5, 6, 7};
 
   if (challengeLevel <= 4) {
     int targetColor;
     int distractorColors[3];
 
     if (challengeLevel <= 2) {
-      // L1 & L2: exactly one primary target plus the three secondary colours.
-      // This guarantees that no distractor is a shade/tint of the target,
-      // and no second primary colour can be mistaken for the target class.
       targetColor = PRIMARY[random(3)];
       distractorColors[0] = SECONDARY[0]; // yellow
       distractorColors[1] = SECONDARY[1]; // cyan
       distractorColors[2] = SECONDARY[2]; // magenta
     } else {
-      // L3 & L4: exactly one secondary target plus all three primaries.
       targetColor = SECONDARY[random(3)];
       distractorColors[0] = PRIMARY[0]; // red
       distractorColors[1] = PRIMARY[1]; // green
@@ -555,11 +717,10 @@ void challengeBuildTask() {
     colorTargetDirection = targetSlot;
   } else {
     // Hard modes (L5 & L6): Target is a tertiary color (orange or purple).
-    // Distractors are randomly selected from primary/secondary colors.
     static const int TERTIARY[] = {6, 7};
-    
+
     int targetColor = TERTIARY[random(2)];
-    
+
     int distractorColors[3];
     bool used[6] = {false};
     for (int i = 0; i < 3; i++) {
@@ -570,10 +731,10 @@ void challengeBuildTask() {
       used[selected] = true;
       distractorColors[i] = selected; // primary/secondary are indices 0-5
     }
-    
+
     int targetSlot = random(4);
     int distractorCursor = 0;
-    
+
     for (int slot = 0; slot < 4; slot++) {
       if (slot == targetSlot) {
         colorOption[slot] = targetColor;
@@ -581,7 +742,7 @@ void challengeBuildTask() {
         colorOption[slot] = distractorColors[distractorCursor++];
       }
     }
-    
+
     colorTargetDirection = targetSlot;
   }
 }
@@ -665,6 +826,7 @@ void challengeBeginAnswerPhase() {
     display.println("Choose: F R B L");
     display.setCursor(0, 58);
     display.println("5 seconds left");
+    drawBatteryOverlay();
     display.display();
   }
 
@@ -706,7 +868,7 @@ void challengeStartLevel(int level) {
                 challengeLevel, challengeLevelName(challengeLevel),
                 COLOR_QUEST_TASKS);
 
-  tone(PIN_BUZZER, 1800, 80);
+  playTone(1800, 80);
   challengeCreateTask();
 }
 
@@ -735,7 +897,7 @@ void challengeFinishLevel() {
                 challengeLevel, challengeCorrectCount, COLOR_QUEST_TASKS,
                 score);
 
-  tone(PIN_BUZZER, score >= 0.8f ? 2400 : 900, 150);
+  playTone(score >= 0.8f ? 2400 : 900, 150);
 
   if (oledPresent) {
     display.clearDisplay();
@@ -751,6 +913,7 @@ void challengeFinishLevel() {
     display.printf("Score: %d%%", (int)round(score * 100.0f));
     display.setCursor(0, 57);
     display.println("Web app saves progress");
+    drawBatteryOverlay();
     display.display();
   }
 
@@ -808,10 +971,10 @@ void challengeAnswerDirection(int direction) {
 
   if (challengeAnswerCorrect) {
     challengeCorrectCount++;
-    tone(PIN_BUZZER, 2400, 100);
+    playTone(2400, 100);
     setCQStripColor(0, 80, 0);
   } else {
-    tone(PIN_BUZZER, 500, 250);
+    playTone(500, 250);
     setCQStripColor(80, 0, 0);
   }
 
@@ -984,7 +1147,17 @@ void sendResponse(const char *command, bool success,
 
 void handleMove(const char *direction, int speed = DEFAULT_SPEED);
 
+extern bool petting;
+uint8_t lastBleColorR = 0, lastBleColorG = 0, lastBleColorB = 0;
+
 void handleCommandLine(const String &line) {
+  // If a BLE command comes in while petting, stop petting immediately
+  if (petting) {
+    petting = false;
+    motorsStop();
+    noTone(PIN_BUZZER);
+  }
+
   if (line.length() == 0)
     return;
 
@@ -1040,7 +1213,7 @@ void handleCommandLine(const String &line) {
   // ========================================
 
   if (strcmp(command, "ping") == 0) {
-    sendResponse("ping", true, "Pong from Elxie-CQ");
+    sendResponse("ping", true, "Pong from ELXIE");
   }
 
   else if (strcmp(command, "move") == 0) {
@@ -1065,6 +1238,10 @@ void handleCommandLine(const String &line) {
     int r = constrain((int)(doc["r"] | 0), 0, 255);
     int g = constrain((int)(doc["g"] | 0), 0, 255);
     int b = constrain((int)(doc["b"] | 0), 0, 255);
+    
+    lastBleColorR = r;
+    lastBleColorG = g;
+    lastBleColorB = b;
 
     setStripColor(r, g, b);
     sendResponse("color", true);
@@ -1103,12 +1280,667 @@ void handleCommandLine(const String &line) {
     int freq = constrain((int)(doc["freq"] | 1000), 20, 20000);
     int duration = constrain((int)(doc["duration"] | 200), 1, 5000);
 
-    tone(PIN_BUZZER, freq, duration);
+    playTone(freq, duration);
     sendResponse("buzz", true);
   }
 
   else {
     sendResponse(command, false, "Unknown command");
+  }
+}
+
+// ========================================
+// ESP-NOW MODE STATE MACHINE  (Unlinked / RC / Pet)
+// Only acted on while deviceConnected == false.
+// ========================================
+
+typedef struct __attribute__((packed)) {
+  int16_t x;
+  int16_t y;
+  uint8_t btn1;
+  uint8_t btn2;
+  uint8_t sw;
+} CommandPacket;
+
+typedef struct __attribute__((packed)) {
+  uint8_t alert;
+} FeedbackPacket;
+
+CommandPacket lastCmd = {0, 0, 0, 0, 0};
+volatile unsigned long lastRxMs = 0;
+volatile bool haveCmd = false;
+portMUX_TYPE cmdMux = portMUX_INITIALIZER_UNLOCKED;
+
+#define ALERT_OK 0
+#define ALERT_OBSTACLE 1
+#define ALERT_DROP 2
+
+#define X_CENTER 512
+#define Y_CENTER 512
+#define DEADZONE 150
+#define SWAP_AXES 1
+#define INVERT_FWD 1
+#define INVERT_TURN 0
+#define DRIVE_CAP 200
+
+#define SONAR_MIN_CM 20
+#define SONAR_REVERSE_PWM 150
+
+enum Mode { MODE_UNLINKED, MODE_RC, MODE_PET };
+Mode curMode = MODE_UNLINKED;
+
+#define LINK_TIMEOUT_MS 500    // no packet -> unlinked
+#define PET_TIMEOUT_MS 60000UL // remote idle 60s -> Pet mode
+#define PET_SLEEP_MS 30000UL   // idle this long *within* Pet -> sleep
+
+unsigned long lastActivityMs = 0;
+bool prevLinked = false;
+bool prevBtn1 = false, prevBtn2 = false, prevSw = false;
+uint8_t stripColorIdx = 0;
+bool headlight = false;
+int lastDistCmEspNow = 999;
+
+// ---- Petting reaction (ESP-NOW mode only; independent of the BLE
+//      tap/hold touch detector, which keeps running for BLE telemetry) ----
+#define PET_HOLD_MS 150
+#define PET_DUR_MS 1500
+#define PET_WOBBLE_PWM 90
+#define PET_WOBBLE_MS 180
+bool petting = false;
+unsigned long petStartMs = 0;
+unsigned long petTouchSinceMs = 0;
+bool prevPetTouch = false;
+unsigned long petWobbleMs = 0;
+bool petWobbleDir = false;
+uint8_t petColorStep = 0;
+unsigned long petColorMs = 0;
+uint8_t petTrillStep = 0;
+unsigned long petTrillMs = 0;
+
+// ---- Pet-mode "ask for a pet" idle wiggle ----
+unsigned long petAskNextMs = 0;
+unsigned long petAskStartMs = 0;
+bool petAsking = false;
+bool petAskDir = false;
+unsigned long petAskFlipMs = 0;
+#define PET_ASK_MIN_GAP 6000UL
+#define PET_ASK_MAX_GAP 12000UL
+#define PET_ASK_DUR_MS 700
+#define PET_ASK_PWM 80
+#define PET_ASK_FLIP_MS 160
+
+// ---- Wander (roaming Pet behaviour, floor) ----
+WanderState wState = WS_CRUISE;
+unsigned long wStateMs = 0;
+unsigned long wStateDur = 0;
+int wTurnDir = 1;
+unsigned long wNextChirpMs = 0;
+unsigned long wNextPauseMs = 0;
+
+#define WANDER_CRUISE_PWM 95
+#define WANDER_BACK_PWM 90
+#define WANDER_TURN_PWM 100
+#define WANDER_BACK_MS 450
+#define WANDER_TURN_MIN_MS 350
+#define WANDER_TURN_MAX_MS 900
+#define WANDER_PAUSE_MIN_MS 800
+#define WANDER_PAUSE_MAX_MS 1800
+#define WANDER_CHIRP_MIN_GAP 3000UL
+#define WANDER_CHIRP_MAX_GAP 7000UL
+#define WANDER_PAUSE_MIN_GAP 8000UL
+#define WANDER_PAUSE_MAX_GAP 16000UL
+
+// ---- Low-level signed-speed adapters onto file 1's motor primitives ----
+// Motor A = RIGHT wheel, Motor B = LEFT wheel (per file 1's documented
+// wiring). See the "VERIFY" note in the header comment.
+void driveASigned(int spd) {
+  spd = constrain(spd, -255, 255);
+  motorsEnable();
+  driveMotorA(abs(spd), spd >= 0);
+}
+void driveBSigned(int spd) {
+  spd = constrain(spd, -255, 255);
+  motorsEnable();
+  driveMotorB(abs(spd), spd >= 0);
+}
+
+// ========================================
+// ESP-NOW callbacks
+// ========================================
+
+void onEspNowRecv(const esp_now_recv_info_t *info, const uint8_t *data,
+                  int len) {
+  for (int i = 0; i < 6; i++)
+    if (info->src_addr[i] != REMOTE_MAC[i])
+      return;
+  if (len != sizeof(CommandPacket))
+    return;
+  portENTER_CRITICAL(&cmdMux);
+  memcpy(&lastCmd, data, sizeof(lastCmd));
+  lastRxMs = millis();
+  haveCmd = true;
+  portEXIT_CRITICAL(&cmdMux);
+}
+
+void sendEspNowFeedback(uint8_t alert) {
+  FeedbackPacket fb = {alert};
+  esp_now_send(REMOTE_MAC, (uint8_t *)&fb, sizeof(fb));
+}
+
+// ========================================
+// ESP-NOW strip helpers (reuse file 1's `strip` object / setStripColor)
+// ========================================
+
+void applyEspNowStripState() {
+  if (headlight) {
+    setStripColor(255, 255, 255);
+    return;
+  }
+  switch (stripColorIdx % 4) {
+  case 0:
+    setStripColor(0, 0, 0);
+    break;
+  case 1:
+    setStripColor(255, 0, 0);
+    break;
+  case 2:
+    setStripColor(0, 255, 0);
+    break;
+  case 3:
+    setStripColor(0, 0, 255);
+    break;
+  }
+}
+
+void espNowStripBlink(uint8_t r, uint8_t g, uint8_t b, int times, int onMs,
+                      int offMs) {
+  for (int i = 0; i < times; i++) {
+    setStripColor(r, g, b);
+    delay(onMs);
+    setStripColor(0, 0, 0);
+    delay(offMs);
+  }
+}
+
+// Ambient "not linked" chaser — needs individual pixel addressing, so it
+// talks to the shared `strip` object directly rather than via setStripColor.
+void espNowStripChaserStep() {
+  static uint8_t pos = 0;
+  static unsigned long last = 0;
+  if (millis() - last < 80)
+    return;
+  last = millis();
+  strip.clear();
+  strip.setPixelColor(pos, strip.Color(0, 80, 255));
+  strip.setPixelColor((pos + NUM_STRIP_PIXELS - 1) % NUM_STRIP_PIXELS,
+                      strip.Color(0, 20, 60));
+  strip.show();
+  pos = (pos + 1) % NUM_STRIP_PIXELS;
+}
+
+void espNowPetColor(uint8_t i) {
+  switch (i % 5) {
+  case 0:
+    setStripColor(255, 150, 200);
+    break;
+  case 1:
+    setStripColor(150, 220, 255);
+    break;
+  case 2:
+    setStripColor(200, 255, 170);
+    break;
+  case 3:
+    setStripColor(255, 220, 150);
+    break;
+  default:
+    setStripColor(210, 170, 255);
+    break;
+  }
+}
+
+void espNowBreatheStep() {
+  static unsigned long last = 0;
+  if (millis() - last < 40)
+    return;
+  last = millis();
+  float t = (millis() % 4000) / 4000.0f;
+  float b = 0.15f + 0.25f * (0.5f * (1 - cos(2 * PI * t)));
+  uint8_t r = (uint8_t)(120 * b);
+  uint8_t g = (uint8_t)(180 * b);
+  uint8_t bl = (uint8_t)(255 * b);
+  setStripColor(r, g, bl);
+}
+
+// ========================================
+// ESP-NOW petting reaction
+// ========================================
+
+void espNowStartPetting() {
+  petting = true;
+  petStartMs = millis();
+  petWobbleMs = millis();
+  petWobbleDir = false;
+  petColorStep = 0;
+  petColorMs = millis();
+  petTrillStep = 0;
+  petTrillMs = millis();
+}
+
+bool espNowServicePetting() {
+  unsigned long now = millis();
+  if (now - petStartMs >= PET_DUR_MS) {
+    petting = false;
+    motorsStop();
+    noTone(PIN_BUZZER);
+    if (deviceConnected) {
+      setStripColor(lastBleColorR, lastBleColorG, lastBleColorB);
+    } else {
+      applyEspNowStripState();
+    }
+    return false;
+  }
+  if (now - petWobbleMs >= PET_WOBBLE_MS) {
+    petWobbleMs = now;
+    petWobbleDir = !petWobbleDir;
+    if (petWobbleDir) {
+      driveASigned(+PET_WOBBLE_PWM);
+      driveBSigned(-PET_WOBBLE_PWM);
+    } else {
+      driveASigned(-PET_WOBBLE_PWM);
+      driveBSigned(+PET_WOBBLE_PWM);
+    }
+  }
+  if (now - petColorMs >= 120) {
+    petColorMs = now;
+    espNowPetColor(petColorStep++);
+  }
+  if (now - petTrillMs >= 90 && !buzzerBusy()) {
+    petTrillMs = now;
+    const int notes[] = {1200, 1600, 2100, 0};
+    int f = notes[petTrillStep % 4];
+    if (f > 0)
+      playTone(f, 90);
+    else
+      noTone(PIN_BUZZER);
+    petTrillStep++;
+  }
+  return true;
+}
+
+// ========================================
+// ESP-NOW "ask for a pet" idle wiggle
+// ========================================
+
+void espNowScheduleNextPetAsk() {
+  unsigned long gap = PET_ASK_MIN_GAP +
+                      (unsigned long)random(PET_ASK_MAX_GAP - PET_ASK_MIN_GAP);
+  petAskNextMs = millis() + gap;
+}
+void espNowStartPetAsk() {
+  petAsking = true;
+  petAskStartMs = millis();
+  petAskFlipMs = millis();
+  petAskDir = false;
+  if (!buzzerBusy())
+    playTone(BUZZER_FREQ, 50);
+}
+bool espNowServicePetAsk(bool safeToMove) {
+  unsigned long now = millis();
+  if (!safeToMove) {
+    if (petAsking) {
+      petAsking = false;
+      motorsStop();
+      espNowScheduleNextPetAsk();
+    }
+    return false;
+  }
+  if (!petAsking)
+    return false;
+  if (now - petAskStartMs >= PET_ASK_DUR_MS) {
+    petAsking = false;
+    motorsStop();
+    espNowScheduleNextPetAsk();
+    return false;
+  }
+  if (now - petAskFlipMs >= PET_ASK_FLIP_MS) {
+    petAskFlipMs = now;
+    petAskDir = !petAskDir;
+    if (petAskDir) {
+      driveASigned(+PET_ASK_PWM);
+      driveBSigned(-PET_ASK_PWM);
+    } else {
+      driveASigned(-PET_ASK_PWM);
+      driveBSigned(+PET_ASK_PWM);
+    }
+  }
+  return true;
+}
+
+// ========================================
+// ESP-NOW wander behaviour (roaming Pet mode, floor)
+// ========================================
+
+void espNowWanderChirp() {
+  if (!buzzerBusy())
+    playTone(BUZZER_FREQ, 70);
+}
+void espNowScheduleWanderChirp() {
+  wNextChirpMs =
+      millis() + WANDER_CHIRP_MIN_GAP +
+      (unsigned long)random(WANDER_CHIRP_MAX_GAP - WANDER_CHIRP_MIN_GAP);
+}
+void espNowScheduleWanderPause() {
+  wNextPauseMs =
+      millis() + WANDER_PAUSE_MIN_GAP +
+      (unsigned long)random(WANDER_PAUSE_MAX_GAP - WANDER_PAUSE_MIN_GAP);
+}
+void espNowEnterWanderState(WanderState s, unsigned long dur) {
+  wState = s;
+  wStateMs = millis();
+  wStateDur = dur;
+}
+void espNowWanderInit() {
+  espNowEnterWanderState(WS_CRUISE, 0);
+  espNowScheduleWanderChirp();
+  espNowScheduleWanderPause();
+}
+
+void espNowServiceWander(bool blocked, bool edge) {
+  unsigned long now = millis();
+
+  if (now >= wNextChirpMs) {
+    espNowWanderChirp();
+    espNowScheduleWanderChirp();
+  }
+
+  if ((edge || blocked) && wState == WS_CRUISE) {
+    motorsStop();
+    wTurnDir = (random(2) == 0) ? 1 : -1;
+    espNowEnterWanderState(WS_BACK, WANDER_BACK_MS);
+    return;
+  }
+
+  switch (wState) {
+  case WS_CRUISE: {
+    if (now >= wNextPauseMs) {
+      motorsStop();
+      espNowEnterWanderState(
+          WS_PAUSE, WANDER_PAUSE_MIN_MS +
+                        random(WANDER_PAUSE_MAX_MS - WANDER_PAUSE_MIN_MS));
+      espNowScheduleWanderPause();
+      break;
+    }
+    driveASigned(WANDER_CRUISE_PWM);
+    driveBSigned(WANDER_CRUISE_PWM);
+    break;
+  }
+  case WS_BACK: {
+    if (edge) {
+      motorsStop();
+      espNowEnterWanderState(
+          WS_TURN,
+          WANDER_TURN_MIN_MS + random(WANDER_TURN_MAX_MS - WANDER_TURN_MIN_MS));
+      break;
+    }
+    driveASigned(-WANDER_BACK_PWM);
+    driveBSigned(-WANDER_BACK_PWM);
+    if (now - wStateMs >= wStateDur) {
+      motorsStop();
+      espNowEnterWanderState(
+          WS_TURN,
+          WANDER_TURN_MIN_MS + random(WANDER_TURN_MAX_MS - WANDER_TURN_MIN_MS));
+    }
+    break;
+  }
+  case WS_TURN: {
+    driveASigned(WANDER_TURN_PWM * wTurnDir);
+    driveBSigned(-WANDER_TURN_PWM * wTurnDir);
+    if (now - wStateMs >= wStateDur) {
+      motorsStop();
+      espNowEnterWanderState(WS_CRUISE, 0);
+    }
+    break;
+  }
+  case WS_PAUSE:
+  default: {
+    motorsStop();
+    if (now - wStateMs >= wStateDur) {
+      espNowEnterWanderState(WS_CRUISE, 0);
+    }
+    break;
+  }
+  }
+}
+
+// ========================================
+// ESP-NOW mode machine — the main per-loop function.
+// Only called while deviceConnected == false.
+// ========================================
+
+void runEspNowControl() {
+  CommandPacket cmd;
+  unsigned long rxMs;
+  bool have;
+  portENTER_CRITICAL(&cmdMux);
+  memcpy(&cmd, &lastCmd, sizeof(cmd));
+  rxMs = lastRxMs;
+  have = haveCmd;
+  portEXIT_CRITICAL(&cmdMux);
+
+  bool linkAlive = have && (millis() - rxMs < LINK_TIMEOUT_MS);
+
+  // ---- NOT LINKED ----
+  if (!linkAlive) {
+    curMode = MODE_UNLINKED;
+    motorsStop();
+    espNowStripChaserStep();
+    prevLinked = false;
+    prevBtn1 = prevBtn2 = prevSw = false;
+    if (petting) {
+      petting = false;
+      noTone(PIN_BUZZER);
+    }
+    if (petAsking)
+      petAsking = false;
+    prevPetTouch = false;
+    return;
+  }
+
+  // Just (re)linked — green blink, seed activity so we begin in RC.
+  if (!prevLinked) {
+    espNowStripBlink(0, 255, 0, 2, 120, 120);
+    applyEspNowStripState();
+    prevLinked = true;
+    lastActivityMs = millis();
+    espNowScheduleNextPetAsk();
+  }
+
+  // ---- sensors (side/corner + bottom drop) ----
+  int sideVal[4], botVal[4];
+  int dropCount = 0;
+  bool obstacle = false;
+  for (int i = 0; i < 4; i++) {
+    botVal[i] = readMuxChannel(BOTTOM_CH[i]);
+    if (botVal[i] > IR_OBSTACLE_THRESHOLD)
+      dropCount++;
+  }
+  for (int i = 0; i < 4; i++) {
+    sideVal[i] = readMuxChannel(CORNER_CH[i]);
+    if (sideVal[i] < IR_OBSTACLE_THRESHOLD)
+      obstacle = true;
+  }
+
+  long frontCm = readSonarCm();
+  lastDistCmEspNow = (frontCm < 0) ? 999 : (int)frontCm;
+  bool tooClose = (frontCm > 0 && frontCm < SONAR_MIN_CM);
+  bool allDrop = (dropCount == 4);
+
+  static unsigned long lastDbg = 0;
+  if (millis() - lastDbg > 300) {
+    lastDbg = millis();
+    const char *mstr = (curMode == MODE_RC)    ? "RC"
+                       : (curMode == MODE_PET) ? "PET"
+                                               : "UNLINKED";
+    Serial.printf("[%s] SIDE %4d %4d %4d %4d | BOT %4d %4d %4d %4d | "
+                  "drop=%d obst=%d dist=%dcm idle=%lums | batt=%d%%%s\n",
+                  mstr, sideVal[0], sideVal[1], sideVal[2], sideVal[3],
+                  botVal[0], botVal[1], botVal[2], botVal[3], dropCount,
+                  obstacle, lastDistCmEspNow, millis() - lastActivityMs,
+                  batteryPercent, batteryLow ? " LOW" : "");
+  }
+
+  // ---- detect real remote activity (stick or button edges) ----
+  int dxRaw = cmd.x - X_CENTER;
+  int dyRaw = cmd.y - Y_CENTER;
+  bool stickIdle = (abs(dxRaw) < DEADZONE && abs(dyRaw) < DEADZONE);
+
+  bool b1 = cmd.btn1, b2 = cmd.btn2, s = cmd.sw;
+  bool btnEdge = (b1 && !prevBtn1) || (b2 && !prevBtn2) || (s && !prevSw);
+
+  bool activeNow = (!stickIdle) || btnEdge;
+  if (activeNow)
+    lastActivityMs = millis();
+
+  // ---- button actions (edge-triggered) — work in BOTH RC and Pet ----
+  if (b1 && !prevBtn1 && !buzzerBusy())
+    playTone(BUZZER_FREQ, 60);
+  prevBtn1 = b1;
+  if (b2 && !prevBtn2) {
+    stripColorIdx++;
+    applyEspNowStripState();
+  }
+  prevBtn2 = b2;
+  if (s && !prevSw) {
+    headlight = !headlight;
+    applyEspNowStripState();
+  }
+  prevSw = s;
+
+  // ---- mode from inactivity timer ----
+  Mode prevMode = curMode;
+  if (millis() - lastActivityMs < PET_TIMEOUT_MS)
+    curMode = MODE_RC;
+  else
+    curMode = MODE_PET;
+
+  if (curMode != prevMode) {
+    if (curMode == MODE_PET) {
+      espNowWanderInit();
+      applyEspNowStripState();
+    } else {
+      petAsking = false;
+      motorsStop();
+      applyEspNowStripState();
+    }
+  }
+
+  // ---- alert byte (drop highest) ----
+  uint8_t alert = ALERT_OK;
+  if (allDrop)
+    alert = ALERT_DROP;
+  else if (tooClose || obstacle)
+    alert = ALERT_OBSTACLE;
+
+  // ---- touch / petting (ESP-NOW mode only) ----
+  bool touch = (digitalRead(PIN_TOUCH) == HIGH);
+  if (touch && !prevPetTouch)
+    petTouchSinceMs = millis();
+  prevPetTouch = touch;
+  if (!petting && touch && stickIdle && !allDrop && !tooClose &&
+      (millis() - petTouchSinceMs >= PET_HOLD_MS)) {
+    espNowStartPetting();
+    petAsking = false;
+  }
+
+  // ============================================================
+  //  BEHAVIOUR BY MODE
+  // ============================================================
+  if (petting) {
+    if (allDrop || !stickIdle) {
+      petting = false;
+      motorsStop();
+      noTone(PIN_BUZZER);
+      applyEspNowStripState();
+    } else {
+      espNowServicePetting();
+    }
+
+  } else if (curMode == MODE_PET) {
+    bool asleep = (millis() - lastActivityMs) > (PET_TIMEOUT_MS + PET_SLEEP_MS);
+
+    if (allDrop) {
+      motorsStop();
+    } else if (asleep) {
+      motorsStop();
+      espNowBreatheStep();
+    } else {
+      bool edge = (dropCount > 0);
+      bool blocked = tooClose || obstacle;
+      espNowServiceWander(blocked, edge);
+      espNowBreatheStep();
+      // occasional "ask for a pet" wiggle while cruising and safe
+      if (!espNowServicePetAsk(!edge && !blocked) && wState == WS_CRUISE &&
+          millis() >= petAskNextMs && !edge && !blocked) {
+        espNowStartPetAsk();
+      }
+    }
+
+  } else {
+    // ---- RC MODE — live joystick drive ----
+    if (allDrop) {
+      motorsStop();
+    } else {
+      int dx = cmd.x - X_CENTER;
+      int dy = cmd.y - Y_CENTER;
+      if (abs(dx) < DEADZONE)
+        dx = 0;
+      if (abs(dy) < DEADZONE)
+        dy = 0;
+
+      int fwdAxis, turnAxis;
+      if (SWAP_AXES) {
+        fwdAxis = dx;
+        turnAxis = dy;
+      } else {
+        fwdAxis = dy;
+        turnAxis = dx;
+      }
+
+      int fwd = (INVERT_FWD ? +fwdAxis : -fwdAxis);
+      int turn = (INVERT_TURN ? -turnAxis : +turnAxis);
+
+      fwd = map(fwd, -512, 512, -DRIVE_CAP, DRIVE_CAP);
+      turn = map(turn, -512, 512, -DRIVE_CAP, DRIVE_CAP);
+
+      int left = fwd + turn;
+      int right = fwd - turn;
+
+      int peak = max(abs(left), abs(right));
+      if (peak > DRIVE_CAP) {
+        left = (left * DRIVE_CAP) / peak;
+        right = (right * DRIVE_CAP) / peak;
+      }
+
+      if (tooClose) {
+        int backSpeed = -SONAR_REVERSE_PWM;
+        int bl = backSpeed + (turn / 2);
+        int br = backSpeed - (turn / 2);
+        driveASigned(br); // Motor A = right wheel  <-- VERIFY on first test
+        driveBSigned(bl); // Motor B = left wheel   <-- VERIFY on first test
+      } else {
+        driveASigned(right); // Motor A = right wheel  <-- VERIFY on first test
+        driveBSigned(left);  // Motor B = left wheel   <-- VERIFY on first test
+      }
+    }
+  }
+
+  // ---- feedback to remote (on change + slow keep-alive) ----
+  static uint8_t prevAlertSent = 0xFF;
+  static unsigned long lastAlertSent = 0;
+  if (alert != prevAlertSent || millis() - lastAlertSent > 1000) {
+    sendEspNowFeedback(alert);
+    prevAlertSent = alert;
+    lastAlertSent = millis();
   }
 }
 
@@ -1122,7 +1954,15 @@ class ServerCallbacks : public BLEServerCallbacks {
     clientReady = false;
     lastTelemetry = millis();
 
-    Serial.println("Web app connected!");
+    // BLE takes over immediately: force-stop anything ESP-NOW was doing.
+    motorsStop();
+    setStripColor(0, 0, 0);
+    noTone(PIN_BUZZER);
+    petting = false;
+    petAsking = false;
+    curMode = MODE_UNLINKED;
+
+    Serial.println("Web app connected! BLE now has control.");
     challengeShowIdle();
   }
 
@@ -1137,7 +1977,14 @@ class ServerCallbacks : public BLEServerCallbacks {
     challengeStopOutputs();
     gameState = GS_IDLE;
 
-    Serial.println("Web app disconnected!");
+    // Hand control back to ESP-NOW from a clean, fresh state.
+    prevLinked = false;
+    lastActivityMs = millis();
+    curMode = MODE_UNLINKED;
+    petting = false;
+    petAsking = false;
+
+    Serial.println("Web app disconnected! ESP-NOW control resumes.");
     BLEDevice::startAdvertising();
     challengeShowIdle();
   }
@@ -1179,9 +2026,7 @@ class RxCharacteristicCallbacks : public BLECharacteristicCallbacks {
 };
 
 // ========================================
-// LIVE TELEMETRY
-// ========================================
-// TOUCH SENSOR LOGIC
+// TOUCH SENSOR LOGIC (always runs; feeds BLE telemetry)
 // ========================================
 
 unsigned long touchPressTime = 0;
@@ -1201,12 +2046,12 @@ void updateTouchState() {
     touchPressTime = now;
     holdTriggered = false;
   }
-  
+
   // If newly released
   if (!currentTouch && isTouching) {
     isTouching = false;
     touchReleaseTime = now;
-    
+
     unsigned long duration = now - touchPressTime;
     if (duration < 1000) {
       tapCount++;
@@ -1229,10 +2074,9 @@ void updateTouchState() {
   // Handle continuous hold
   if (isTouching && !holdTriggered && (now - touchPressTime > 1000)) {
     currentTouchEvent = "hold";
-    holdTriggered = true; // prevent re-triggering constantly if we only want one hold event
+    holdTriggered =
+        true; // prevent re-triggering constantly if we only want one hold event
   }
-  
-  // Clear tap events after they've been sent in telemetry (cleared in sendLiveTelemetry)
 }
 
 String consumeTouchEvent() {
@@ -1246,13 +2090,8 @@ String consumeTouchEvent() {
 }
 
 // ========================================
-// LIVE TELEMETRY
+// LIVE TELEMETRY (BLE)
 // ========================================
-
-int readBatteryPercentage() {
-  int raw = analogRead(PIN_BATTERY);
-  return constrain((raw * 100L) / 4095L, 0, 100);
-}
 
 void sendLiveTelemetry() {
   if (!deviceConnected || !clientReady)
@@ -1286,7 +2125,7 @@ void sendLiveTelemetry() {
   telemetry["motion"]["sudden"] = detectSuddenMotion();
   telemetry["pit"]["detected"] = false;
   telemetry["timestamp"] = millis();
-  
+
   telemetry["touch"]["event"] = consumeTouchEvent();
 
   sendJson(telemetry);
@@ -1342,27 +2181,26 @@ void motorsEnable() { digitalWrite(PIN_STBY, HIGH); }
 void handleMove(const char *direction, int speed) {
   speed = constrain(speed, 0, 255);
 
-  if (strcmp(direction, "forward") == 0 ||
-      strcmp(direction, "front") == 0) {
+  if (strcmp(direction, "forward") == 0 || strcmp(direction, "front") == 0) {
     motorsEnable();
-    driveMotorA(speed, true);   // right wheel forward
-    driveMotorB(speed, true);   // left wheel forward
+    driveMotorA(speed, true); // right wheel forward
+    driveMotorB(speed, true); // left wheel forward
 
   } else if (strcmp(direction, "backward") == 0 ||
              strcmp(direction, "back") == 0) {
     motorsEnable();
-    driveMotorA(speed, false);  // right wheel backward
-    driveMotorB(speed, false);  // left wheel backward
+    driveMotorA(speed, false); // right wheel backward
+    driveMotorB(speed, false); // left wheel backward
 
   } else if (strcmp(direction, "right") == 0) {
     motorsEnable();
-    driveMotorA(0, true);       // right wheel idle
-    driveMotorB(speed, true);   // left wheel forward
+    driveMotorA(0, true);     // right wheel idle
+    driveMotorB(speed, true); // left wheel forward
 
   } else if (strcmp(direction, "left") == 0) {
     motorsEnable();
-    driveMotorA(speed, true);   // right wheel forward
-    driveMotorB(0, true);       // left wheel idle
+    driveMotorA(speed, true); // right wheel forward
+    driveMotorB(0, true);     // left wheel idle
 
   } else {
     Serial.print("Unknown movement direction: ");
@@ -1566,8 +2404,8 @@ void setup() {
   delay(1000);
 
   Serial.println();
-  Serial.println("Starting Elxie-CQ firmware...");
-  Serial.println("Colour Quest game engine enabled.");
+  Serial.println("Starting ELXIE merged firmware...");
+  Serial.println("BLE + Colour Quest, and ESP-NOW Pet/RC mode.");
 
   motorsInit();
   sonarInit();
@@ -1593,6 +2431,33 @@ void setup() {
   oledInit();
 
   randomSeed(esp_random());
+
+  // ========================================
+  // ESP-NOW / REMOTE
+  // ========================================
+
+  WiFi.mode(WIFI_STA);
+  delay(200);
+  Serial.print("My MAC (for pairing the remote): ");
+  Serial.println(WiFi.macAddress());
+
+  if (esp_now_init() != ESP_OK) {
+    Serial.println("ESP-NOW init FAILED — rebooting in 2s");
+    delay(2000);
+    ESP.restart();
+  }
+  esp_now_register_recv_cb(onEspNowRecv);
+
+  esp_now_peer_info_t peer = {};
+  memcpy(peer.peer_addr, REMOTE_MAC, 6);
+  peer.channel = 0;
+  peer.encrypt = false;
+  if (esp_now_add_peer(&peer) != ESP_OK)
+    Serial.println("add_peer failed (feedback to remote may not send)");
+
+  lastActivityMs = millis();
+  espNowScheduleNextPetAsk();
+  applyEspNowStripState();
 
   // ========================================
   // BLE / NUS
@@ -1641,10 +2506,13 @@ void setup() {
   Serial.println("NUS RX:      6E400002-B5A3-F393-E0A9-E50E24DCCA9E");
   Serial.println("NUS TX:      6E400003-B5A3-F393-E0A9-E50E24DCCA9E");
 
-  challengeShowIdle();
-  tone(PIN_BUZZER, 1600, 80);
+  batteryPercent = readBatteryPercentage();
+  batteryLow = (batteryPercent <= BATT_WARN_PCT);
 
-  Serial.println("Waiting for Web App...");
+  challengeShowIdle();
+  playTone(1600, 80);
+
+  Serial.println("Waiting for Web App (BLE) or remote (ESP-NOW)...");
 }
 
 // ========================================
@@ -1674,7 +2542,7 @@ void loop() {
     // No answer during the full 10-second task window counts as a failed task.
     challengeAnswerCorrect = false;
     challengeStopOutputs();
-    tone(PIN_BUZZER, 500, 250);
+    playTone(500, 250);
     setStripColor(80, 0, 0);
     challengeShowFeedback(false);
 
@@ -1724,12 +2592,41 @@ void loop() {
     // Keep existing telemetry functionality.
     sendLiveTelemetry();
   }
-  
+
   updateTouchState();
 
-  // OLED is locally owned: show the happy face whenever no game is active.
+  // OLED is locally owned: show the happy face whenever no game is active,
+  // regardless of whether BLE or ESP-NOW currently has control.
   if (gameState == GS_IDLE)
     updateIdleDisplay();
+
+  // Low-battery watch runs regardless of who has control.
+  serviceBattery();
+
+  // ---- Control arbitration ----
+  // ESP-NOW packets keep arriving in the background (onEspNowRecv) either
+  // way, so the link timer stays warm; they're just not acted on for
+  // driving/mode purposes while BLE is connected.
+  if (!deviceConnected) {
+    runEspNowControl();
+  } else {
+    // When BLE is connected, still allow the petting reaction if touched
+    bool touch = (digitalRead(PIN_TOUCH) == HIGH);
+    static bool prevBleTouch = false;
+    static unsigned long bleTouchSince = 0;
+    
+    if (touch && !prevBleTouch) bleTouchSince = millis();
+    prevBleTouch = touch;
+    
+    // Trigger petting if touched for PET_HOLD_MS (150ms) and no game is active
+    if (!petting && touch && gameState == GS_IDLE && (millis() - bleTouchSince >= 150)) {
+        espNowStartPetting();
+    }
+    
+    if (petting) {
+        espNowServicePetting();
+    }
+  }
 
   delay(5);
 }
