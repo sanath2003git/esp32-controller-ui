@@ -25,7 +25,7 @@ import {
 type BleStatus = "disconnected" | "connecting" | "connected";
 
 const TRUST_DECAY_INTERVAL_MS = 30000; // 30 seconds
-const TRUST_DECAY_AMOUNT = -3; // 3 percent
+const TRUST_DECAY_AMOUNT = -1; // 1 percent
 
 type BleContextValue = {
   status: BleStatus;
@@ -67,7 +67,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
       const now = Date.now();
       const timeSinceLastTouch = now - lastHoldTimeRef.current;
       const timeSinceLastDecay = now - lastDecayTimeRef.current;
-      
+
       // If it's been at least 30s since last touch, AND at least 30s since last decay
       if (timeSinceLastTouch >= TRUST_DECAY_INTERVAL_MS && timeSinceLastDecay >= TRUST_DECAY_INTERVAL_MS) {
         lastDecayTimeRef.current = now;
