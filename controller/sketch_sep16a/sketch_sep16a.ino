@@ -1215,6 +1215,21 @@ void handleCommandLine(const String &line) {
   if (strcmp(command, "ping") == 0) {
     sendResponse("ping", true, "Pong from ELXIE");
   }
+  else if (strcmp(command, "led") == 0) {
+    const char* hex = doc["color"] | "#000000";
+    if (hex[0] == '#') hex++;
+    long rgb = strtol(hex, NULL, 16);
+    int r = (rgb >> 16) & 0xFF;
+    int g = (rgb >> 8) & 0xFF;
+    int b = rgb & 0xFF;
+    
+    lastBleColorR = r;
+    lastBleColorG = g;
+    lastBleColorB = b;
+
+    setStripColor(r, g, b);
+    sendResponse("led", true);
+  }
 
   else if (strcmp(command, "move") == 0) {
     const char *direction = doc["direction"];

@@ -11,8 +11,9 @@ export default function TrainingPage() {
   const modeMeta = getModeMeta(params.mode);
   const title = modeMeta?.title ?? "Training";
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
+  const isReflexDash = params.mode === "reflex-dash";
 
-  if (!isColourQuest) {
+  if (!isColourQuest && !isReflexDash) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -49,8 +50,7 @@ export default function TrainingPage() {
         </div>
       </main>
     );
-  }
-  else {
+  } else if (isColourQuest) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -134,6 +134,103 @@ export default function TrainingPage() {
                     <h4 className="text-sm font-bold text-white">4. Score & Unlock Levels</h4>
                     <p className="mt-0.5 text-xs leading-5 text-white/50">
                       Complete all 10 tasks in a level. Earn 3 stars (90%+ accuracy) to unlock the next challenge level!
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </main>
+    );
+  }
+  else if (isReflexDash) {
+    return (
+      <main className="min-h-screen">
+        <SubPageHeader
+          title={`${title} \u00b7 Training`}
+          subtitle="Game Rules & Guide"
+          backHref={`/playground/${params.mode}`}
+        />
+
+        <div className="mx-auto min-h-screen max-w-md px-4 pb-10 pt-24">
+          <section>
+            <p className="text-sm font-medium text-accent">Training</p>
+
+            <h2 className="mt-2 text-3xl font-black tracking-tight">
+              How to play?
+            </h2>
+
+            <p className="mt-2 text-sm leading-6 text-white/50">
+              Learn the rules and gameplay mechanics of Reflex Dash before starting your challenge!
+            </p>
+          </section>
+
+          <section className="mt-8 space-y-4">
+            <div className="rounded-3xl border border-border bg-surface p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
+              <div className="flex items-center gap-2 text-warning">
+                <Sparkles size={18} />
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-warning">
+                  Gameplay Overview
+                </p>
+              </div>
+
+              <h3 className="mt-2 text-xl font-bold text-white">
+                Reflex Dash Mechanics
+              </h3>
+
+              <p className="mt-2 text-sm leading-6 text-white/60">
+                Reflex Dash tests your reaction time and cognitive processing across 3 levels (Easy, Medium, Hard).
+              </p>
+
+              <div className="mt-5 space-y-4">
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                    <Palette size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">1. Watch the Colors</h4>
+                    <p className="mt-0.5 text-xs leading-5 text-white/50">
+                      The screen will show different colors.
+                      <br/>- Easy: Green (Go), Red (Stop)
+                      <br/>- Medium: 2 Go Colors, 2 Stop Colors
+                      <br/>- Hard: 3 Go Colors, 3 Stop Colors
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/10 text-accent">
+                    <Sparkles size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">2. GO Action</h4>
+                    <p className="mt-0.5 text-xs leading-5 text-white/50">
+                      When a GO color appears, immediately press the GO button (or drive the robot). Do it as fast as you can to score points!
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-400">
+                    <HelpCircle size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">3. STOP Action</h4>
+                    <p className="mt-0.5 text-xs leading-5 text-white/50">
+                      When a STOP color appears, do NOT press anything! Pressing during a STOP phase results in a penalty.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
+                    <Trophy size={18} />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white">4. Score & Timing</h4>
+                    <p className="mt-0.5 text-xs leading-5 text-white/50">
+                      Each level lasts a fixed duration (15s, 20s, or 25s). Rack up points by reacting quickly to GO phases.
                     </p>
                   </div>
                 </div>

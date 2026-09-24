@@ -7,6 +7,8 @@ import ControlPanel from "@/components/ControlPanel";
 import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
+import ReflexDashGame from "@/components/ReflexDashGame";
+import { getReflexDashLevel } from "@/lib/reflexDash";
 import {
   calculateStars,
   createColorQuestRegionCommand,
@@ -45,9 +47,14 @@ export default function ChallengeLevelPage() {
   const { status, send, lastMessage, openModal } = useBleContext();
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
+  const isReflexDash = params.mode === "reflex-dash";
   const modeMeta = getModeMeta(params.mode);
   const levelId = Number(params.level);
-  const levelMeta = getColourQuestLevel(levelId);
+  const levelMeta = isColourQuest ? getColourQuestLevel(levelId) : isReflexDash ? getReflexDashLevel(levelId) : undefined;
+
+  if (isReflexDash && levelMeta) {
+    return <ReflexDashGame levelId={levelId} levelMeta={levelMeta} />;
+  }
 
   const [gameState, setGameState] = useState<ColourQuestGameState>("idle");
   const gameStateRef = useRef<ColourQuestGameState>("idle");

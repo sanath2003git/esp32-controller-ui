@@ -33,7 +33,7 @@ export default function ModeHubPage() {
     );
   }
 
-  const isImplemented = params.mode === "colour-quest" || params.mode === "color-quest";
+  const isImplemented = params.mode === "colour-quest" || params.mode === "color-quest" || params.mode === "reflex-dash";
 
   return (
     <main className="min-h-screen">

@@ -33,6 +33,8 @@ type ControlPanelProps = {
   isGameActive?: boolean;
   activeTask?: ActiveTaskInfo | null;
   onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
+  onDrive?: (dir: MovementDirection | null) => void;
+  customTelemetry?: React.ReactNode;
 };
 
 type ObstaclePosition =
@@ -129,6 +131,8 @@ export default function ControlPanel({
   isGameActive = false,
   activeTask,
   onInputDirection,
+  onDrive,
+  customTelemetry,
 }: ControlPanelProps) {
   const { status, telemetry, move, stop, send } =
     useBleContext();
@@ -148,8 +152,7 @@ export default function ControlPanel({
     useRef<MovementDirection | null>(null);
 
   const isConnected = status === "connected";
-  const isColorQuestActive =
-    (game === "color-quest" || mode === "challenge") && isGameActive;
+  const isColorQuestActive = game === "color-quest" && isGameActive;
 
   const dirToRegionMap: Record<
     "up" | "right" | "down" | "left",
@@ -223,6 +226,7 @@ export default function ControlPanel({
           });
         }
         activeMovementDirection.current = null;
+        onDrive?.(null);
       }
       return;
     }
@@ -287,11 +291,13 @@ export default function ControlPanel({
     }
 
     sendMove(nextDirection);
+    onDrive?.(nextDirection);
   };
 
   const handleJoystickRelease = () => {
     if (activeMovementDirection.current !== null) {
       activeMovementDirection.current = null;
+      onDrive?.(null);
 
       if (!isColorQuestActive) {
         void stop().catch((error: unknown) => {
@@ -399,7 +405,8 @@ export default function ControlPanel({
           </button>
         </div>
 
-      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
+      {customTelemetry ? customTelemetry : (
+        <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
         <div className="flex items-center justify-between text-xs text-white/45">
           <span className="flex items-center gap-1.5">
             <Compass
@@ -492,7 +499,8 @@ export default function ControlPanel({
               : `${telemetry.distance.front} cm`}
           </strong>
         </div>
-      </div>
+        </div>
+      )}
 
       {alertToast && (
         <div

@@ -9,6 +9,7 @@ import SubPageHeader from "@/components/SubPageHeader";
 import { getModeMeta } from "@/data/modes";
 import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
+import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -18,15 +19,17 @@ export default function ChallengesPage() {
   const title = modeMeta?.title ?? "Challenge";
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
-  const displayLevels = isColourQuest ? COLOUR_QUEST_LEVELS : defaultLevels;
+  const isReflexDash = params.mode === "reflex-dash";
+  const displayLevels = isColourQuest ? COLOUR_QUEST_LEVELS : isReflexDash ? REFLEX_DASH_LEVELS : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
 
   useEffect(() => {
-    if (!isColourQuest) return;
+    if (!isColourQuest && !isReflexDash) return;
 
     let isMounted = true;
-    fetchAndSyncProgress("color-quest")
+    const gameId = isColourQuest ? "color-quest" : "reflex-dash";
+    fetchAndSyncProgress(gameId)
       .then((data) => {
         if (isMounted && data.levels) {
           setUserProgress(data.levels);
@@ -39,9 +42,9 @@ export default function ChallengesPage() {
     return () => {
       isMounted = false;
     };
-  }, [isColourQuest]);
+  }, [isColourQuest, isReflexDash]);
 
-  if (!isColourQuest) {
+  if (!isColourQuest && !isReflexDash) {
     return (
       <main className="min-h-screen">
         <SubPageHeader

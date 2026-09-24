@@ -94,7 +94,6 @@ export default function Playground() {
             icon="reflex"
             accent="warning"
             href="/playground/reflex-dash"
-            isComingSoon={true}
           />
         </div>
       </section>
