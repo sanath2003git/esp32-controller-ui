@@ -23,7 +23,7 @@ const COLORS = {
 
 export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number, levelMeta: any }) {
   const router = useRouter();
-  const { status, send, openModal } = useBleContext();
+  const { status, send, openModal, setColor } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
   const [timeLeft, setTimeLeft] = useState(0);
@@ -71,10 +71,12 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   const sendColorToRobot = async (hex: string) => {
     if (status !== "connected") return;
     try {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      await send({ command: "color", r, g, b });
+      const cleanHex = hex.replace("#", "");
+      const r = parseInt(cleanHex.substring(0, 2), 16);
+      const g = parseInt(cleanHex.substring(2, 4), 16);
+      const b = parseInt(cleanHex.substring(4, 6), 16);
+      console.log(`[REFLEX DASH] Sending color: ${hex} (R:${r}, G:${g}, B:${b})`);
+      await setColor({ r, g, b });
     } catch (err) {
       console.warn("Failed to send color to robot", err);
     }
@@ -120,11 +122,17 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     setGameState("completed");
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     setCurrentColor(null);
     sendColorToRobot("#000000"); // turn off LED
     
-    // Normalize score between 0 and 1. Max possible score varies, let's estimate 10 as perfect.
-    const normalizedScore = Math.min(Math.max(score / 10, 0), 1);
+    // In Reflex Dash, the game lasts totalDuration (e.g., 15s).
+    // The player earns 1 point for every 500ms driving on GO, and loses 3 points for driving on STOP.
+    // If we assume a perfect player, they would drive exactly during GO phases.
+    // On average, half the time is GO (e.g., 7.5s), which is 15 ticks of 500ms = 15 points.
+    // So let's normalize the score based on an expected perfect score: (totalDuration / 1000)
+    const expectedPerfectScore = (totalDuration / 1000);
+    const normalizedScore = Math.min(Math.max(score / expectedPerfectScore, 0), 1);
     
     try {
       const result = await submitAndPersistLevelResult("reflex-dash", levelId, normalizedScore);
@@ -145,7 +153,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     } finally {
       setIsModalOpen(true);
     }
-  }, [score, levelId]);
+  }, [score, levelId, totalDuration]);
 
   useEffect(() => {
     return () => {
@@ -254,32 +262,31 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
                 isGameActive={gameState === "playing"} 
                 onDrive={(dir) => setIsDriving(dir !== null)}
                 customTelemetry={
-                  <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
-                    <div className="w-full flex justify-between text-white/80 font-bold mb-4">
-                      <span>Time: {timeLeft}s</span>
-                      <span>Score: {score}</span>
-                    </div>
-                    
+                  <div className="mt-5">
                     <div 
-                      className="w-full aspect-square rounded-3xl flex items-center justify-center mb-4 border-4 transition-colors"
+                      className="relative w-full aspect-square rounded-3xl flex items-center justify-center border-4 transition-colors shadow-2xl"
                       style={{ 
-                        backgroundColor: currentColor ? `${currentColor.hex}33` : 'transparent',
+                        backgroundColor: currentColor ? `${currentColor.hex}33` : 'rgba(255,255,255,0.05)',
                         borderColor: currentColor ? currentColor.hex : '#333'
                       }}
                     >
+                      <div className="absolute top-4 left-5 right-5 flex justify-between text-white/90 font-black tracking-widest uppercase text-sm">
+                        <span>Time: {timeLeft}s</span>
+                        <span>Score: {score}</span>
+                      </div>
                       {currentColor ? (
                         <div className="flex flex-col items-center">
-                           <span className="text-4xl font-black tracking-widest uppercase" style={{ color: currentColor.hex }}>
+                           <span className="text-5xl font-black tracking-widest uppercase" style={{ color: currentColor.hex }}>
                              {currentColor.name}
                            </span>
                            {message && (
-                             <span className="mt-2 text-sm font-bold opacity-80" style={{ color: currentColor.hex }}>
+                             <span className="mt-3 text-base font-bold opacity-80 animate-pulse" style={{ color: currentColor.hex }}>
                                {message}
                              </span>
                            )}
                         </div>
                       ) : (
-                        <span className="text-white/20 font-bold">Waiting...</span>
+                        <span className="text-white/30 font-bold tracking-widest uppercase">Ready...</span>
                       )}
                     </div>
                   </div>

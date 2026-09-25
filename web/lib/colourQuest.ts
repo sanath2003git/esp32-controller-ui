@@ -79,6 +79,9 @@ export function normalizeGameSlug(slug: string): string {
   if (lower === "colour-quest" || lower === "color-quest") {
     return "color-quest";
   }
+  if (lower === "reflex-dash") {
+    return "reflex-dash";
+  }
   return lower;
 }
 

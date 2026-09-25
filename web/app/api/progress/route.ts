@@ -8,6 +8,7 @@ import {
   normalizeGameSlug,
   normalizeStars,
 } from "@/lib/colourQuest";
+import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
 import type { LevelProgress } from "@/types/colourQuest";
 
 export async function GET(request: Request) {
@@ -52,7 +53,9 @@ export async function GET(request: Request) {
 
     // Authoritative unlock computation
     const levelsMap: Record<number, LevelProgress> = {};
-    for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+    const gameLevels = game === "reflex-dash" ? REFLEX_DASH_LEVELS : COLOUR_QUEST_LEVELS;
+    
+    for (const lvlMeta of gameLevels) {
       const lvl = lvlMeta.id;
       const existing = dbMap[lvl];
       const unlocked = isLevelUnlocked(lvl, dbMap);
@@ -67,14 +70,21 @@ export async function GET(request: Request) {
       };
     }
 
-    const progressInfo = calculateGameProgress(levelsMap);
+    const totalLevels = gameLevels.length;
+    let completedLevels = 0;
+    for (let i = 1; i <= totalLevels; i++) {
+      if (levelsMap[i] && levelsMap[i].stars > 0) {
+        completedLevels++;
+      }
+    }
+    const progressPercentage = Math.round((completedLevels / totalLevels) * 100);
 
     return NextResponse.json({
       success: true,
       game,
-      completedLevels: progressInfo.completedLevels,
-      totalLevels: progressInfo.totalLevels,
-      progressPercentage: progressInfo.progressPercentage,
+      completedLevels,
+      totalLevels,
+      progressPercentage,
       levels: levelsMap,
     });
   } catch (error) {

@@ -16,16 +16,16 @@ The primary goal is for the user to react as quickly as possible to visual cues 
 | Mode | Reflex Dash |
 | Theme | Reaction Time / Cognitive Color Mapping |
 | Input Method | Joystick (Driving) |
-| Feedback | LED strip (Full strip flashes), OLED face, Buzzer |
+| Feedback | LED strip (Full strip shows), OLED face, Buzzer |
 
 ---
 
 ## 2. Game Loop (General)
 
-Each level consists of a set amount of time (e.g., 30-45 seconds) or a fixed number of "phases" where colors randomly flash on the strip.
+Each level consists of a set amount of time (e.g., 30-45 seconds) or a fixed number of "phases" where colors randomly show on the strip.
 1. **Trigger:** Level starts, OLED shows a countdown (and rule mappings for harder levels).
-2. **Active Phase:** The strip flashes a **GO** color. The user must push the joystick to move. As long as a GO color is shown and the user is moving, they accumulate score.
-3. **Stop Phase:** The strip flashes a **STOP** color. The user must let go of the joystick within a specific reaction window. 
+2. **Active Phase:** The strip shows a **GO** color. The user must push the joystick to move. As long as a GO color is shown and the user is moving, they accumulate score.
+3. **Stop Phase:** The strip shows a **STOP** color. The user must let go of the joystick within a specific reaction window. 
 4. **Scoring:** 
     *   Moving during a GO color = +Points (steady accumulation).
     *   Moving during a STOP color (failing to stop in time) = -Points / Penalty buzz.
@@ -53,7 +53,7 @@ Each level consists of a set amount of time (e.g., 30-45 seconds) or a fixed num
 *   **Mechanic (Levels 7–8):** Introduction of the expanded color rules (the "Easy version" of multi-color mapping). The game uses 4 colors with a fixed mapping:
     *   **GO Colors:** Green and Blue
     *   **STOP Colors:** Red and Yellow
-    *   The strip flashes these 4 colors randomly. The user must instantly remember whether the color shown belongs to the GO or STOP group.
+    *   The strip shows these 4 colors randomly. The user must instantly remember whether the color shown belongs to the GO or STOP group.
 
 ---
 
@@ -65,7 +65,7 @@ Each level consists of a set amount of time (e.g., 30-45 seconds) or a fixed num
     *   3 random colors will be assigned as **GO**.
     *   3 random colors will be assigned as **STOP**.
     *   The user must memorize this specific mapping before the level starts. 
-*   **Level 9:** The dynamic mapping is introduced. The flashes are fast, requiring the user to process the color and recall the mapping under time pressure.
+*   **Level 9:** The dynamic mapping is introduced. The shows are fast, requiring the user to process the color and recall the mapping under time pressure.
 *   **Level 10:** The ultimate challenge. The dynamic mapping applies, and the flash phases are extremely short and chaotic. The reaction window to stop is punishingly small (e.g., 300ms).
 
 ---

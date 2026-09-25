@@ -495,6 +495,25 @@ volatile bool havePendingLine = false;
 // COLOUR QUEST GAME ENGINE
 // ========================================
 
+enum ActiveGame {
+  GAME_NONE,
+  GAME_COLOR_QUEST,
+  GAME_REFLEX_DASH
+};
+ActiveGame currentGame = GAME_NONE;
+bool isMoving = false;
+
+enum ReflexDashState { RDS_IDLE, RDS_ACTIVE_GO, RDS_ACTIVE_STOP, RDS_FEEDBACK };
+ReflexDashState reflexDashState = RDS_IDLE;
+int rdLevel = 0;
+int rdPhaseCount = 0;
+int rdMaxPhases = 10;
+unsigned long rdPhaseEnd = 0;
+unsigned long rdReactionWindowEnd = 0;
+bool rdPenaltyApplied = false;
+unsigned long rdScorePoints = 0;
+unsigned long rdMaxPossiblePoints = 0;
+
 enum GameState { GS_IDLE, GS_SHOWING, GS_WAIT_INPUT, GS_FEEDBACK };
 
 GameState gameState = GS_IDLE;
@@ -850,6 +869,7 @@ void challengeBeginAnswerPhase() {
 }
 
 void challengeStartLevel(int level) {
+  currentGame = GAME_COLOR_QUEST;
   if (level < COLOR_QUEST_MIN_LEVEL || level > COLOR_QUEST_MAX_LEVEL) {
     sendError("invalid color-quest level");
     return;
@@ -919,6 +939,7 @@ void challengeFinishLevel() {
 
   gameState = GS_IDLE;
   challengeLevel = 0;
+  currentGame = GAME_NONE;
   challengeShowIdle();
 }
 
@@ -927,6 +948,7 @@ void challengeAbort() {
   noTone(PIN_BUZZER);
 
   gameState = GS_IDLE;
+  currentGame = GAME_NONE;
   challengeLevel = 0;
   challengeTaskIndex = 0;
   challengeCorrectCount = 0;
@@ -937,6 +959,158 @@ void challengeAbort() {
   sendJson(response);
 
   challengeShowIdle();
+}
+
+// ========================================
+// REFLEX DASH GAME ENGINE
+// ========================================
+
+void rdStopOutputs() { 
+  setStripColor(0, 0, 0); 
+}
+
+void rdCreatePhase() {
+  unsigned long now = millis();
+  rdPenaltyApplied = false;
+  
+  // Random GO or STOP (simple 50/50 for now)
+  bool isGo = random(2) == 0;
+  
+  if (isGo) {
+    reflexDashState = RDS_ACTIVE_GO;
+    setStripColor(0, 255, 0); // Green
+    rdPhaseEnd = now + random(2000, 5000); // 2-5s GO phase
+    if (oledPresent) {
+      display.clearDisplay();
+      display.setTextColor(SSD1306_WHITE);
+      display.setTextSize(2);
+      display.setCursor(20, 20);
+      display.println("GO!");
+      drawBatteryOverlay();
+      display.display();
+    }
+  } else {
+    reflexDashState = RDS_ACTIVE_STOP;
+    setStripColor(255, 0, 0); // Red
+    rdPhaseEnd = now + random(2000, 4000); // 2-4s STOP phase
+    // Tighten reaction window based on level (1 = 1000ms, 10 = 300ms)
+    long reactionWindow = map(rdLevel, 1, 10, 1000, 300);
+    rdReactionWindowEnd = now + reactionWindow;
+    if (oledPresent) {
+      display.clearDisplay();
+      display.setTextColor(SSD1306_WHITE);
+      display.setTextSize(2);
+      display.setCursor(20, 20);
+      display.println("STOP!");
+      drawBatteryOverlay();
+      display.display();
+    }
+  }
+}
+
+void rdFinishLevel() {
+  rdStopOutputs();
+  
+  float score = 0.0f;
+  if (rdMaxPossiblePoints > 0) {
+    score = (float)rdScorePoints / (float)rdMaxPossiblePoints;
+  }
+  
+  JsonDocument result;
+  result["type"] = "response";
+  result["game"] = "reflex-dash";
+  result["level"] = rdLevel;
+  result["score"] = score;
+  sendJson(result);
+
+  playTone(score >= 0.7f ? 2400 : 900, 150);
+
+  if (oledPresent) {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.printf("RD L%d COMPLETE", rdLevel);
+    display.setTextSize(2);
+    display.setCursor(10, 18);
+    display.printf("Score:%d%%", (int)(score * 100));
+    drawBatteryOverlay();
+    display.display();
+  }
+
+  reflexDashState = RDS_IDLE;
+  currentGame = GAME_NONE;
+  rdLevel = 0;
+  challengeShowIdle();
+}
+
+void rdAbort() {
+  rdStopOutputs();
+  noTone(PIN_BUZZER);
+  
+  reflexDashState = RDS_IDLE;
+  currentGame = GAME_NONE;
+  rdLevel = 0;
+
+  JsonDocument response;
+  response["type"] = "aborted";
+  response["game"] = "reflex-dash";
+  sendJson(response);
+
+  challengeShowIdle();
+}
+
+void rdStartLevel(int level) {
+  currentGame = GAME_REFLEX_DASH;
+  rdLevel = constrain(level, 1, 10);
+  rdPhaseCount = 0;
+  rdScorePoints = 0;
+  rdMaxPossiblePoints = 0;
+  rdMaxPhases = 5 + rdLevel; // Scale phases with level
+
+  Serial.printf("Starting Reflex Dash level %d\n", rdLevel);
+  playTone(1800, 80);
+  rdCreatePhase();
+}
+
+void updateReflexDash() {
+  unsigned long now = millis();
+  
+  if (reflexDashState == RDS_ACTIVE_GO) {
+    if (isMoving) {
+      rdScorePoints++;
+    }
+    rdMaxPossiblePoints++;
+    
+    if (now > rdPhaseEnd) {
+      rdPhaseCount++;
+      if (rdPhaseCount >= rdMaxPhases) {
+        rdFinishLevel();
+      } else {
+        rdCreatePhase();
+      }
+    }
+  } else if (reflexDashState == RDS_ACTIVE_STOP) {
+    if (now > rdReactionWindowEnd) { 
+      if (isMoving) {
+        if (!rdPenaltyApplied) {
+          playTone(300, 300); // harsh buzz penalty
+          setStripColor(255, 0, 0);
+          rdPenaltyApplied = true;
+        }
+        if (rdScorePoints > 5) rdScorePoints -= 5; // penalty
+      }
+    }
+    
+    if (now > rdPhaseEnd) {
+      rdPhaseCount++;
+      if (rdPhaseCount >= rdMaxPhases) {
+        rdFinishLevel();
+      } else {
+        rdCreatePhase();
+      }
+    }
+  }
 }
 
 int regionNameToDirection(const char *region) {
@@ -1186,24 +1360,30 @@ void handleCommandLine(const String &line) {
   if (strcmp(command, "challenge") == 0) {
     const char *game = doc["game"] | "";
 
-    if (strcmp(game, "color-quest") != 0) {
+    if (strcmp(game, "color-quest") == 0) {
+      int level = doc["level"] | 0;
+      challengeStartLevel(level);
+    } else if (strcmp(game, "reflex-dash") == 0) {
+      int level = doc["level"] | 0;
+      rdStartLevel(level);
+    } else {
       sendError("unsupported game");
-      return;
     }
-
-    int level = doc["level"] | 0;
-    challengeStartLevel(level);
     return;
   }
 
   if (strcmp(command, "input") == 0) {
-    handleChallengeInput(doc);
+    if (currentGame == GAME_COLOR_QUEST) {
+      handleChallengeInput(doc);
+    }
     return;
   }
 
   if (strcmp(command, "abort") == 0) {
-    if (gameState != GS_IDLE) {
+    if (currentGame == GAME_COLOR_QUEST) {
       challengeAbort();
+    } else if (currentGame == GAME_REFLEX_DASH) {
+      rdAbort();
     }
     return;
   }
@@ -2175,6 +2355,7 @@ void driveMotorB(int speed, bool forward) {
 }
 
 void motorsStop() {
+  isMoving = false;
   analogWrite(PIN_PWMA, 0);
   analogWrite(PIN_PWMB, 0);
   digitalWrite(PIN_STBY, LOW);
@@ -2195,6 +2376,7 @@ void motorsEnable() { digitalWrite(PIN_STBY, HIGH); }
 // otherwise DEFAULT_SPEED is used.
 void handleMove(const char *direction, int speed) {
   speed = constrain(speed, 0, 255);
+  isMoving = true;
 
   if (strcmp(direction, "forward") == 0 || strcmp(direction, "front") == 0) {
     motorsEnable();
@@ -2534,18 +2716,7 @@ void setup() {
 // LOOP
 // ========================================
 
-void loop() {
-  // Process complete newline-delimited JSON outside the BLE callback.
-  if (havePendingLine) {
-    noInterrupts();
-    String line = pendingLine;
-    pendingLine = "";
-    havePendingLine = false;
-    interrupts();
-
-    handleCommandLine(line);
-  }
-
+void updateColorQuest() {
   // Colour Quest is a non-blocking state machine:
   // SHOWING -> WAIT_INPUT -> FEEDBACK -> next task / finish.
   if (gameState == GS_SHOWING && (long)(millis() - challengeShowUntil) >= 0) {
@@ -2585,6 +2756,26 @@ void loop() {
     } else {
       challengeCreateTask();
     }
+  }
+}
+
+void loop() {
+  // Process complete newline-delimited JSON outside the BLE callback.
+  if (havePendingLine) {
+    noInterrupts();
+    String line = pendingLine;
+    pendingLine = "";
+    havePendingLine = false;
+    interrupts();
+
+    handleCommandLine(line);
+  }
+
+  // Game Routing
+  if (currentGame == GAME_COLOR_QUEST) {
+    updateColorQuest();
+  } else if (currentGame == GAME_REFLEX_DASH) {
+    updateReflexDash();
   }
 
   if (!deviceConnected && wasDeviceConnected) {
