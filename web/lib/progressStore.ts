@@ -7,10 +7,18 @@ import {
   mergeBestStars,
   normalizeGameSlug,
 } from "./colourQuest";
+import { REFLEX_DASH_LEVELS } from "./reflexDash";
 import type { LevelProgress, UserGameProgressResponse } from "@/types/colourQuest";
 
-const LOCAL_STORAGE_KEY = "robotoy_color_quest_progress_v1";
 const LOCAL_STORAGE_TRUST_KEY = "robotoy_trust_v1";
+
+function getLocalStorageKey(game: string) {
+  return `robotoy_${normalizeGameSlug(game)}_progress_v1`;
+}
+
+function getGameLevels(game: string) {
+  return normalizeGameSlug(game) === "reflex-dash" ? REFLEX_DASH_LEVELS : COLOUR_QUEST_LEVELS;
+}
 
 export function getTrustLevel(): number {
   if (typeof window === "undefined") return 50;
@@ -38,9 +46,9 @@ export function incrementTrustLevel(amount: number): void {
   }
 }
 
-export function getInitialProgressMap(): Record<number, LevelProgress> {
+export function getInitialProgressMap(game: string): Record<number, LevelProgress> {
   const map: Record<number, LevelProgress> = {};
-  for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+  for (const lvlMeta of getGameLevels(game)) {
     const lvl = lvlMeta.id;
     map[lvl] = {
       level: lvl,
@@ -53,19 +61,19 @@ export function getInitialProgressMap(): Record<number, LevelProgress> {
   return map;
 }
 
-export function readLocalProgress(): Record<number, LevelProgress> {
+export function readLocalProgress(game: string): Record<number, LevelProgress> {
   if (typeof window === "undefined") {
-    return getInitialProgressMap();
+    return getInitialProgressMap(game);
   }
 
   try {
-    const raw = localStorage.getItem(LOCAL_STORAGE_KEY);
-    if (!raw) return getInitialProgressMap();
+    const raw = localStorage.getItem(getLocalStorageKey(game));
+    if (!raw) return getInitialProgressMap(game);
 
     const parsed: Record<number, LevelProgress> = JSON.parse(raw);
     const result: Record<number, LevelProgress> = {};
 
-    for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+    for (const lvlMeta of getGameLevels(game)) {
       const lvl = lvlMeta.id;
       const rec = parsed[lvl];
       result[lvl] = {
@@ -80,15 +88,15 @@ export function readLocalProgress(): Record<number, LevelProgress> {
     return result;
   } catch (err) {
     console.warn("[PROGRESS STORE] LocalStorage read failed:", err);
-    return getInitialProgressMap();
+    return getInitialProgressMap(game);
   }
 }
 
-export function writeLocalProgress(map: Record<number, LevelProgress>): void {
+export function writeLocalProgress(game: string, map: Record<number, LevelProgress>): void {
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(map));
+    localStorage.setItem(getLocalStorageKey(game), JSON.stringify(map));
   } catch (err) {
     console.warn("[PROGRESS STORE] LocalStorage write failed:", err);
   }
@@ -98,7 +106,7 @@ export async function fetchAndSyncProgress(
   game = "color-quest"
 ): Promise<UserGameProgressResponse> {
   const normGame = normalizeGameSlug(game);
-  const localMap = readLocalProgress();
+  const localMap = readLocalProgress(normGame);
 
   try {
     const res = await fetch(`/api/progress?game=${normGame}`);
@@ -107,8 +115,9 @@ export async function fetchAndSyncProgress(
       if (data.success && data.levels) {
         // Merge DB levels with local progress (take maximum stars/scores)
         const mergedMap: Record<number, LevelProgress> = {};
+        const gameLevels = getGameLevels(normGame);
 
-        for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+        for (const lvlMeta of gameLevels) {
           const lvl = lvlMeta.id;
           const remoteRec = data.levels[lvl];
           const localRec = localMap[lvl];
@@ -128,12 +137,12 @@ export async function fetchAndSyncProgress(
         }
 
         // Re-evaluate unlock status for all levels
-        for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+        for (const lvlMeta of gameLevels) {
           const lvl = lvlMeta.id;
           mergedMap[lvl].unlocked = isLevelUnlocked(lvl, mergedMap);
         }
 
-        writeLocalProgress(mergedMap);
+        writeLocalProgress(normGame, mergedMap);
         const progressInfo = calculateGameProgress(mergedMap);
 
         return {
@@ -178,7 +187,7 @@ export async function submitAndPersistLevelResult(
   const awardedStars = calculateStars(score);
 
   // 1. Update local storage immediately for fast UI feedback
-  const localMap = readLocalProgress();
+  const localMap = readLocalProgress(normGame);
   const currentLocal = localMap[level] || {
     level,
     bestScore: 0,
@@ -200,7 +209,7 @@ export async function submitAndPersistLevelResult(
   };
 
   // Re-calculate unlocked state for all levels
-  for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+  for (const lvlMeta of getGameLevels(normGame)) {
     const lvl = lvlMeta.id;
     localMap[lvl] = {
       ...(localMap[lvl] || {
@@ -213,7 +222,7 @@ export async function submitAndPersistLevelResult(
     };
   }
 
-  writeLocalProgress(localMap);
+  writeLocalProgress(normGame, localMap);
   const isNextUnlocked = isLevelUnlocked(level + 1, localMap);
   const progressInfo = calculateGameProgress(localMap);
   

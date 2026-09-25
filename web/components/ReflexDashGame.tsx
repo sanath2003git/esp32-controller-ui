@@ -7,8 +7,7 @@ import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { submitAndPersistLevelResult } from "@/lib/progressStore";
 import { calculateStars } from "@/lib/colourQuest";
-import { Play, AlertCircle, Gamepad2 } from "lucide-react";
-import ControlPanel from "@/components/ControlPanel";
+import { Play, AlertCircle, Gamepad2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
 
 type Color = { name: string; hex: string; action: "GO" | "STOP" };
 
@@ -23,7 +22,7 @@ const COLORS = {
 
 export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number, levelMeta: any }) {
   const router = useRouter();
-  const { status, send, openModal, setColor } = useBleContext();
+  const { status, send, openModal, setColor, move, stop } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
   const [timeLeft, setTimeLeft] = useState(0);
@@ -82,6 +81,15 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     }
   };
 
+  const handleDrive = (dir: "forward" | "backward" | "left" | "right" | null) => {
+    setIsDriving(dir !== null);
+    if (dir === null) {
+      stop();
+    } else {
+      move(dir);
+    }
+  };
+
   const nextPhase = useCallback(() => {
     if (gameState !== "playing") return;
     const randomColor = colors.current[Math.floor(Math.random() * colors.current.length)];
@@ -96,10 +104,10 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, [gameState, status, send]);
 
   const startGame = () => {
-    if (status !== "connected") {
-      openModal();
-      return;
-    }
+    // if (status !== "connected") {
+    //   openModal();
+    //   return;
+    // }
     setGameState("playing");
     setScore(0);
     setTimeLeft(totalDuration / 1000);
@@ -153,7 +161,20 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     } finally {
       setIsModalOpen(true);
     }
-  }, [score, levelId, totalDuration]);
+  }, [score, levelId, totalDuration, status, send]);
+
+  const abortGame = useCallback(() => {
+    setGameState("idle");
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
+    setCurrentColor(null);
+    sendColorToRobot("#000000"); // turn off LED
+    if (status === "connected") {
+      send({ type: "command", command: "abort" });
+    }
+    router.push(`/playground/reflex-dash/challenges`);
+  }, [router, send, status]);
 
   useEffect(() => {
     return () => {
@@ -254,48 +275,117 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         )}
 
         {gameState === "playing" && (
-          <div className="flex flex-col items-center mt-4">
-            <div className="w-full">
-              <ControlPanel 
-                mode="challenge" 
-                game="reflex-dash" 
-                isGameActive={gameState === "playing"} 
-                onDrive={(dir) => setIsDriving(dir !== null)}
-                customTelemetry={
-                  <div className="mt-5">
-                    <div 
-                      className="relative w-full aspect-square rounded-3xl flex items-center justify-center border-4 transition-colors shadow-2xl"
-                      style={{ 
-                        backgroundColor: currentColor ? `${currentColor.hex}33` : 'rgba(255,255,255,0.05)',
-                        borderColor: currentColor ? currentColor.hex : '#333'
-                      }}
-                    >
-                      <div className="absolute top-4 left-5 right-5 flex justify-between text-white/90 font-black tracking-widest uppercase text-sm">
-                        <span>Time: {timeLeft}s</span>
-                        <span>Score: {score}</span>
-                      </div>
-                      {currentColor ? (
-                        <div className="flex flex-col items-center">
-                           <span className="text-5xl font-black tracking-widest uppercase" style={{ color: currentColor.hex }}>
-                             {currentColor.name}
-                           </span>
-                           {message && (
-                             <span className="mt-3 text-base font-bold opacity-80 animate-pulse" style={{ color: currentColor.hex }}>
-                               {message}
-                             </span>
-                           )}
-                        </div>
-                      ) : (
-                        <span className="text-white/30 font-bold tracking-widest uppercase">Ready...</span>
-                      )}
-                    </div>
-                  </div>
-                }
-              />
+          <div 
+            className="fixed inset-0 z-50 bg-[#0a0f16] flex flex-row items-center justify-between p-6 sm:p-10 overflow-hidden touch-none text-white select-none"
+          >
+            {/* Subtle Tech Grid Background */}
+            <div className="absolute inset-0 pointer-events-none opacity-20" 
+                 style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
+
+            {/* Left controls: Circular Up/Down Pad */}
+            <div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-full border-4 border-white/10 bg-white/5 flex flex-col overflow-hidden shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.05)] backdrop-blur-md">
+              <button 
+                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
+                 onPointerDown={() => handleDrive("forward")} 
+                 onPointerUp={() => handleDrive(null)}
+                 onPointerLeave={() => handleDrive(null)}
+                 onContextMenu={(e) => e.preventDefault()}
+              >
+                <ArrowUp size={48} className="text-white/50 pointer-events-none" />
+              </button>
+              
+              {/* Center Divider / Crosshair detail */}
+              <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-white/10 -translate-y-1/2 pointer-events-none" />
+              <div className="absolute top-1/2 left-1/2 w-8 h-8 rounded-full border-2 border-white/20 -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-[#0a0f16]" />
+
+              <button 
+                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
+                 onPointerDown={() => handleDrive("backward")} 
+                 onPointerUp={() => handleDrive(null)}
+                 onPointerLeave={() => handleDrive(null)}
+                 onContextMenu={(e) => e.preventDefault()}
+              >
+                <ArrowDown size={48} className="text-white/50 pointer-events-none" />
+              </button>
             </div>
-            <p className="mt-4 text-xs text-white/50 text-center">
-              Drive the robot when a GO color appears.<br/>Stop immediately if a STOP color appears.
-            </p>
+
+            {/* Middle: Timer, Score, Current Color, Exit button */}
+            <div className="flex flex-col items-center justify-center flex-1 mx-4 sm:mx-10 relative h-full">
+              {/* HUD Header */}
+              <div className="absolute top-0 flex items-center justify-between w-full max-w-sm text-white/50 font-black tracking-[0.2em] uppercase text-[10px] sm:text-xs">
+                 <div className="flex flex-col items-center">
+                   <span className="opacity-50">Time</span>
+                   <span className="text-white text-lg sm:text-xl">{timeLeft}s</span>
+                 </div>
+                 <div className="flex flex-col items-center">
+                   <span className="opacity-50">Score</span>
+                   <span className="text-white text-lg sm:text-xl">{score}</span>
+                 </div>
+              </div>
+
+              <div 
+                className="w-full max-w-[280px] sm:max-w-xs aspect-video rounded-[2rem] flex flex-col items-center justify-center border-2 sm:border-4 transition-colors shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden mt-6"
+                style={{ 
+                  backgroundColor: currentColor ? `${currentColor.hex}15` : 'rgba(255,255,255,0.02)',
+                  borderColor: currentColor ? currentColor.hex : 'rgba(255,255,255,0.1)'
+                }}
+              >
+                {/* Internal HUD corners */}
+                <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
+                <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
+                <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
+                <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
+
+                {currentColor ? (
+                  <div className="flex flex-col items-center">
+                     <span className="text-4xl sm:text-5xl font-black tracking-widest uppercase drop-shadow-lg" style={{ color: currentColor.hex, textShadow: `0 0 20px ${currentColor.hex}` }}>
+                       {currentColor.name}
+                     </span>
+                     {message && (
+                       <span className="mt-3 text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-90 animate-pulse bg-black/40 px-3 py-1 rounded-full" style={{ color: currentColor.hex }}>
+                         {message}
+                       </span>
+                     )}
+                  </div>
+                ) : (
+                  <span className="text-white/30 font-bold tracking-[0.2em] uppercase text-sm">Awaiting Signal</span>
+                )}
+              </div>
+
+              <button 
+                onClick={abortGame} 
+                className="absolute bottom-0 text-white/30 text-[10px] sm:text-xs uppercase tracking-widest font-bold hover:text-white/80 transition-colors border border-white/10 px-4 py-2 rounded-full bg-white/5 active:bg-white/20"
+              >
+                Abort Challenge
+              </button>
+            </div>
+
+            {/* Right controls: Circular Left/Right Pad */}
+            <div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-full border-4 border-white/10 bg-white/5 flex flex-row overflow-hidden shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.05)] backdrop-blur-md">
+              <button 
+                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
+                 onPointerDown={() => handleDrive("left")} 
+                 onPointerUp={() => handleDrive(null)}
+                 onPointerLeave={() => handleDrive(null)}
+                 onContextMenu={(e) => e.preventDefault()}
+              >
+                <ArrowLeft size={48} className="text-white/50 pointer-events-none" />
+              </button>
+              
+              {/* Center Divider / Crosshair detail */}
+              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-white/10 -translate-x-1/2 pointer-events-none" />
+              <div className="absolute top-1/2 left-1/2 w-8 h-8 rounded-full border-2 border-white/20 -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-[#0a0f16]" />
+
+              <button 
+                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
+                 onPointerDown={() => handleDrive("right")} 
+                 onPointerUp={() => handleDrive(null)}
+                 onPointerLeave={() => handleDrive(null)}
+                 onContextMenu={(e) => e.preventDefault()}
+              >
+                <ArrowRight size={48} className="text-white/50 pointer-events-none" />
+              </button>
+            </div>
           </div>
         )}
       </div>
