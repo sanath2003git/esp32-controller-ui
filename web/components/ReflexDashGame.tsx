@@ -22,7 +22,7 @@ const COLORS = {
 
 export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number, levelMeta: any }) {
   const router = useRouter();
-  const { status, send, openModal, setColor, move, stop } = useBleContext();
+  const { status, send, openModal, setColor, move, stop, lastMessage } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
   const [timeLeft, setTimeLeft] = useState(0);
@@ -74,8 +74,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
       const r = parseInt(cleanHex.substring(0, 2), 16);
       const g = parseInt(cleanHex.substring(2, 4), 16);
       const b = parseInt(cleanHex.substring(4, 6), 16);
-      console.log(`[REFLEX DASH] Sending color: ${hex} (R:${r}, G:${g}, B:${b})`);
-      await setColor({ r, g, b });
+      await send({ command: "color", r, g, b });
     } catch (err) {
       console.warn("Failed to send color to robot", err);
     }
@@ -91,77 +90,72 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   };
 
   const nextPhase = useCallback(() => {
-    if (gameState !== "playing") return;
+    if (gameState !== "playing" || status === "connected") return;
     const randomColor = colors.current[Math.floor(Math.random() * colors.current.length)];
     setCurrentColor(randomColor);
     sendColorToRobot(randomColor.hex);
     reactionStartRef.current = Date.now();
     setMessage(null);
 
-    // Random duration for each phase (1s to 2.5s)
     const phaseDuration = 1000 + Math.random() * 1500;
     phaseTimerRef.current = setTimeout(nextPhase, phaseDuration);
-  }, [gameState, status, send]);
+  }, [gameState, status]);
 
-  const startGame = () => {
-    // if (status !== "connected") {
-    //   openModal();
-    //   return;
-    // }
-    setGameState("playing");
-    setScore(0);
-    setTimeLeft(totalDuration / 1000);
-    
-    // Start game timer
-    gameTimerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          endGame();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    nextPhase();
-  };
-
-  const endGame = useCallback(async () => {
+  const handleLevelComplete = useCallback(async (finalScore: number) => {
     setGameState("completed");
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
     if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     setCurrentColor(null);
     sendColorToRobot("#000000"); // turn off LED
-    
-    // In Reflex Dash, the game lasts totalDuration (e.g., 15s).
-    // The player earns 1 point for every 500ms driving on GO, and loses 3 points for driving on STOP.
-    // If we assume a perfect player, they would drive exactly during GO phases.
-    // On average, half the time is GO (e.g., 7.5s), which is 15 ticks of 500ms = 15 points.
-    // So let's normalize the score based on an expected perfect score: (totalDuration / 1000)
-    const expectedPerfectScore = (totalDuration / 1000);
-    const normalizedScore = Math.min(Math.max(score / expectedPerfectScore, 0), 1);
+    stop();
     
     try {
-      const result = await submitAndPersistLevelResult("reflex-dash", levelId, normalizedScore);
+      const result = await submitAndPersistLevelResult("reflex-dash", levelId, finalScore);
       setCurrentResult({
-        score: normalizedScore,
+        score: finalScore,
         stars: result.awardedStars,
         bestScore: result.bestScore,
         isNextUnlocked: result.isNextUnlocked,
       });
     } catch (err) {
-      const localStars = calculateStars(normalizedScore);
+      const localStars = calculateStars(finalScore);
       setCurrentResult({
-        score: normalizedScore,
+        score: finalScore,
         stars: localStars,
-        bestScore: normalizedScore,
+        bestScore: finalScore,
         isNextUnlocked: localStars === 3,
       });
     } finally {
       setIsModalOpen(true);
     }
-  }, [score, levelId, totalDuration, status, send]);
+  }, [levelId]);
+
+  const startGame = () => {
+    setGameState("playing");
+    setScore(0);
+    setTimeLeft(totalDuration / 1000);
+    
+    // Start game timer just for visual countdown
+    gameTimerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1 && status !== "connected") {
+          // Only auto-end offline. If connected, wait for robot 'response'.
+          const expectedPerfectScore = (totalDuration / 1000);
+          const normalizedScore = Math.min(Math.max(score / expectedPerfectScore, 0), 1);
+          handleLevelComplete(normalizedScore);
+          return 0;
+        }
+        return Math.max(0, prev - 1);
+      });
+    }, 1000);
+
+    if (status === "connected") {
+      send({ command: "challenge", game: "reflex-dash", level: levelId });
+    } else {
+      nextPhase(); // Start offline mock loop
+    }
+  };
 
   const abortGame = useCallback(() => {
     setGameState("idle");
@@ -170,11 +164,32 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     setCurrentColor(null);
     sendColorToRobot("#000000"); // turn off LED
+    stop();
     if (status === "connected") {
-      send({ type: "command", command: "abort" });
+      send({ command: "abort" } as any);
     }
     router.push(`/playground/reflex-dash/challenges`);
   }, [router, send, status]);
+
+  useEffect(() => {
+    if (gameState !== "playing" || !lastMessage) return;
+    
+    const msg = lastMessage as any;
+    if (msg.game === "reflex-dash") {
+      if (msg.type === "event" && msg.event === "phase_start") {
+        setCurrentColor({
+          name: msg.colorName,
+          hex: msg.hex,
+          action: msg.isGo ? "GO" : "STOP",
+        });
+        setScore(Math.floor((msg.score || 0) * 100));
+      } else if (msg.type === "response") {
+        handleLevelComplete(msg.score);
+      } else if (msg.type === "aborted") {
+        abortGame();
+      }
+    }
+  }, [lastMessage, gameState, handleLevelComplete, abortGame]);
 
   useEffect(() => {
     return () => {
@@ -185,7 +200,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, []);
 
   useEffect(() => {
-    if (gameState !== "playing") return;
+    if (gameState !== "playing") return; // Allow visual scoring to run while connected so UI is responsive
 
     if (drivingScoreTimerRef.current) {
       clearInterval(drivingScoreTimerRef.current);
@@ -213,34 +228,8 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     return () => {
       if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     };
-  }, [isDriving, currentColor, gameState]);
+  }, [isDriving, currentColor, gameState, status]);
 
-  const handleAction = () => {
-    if (gameState !== "playing" || !currentColor) return;
-
-    const reactionTime = Date.now() - reactionStartRef.current;
-
-    if (currentColor.action === "GO") {
-      // Reward based on reaction time (faster = more points)
-      if (reactionTime < 500) {
-        setScore(s => s + 2);
-        setMessage("Perfect!");
-      } else if (reactionTime < 1000) {
-        setScore(s => s + 1);
-        setMessage("Good!");
-      } else {
-        setMessage("Too slow!");
-      }
-    } else {
-      // Penalty for GO on STOP
-      setScore(s => Math.max(0, s - 2));
-      setMessage("Oops! That was a STOP color.");
-    }
-    
-    // Immediately start next phase
-    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-    nextPhase();
-  };
 
   return (
     <main className="min-h-screen pb-16">

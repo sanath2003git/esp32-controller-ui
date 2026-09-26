@@ -5,6 +5,7 @@ export type LevelMeta = {
   title: string;
   description: string;
   difficulty: LevelDifficulty;
+  concept?: string;
   timing?: string;
 };
 

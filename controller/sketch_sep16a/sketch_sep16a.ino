@@ -133,6 +133,13 @@ enum WanderState { WS_CRUISE, WS_BACK, WS_TURN, WS_PAUSE };
 // Default motor PWM speed (0..255) for BLE "move" commands.
 const int DEFAULT_SPEED = 180;
 
+// Motor speed calibration multipliers to ensure straight movement
+// If robot turns left when driving forward, right wheel (A) is too fast: lower
+// MOTOR_A_MULT If robot turns right when driving forward, left wheel (B) is too
+// fast: lower MOTOR_B_MULT
+const float MOTOR_A_MULT = 0.70; // Right wheel (Motor A) multiplier
+const float MOTOR_B_MULT = 1.0;  // Left wheel (Motor B) multiplier
+
 // Sonar (HC-SR04)
 #define PIN_TRIG 15
 #define PIN_ECHO 16
@@ -495,11 +502,7 @@ volatile bool havePendingLine = false;
 // COLOUR QUEST GAME ENGINE
 // ========================================
 
-enum ActiveGame {
-  GAME_NONE,
-  GAME_COLOR_QUEST,
-  GAME_REFLEX_DASH
-};
+enum ActiveGame { GAME_NONE, GAME_COLOR_QUEST, GAME_REFLEX_DASH };
 ActiveGame currentGame = GAME_NONE;
 bool isMoving = false;
 
@@ -511,8 +514,9 @@ int rdMaxPhases = 10;
 unsigned long rdPhaseEnd = 0;
 unsigned long rdReactionWindowEnd = 0;
 bool rdPenaltyApplied = false;
-unsigned long rdScorePoints = 0;
-unsigned long rdMaxPossiblePoints = 0;
+unsigned long rdDrivenGoTime = 0;
+unsigned long rdTotalGoTime = 0;
+unsigned long rdLastUpdateTime = 0;
 
 enum GameState { GS_IDLE, GS_SHOWING, GS_WAIT_INPUT, GS_FEEDBACK };
 
@@ -965,57 +969,151 @@ void challengeAbort() {
 // REFLEX DASH GAME ENGINE
 // ========================================
 
-void rdStopOutputs() { 
-  setStripColor(0, 0, 0); 
+void rdStopOutputs() {
+  setStripColor(0, 0, 0);
+  motorsStop();
 }
 
 void rdCreatePhase() {
   unsigned long now = millis();
   rdPenaltyApplied = false;
-  
-  // Random GO or STOP (simple 50/50 for now)
+
   bool isGo = random(2) == 0;
-  
-  if (isGo) {
-    reflexDashState = RDS_ACTIVE_GO;
-    setStripColor(0, 255, 0); // Green
-    rdPhaseEnd = now + random(2000, 5000); // 2-5s GO phase
-    if (oledPresent) {
-      display.clearDisplay();
-      display.setTextColor(SSD1306_WHITE);
-      display.setTextSize(2);
-      display.setCursor(20, 20);
-      display.println("GO!");
-      drawBatteryOverlay();
-      display.display();
+  uint8_t r = 0, g = 0, b = 0;
+  String colorName = "";
+
+  if (rdLevel == 1) {
+    if (isGo) {
+      r = 0;
+      g = 255;
+      b = 0;
+      colorName = "Green";
+    } else {
+      r = 255;
+      g = 0;
+      b = 0;
+      colorName = "Red";
+    }
+  } else if (rdLevel == 2) {
+    if (isGo) {
+      if (random(2) == 0) {
+        r = 0;
+        g = 255;
+        b = 0;
+        colorName = "Green";
+      } else {
+        r = 0;
+        g = 0;
+        b = 255;
+        colorName = "Blue";
+      }
+    } else {
+      if (random(2) == 0) {
+        r = 255;
+        g = 0;
+        b = 0;
+        colorName = "Red";
+      } else {
+        r = 255;
+        g = 255;
+        b = 0;
+        colorName = "Yellow";
+      }
     }
   } else {
-    reflexDashState = RDS_ACTIVE_STOP;
-    setStripColor(255, 0, 0); // Red
-    rdPhaseEnd = now + random(2000, 4000); // 2-4s STOP phase
-    // Tighten reaction window based on level (1 = 1000ms, 10 = 300ms)
-    long reactionWindow = map(rdLevel, 1, 10, 1000, 300);
-    rdReactionWindowEnd = now + reactionWindow;
-    if (oledPresent) {
-      display.clearDisplay();
-      display.setTextColor(SSD1306_WHITE);
-      display.setTextSize(2);
-      display.setCursor(20, 20);
-      display.println("STOP!");
-      drawBatteryOverlay();
-      display.display();
+    // Level 3+
+    if (isGo) {
+      int c = random(3);
+      if (c == 0) {
+        r = 0;
+        g = 255;
+        b = 0;
+        colorName = "Green";
+      } else if (c == 1) {
+        r = 0;
+        g = 0;
+        b = 255;
+        colorName = "Blue";
+      } else {
+        r = 0;
+        g = 255;
+        b = 255;
+        colorName = "Cyan";
+      }
+    } else {
+      int c = random(3);
+      if (c == 0) {
+        r = 255;
+        g = 0;
+        b = 0;
+        colorName = "Red";
+      } else if (c == 1) {
+        r = 255;
+        g = 255;
+        b = 0;
+        colorName = "Yellow";
+      } else {
+        r = 128;
+        g = 0;
+        b = 128;
+        colorName = "Purple";
+      }
     }
   }
+
+  setStripColor(r, g, b);
+
+  if (isGo) {
+    reflexDashState = RDS_ACTIVE_GO;
+    rdPhaseEnd = now + random(2000, 5000);
+  } else {
+    reflexDashState = RDS_ACTIVE_STOP;
+    rdPhaseEnd = now + random(2000, 4000);
+    long reactionWindow = map(rdLevel, 1, 10, 1000, 300);
+    rdReactionWindowEnd = now + reactionWindow;
+  }
+
+  if (oledPresent) {
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(20, 20);
+    display.println(colorName);
+    drawBatteryOverlay();
+    display.display();
+  }
+
+  // Send phase to web app
+  JsonDocument event;
+  event["type"] = "event";
+  event["game"] = "reflex-dash";
+  event["event"] = "phase_start";
+  event["isGo"] = isGo;
+  event["colorName"] = colorName;
+  char hexCode[8];
+  sprintf(hexCode, "#%02x%02x%02x", r, g, b);
+  event["hex"] = hexCode;
+
+  float score = 0.0f;
+  if (rdTotalGoTime > 0)
+    score = (float)rdDrivenGoTime / (float)rdTotalGoTime;
+  event["score"] = score; // Send as float 0.0 to 1.0
+
+  sendJson(event);
 }
 
 void rdFinishLevel() {
   rdStopOutputs();
-  
+
   float score = 0.0f;
-  if (rdMaxPossiblePoints > 0) {
-    score = (float)rdScorePoints / (float)rdMaxPossiblePoints;
+  if (rdTotalGoTime > 0) {
+    score = (float)rdDrivenGoTime / (float)rdTotalGoTime;
   }
-  
+
+  // Cap at 1.0 just in case
+  if (score > 1.0f)
+    score = 1.0f;
+
   JsonDocument result;
   result["type"] = "response";
   result["game"] = "reflex-dash";
@@ -1047,7 +1145,7 @@ void rdFinishLevel() {
 void rdAbort() {
   rdStopOutputs();
   noTone(PIN_BUZZER);
-  
+
   reflexDashState = RDS_IDLE;
   currentGame = GAME_NONE;
   rdLevel = 0;
@@ -1064,8 +1162,9 @@ void rdStartLevel(int level) {
   currentGame = GAME_REFLEX_DASH;
   rdLevel = constrain(level, 1, 10);
   rdPhaseCount = 0;
-  rdScorePoints = 0;
-  rdMaxPossiblePoints = 0;
+  rdDrivenGoTime = 0;
+  rdTotalGoTime = 0;
+  rdLastUpdateTime = millis();
   rdMaxPhases = 5 + rdLevel; // Scale phases with level
 
   Serial.printf("Starting Reflex Dash level %d\n", rdLevel);
@@ -1075,13 +1174,15 @@ void rdStartLevel(int level) {
 
 void updateReflexDash() {
   unsigned long now = millis();
-  
+  unsigned long delta = now - rdLastUpdateTime;
+  rdLastUpdateTime = now;
+
   if (reflexDashState == RDS_ACTIVE_GO) {
     if (isMoving) {
-      rdScorePoints++;
+      rdDrivenGoTime += delta;
     }
-    rdMaxPossiblePoints++;
-    
+    rdTotalGoTime += delta;
+
     if (now > rdPhaseEnd) {
       rdPhaseCount++;
       if (rdPhaseCount >= rdMaxPhases) {
@@ -1091,17 +1192,21 @@ void updateReflexDash() {
       }
     }
   } else if (reflexDashState == RDS_ACTIVE_STOP) {
-    if (now > rdReactionWindowEnd) { 
+    if (now > rdReactionWindowEnd) {
       if (isMoving) {
         if (!rdPenaltyApplied) {
           playTone(300, 300); // harsh buzz penalty
           setStripColor(255, 0, 0);
           rdPenaltyApplied = true;
+          // Apply a severe time penalty equivalent to 1 second
+          if (rdDrivenGoTime > 1000)
+            rdDrivenGoTime -= 1000;
+          else
+            rdDrivenGoTime = 0;
         }
-        if (rdScorePoints > 5) rdScorePoints -= 5; // penalty
       }
     }
-    
+
     if (now > rdPhaseEnd) {
       rdPhaseCount++;
       if (rdPhaseCount >= rdMaxPhases) {
@@ -1394,15 +1499,15 @@ void handleCommandLine(const String &line) {
 
   if (strcmp(command, "ping") == 0) {
     sendResponse("ping", true, "Pong from ELXIE");
-  }
-  else if (strcmp(command, "led") == 0) {
-    const char* hex = doc["color"] | "#000000";
-    if (hex[0] == '#') hex++;
+  } else if (strcmp(command, "led") == 0) {
+    const char *hex = doc["color"] | "#000000";
+    if (hex[0] == '#')
+      hex++;
     long rgb = strtol(hex, NULL, 16);
     int r = (rgb >> 16) & 0xFF;
     int g = (rgb >> 8) & 0xFF;
     int b = rgb & 0xFF;
-    
+
     lastBleColorR = r;
     lastBleColorG = g;
     lastBleColorB = b;
@@ -1433,7 +1538,7 @@ void handleCommandLine(const String &line) {
     int r = constrain((int)(doc["r"] | 0), 0, 255);
     int g = constrain((int)(doc["g"] | 0), 0, 255);
     int b = constrain((int)(doc["b"] | 0), 0, 255);
-    
+
     lastBleColorR = r;
     lastBleColorG = g;
     lastBleColorB = b;
@@ -1524,7 +1629,8 @@ portMUX_TYPE cmdMux = portMUX_INITIALIZER_UNLOCKED;
 enum Mode { MODE_UNLINKED, MODE_RC, MODE_PET };
 Mode curMode = MODE_UNLINKED;
 
-#define LINK_TIMEOUT_MS 500    // no packet -> unlinked
+#define LINK_TIMEOUT_MS                                                        \
+  500 // no packet -> unlinked (increased from 500ms for stability)
 #define PET_TIMEOUT_MS 60000UL // remote idle 60s -> Pet mode
 #define PET_SLEEP_MS 30000UL   // idle this long *within* Pet -> sleep
 
@@ -2345,13 +2451,13 @@ void motorsInit() {
 void driveMotorA(int speed, bool forward) {
   digitalWrite(PIN_AIN1, forward ? HIGH : LOW);
   digitalWrite(PIN_AIN2, forward ? LOW : HIGH);
-  analogWrite(PIN_PWMA, constrain(speed, 0, 255));
+  analogWrite(PIN_PWMA, constrain(speed * MOTOR_A_MULT, 0, 255));
 }
 
 void driveMotorB(int speed, bool forward) {
   digitalWrite(PIN_BIN1, forward ? HIGH : LOW);
   digitalWrite(PIN_BIN2, forward ? LOW : HIGH);
-  analogWrite(PIN_PWMB, constrain(speed, 0, 255));
+  analogWrite(PIN_PWMB, constrain(speed * MOTOR_B_MULT, 0, 255));
 }
 
 void motorsStop() {
@@ -2820,17 +2926,19 @@ void loop() {
     bool touch = (digitalRead(PIN_TOUCH) == HIGH);
     static bool prevBleTouch = false;
     static unsigned long bleTouchSince = 0;
-    
-    if (touch && !prevBleTouch) bleTouchSince = millis();
+
+    if (touch && !prevBleTouch)
+      bleTouchSince = millis();
     prevBleTouch = touch;
-    
+
     // Trigger petting if touched for PET_HOLD_MS (150ms) and no game is active
-    if (!petting && touch && gameState == GS_IDLE && (millis() - bleTouchSince >= 150)) {
-        espNowStartPetting();
+    if (!petting && touch && gameState == GS_IDLE &&
+        (millis() - bleTouchSince >= 150)) {
+      espNowStartPetting();
     }
-    
+
     if (petting) {
-        espNowServicePetting();
+      espNowServicePetting();
     }
   }
 
