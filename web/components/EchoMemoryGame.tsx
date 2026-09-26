@@ -389,10 +389,10 @@ export default function EchoMemoryGame({
 
           <div className="mt-3 flex items-center justify-between w-full border-t border-white/10 pt-3">
             <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-0.5 text-xs font-bold text-accent">
-              Level 1 \u00b7 Easy
+              Level 1 · Easy
             </span>
             <span className="text-xs font-medium text-white/50">
-              4 Steps \u00b7 3s Flash
+              4 Steps · 3s Flash
             </span>
           </div>
         </section>
