@@ -10,10 +10,8 @@ import {
   Compass,
   Eye,
   HelpCircle,
-  Layers,
   Palette,
   Sparkles,
-  Star,
   Timer,
   Trophy,
 } from "lucide-react";
@@ -290,7 +288,7 @@ export default function TrainingPage() {
               </h3>
 
               <p className="mt-2 text-sm leading-6 text-white/60">
-                Echo Memory tests your pattern recognition and memory recall. Watch the sequence flashed on your robot&apos;s directional LEDs, hold it in memory, and echo it back using your controller!
+                Echo Memory tests your pattern recognition and memory recall across directional LED sequences.
               </p>
 
               <div className="mt-5 space-y-4">
@@ -299,9 +297,9 @@ export default function TrainingPage() {
                     <Eye size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">1. Watch / Memorize Phase</h4>
+                    <h4 className="text-sm font-bold text-white">1. Watch &amp; Memorize</h4>
                     <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      Watch the Robo flash the directional LEDs in a specific sequence (3-second flash for Level 1). Observe each direction carefully.
+                      Watch the Robo flash the 4-step directional LED sequence.
                     </p>
                   </div>
                 </div>
@@ -311,109 +309,25 @@ export default function TrainingPage() {
                     <Timer size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">2. Wait Phase (3 Seconds)</h4>
+                    <h4 className="text-sm font-bold text-white">2. Wait</h4>
                     <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      All LEDs turn off for 3 seconds. Hold the pattern in mind while waiting—inputs are temporarily locked while preparing your answer.
+                      After the sequence, all LEDs turn off for 3 seconds. Remember the pattern.
                     </p>
                   </div>
                 </div>
 
                 <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
                   <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-                    <Sparkles size={18} />
+                    <Compass size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">3. Echo / Input Phase</h4>
+                    <h4 className="text-sm font-bold text-white">3. Echo the Sequence</h4>
                     <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      Reproduce the directions using the controller D-pad. Enter each directional step in the exact order you memorized.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Fixed Color-to-Direction Mapping */}
-            <div className="rounded-3xl border border-border bg-surface p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
-              <div className="flex items-center gap-2 text-accent">
-                <Compass size={18} />
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                  Color Mapping
-                </p>
-              </div>
-
-              <h3 className="mt-2 text-xl font-bold text-white">
-                Fixed Color-Direction Mapping
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-white/60">
-                Each direction corresponds to a fixed color on the robot&apos;s LEDs and controller:
-              </p>
-
-              <div className="mt-4 grid grid-cols-2 gap-2.5">
-                <div className="flex items-center gap-3 rounded-2xl border border-red-500/30 bg-red-500/10 p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-red-500/20 text-red-400 font-black text-sm">
-                    &uarr;
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Up</h4>
-                    <p className="text-[11px] font-semibold text-red-400">Red</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl border border-yellow-500/30 bg-yellow-500/10 p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-yellow-500/20 text-yellow-400 font-black text-sm">
-                    &rarr;
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Right</h4>
-                    <p className="text-[11px] font-semibold text-yellow-400">Yellow</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-emerald-500/20 text-emerald-400 font-black text-sm">
-                    &darr;
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Down</h4>
-                    <p className="text-[11px] font-semibold text-emerald-400">Green</p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 rounded-2xl border border-blue-500/30 bg-blue-500/10 p-3">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-500/20 text-blue-400 font-black text-sm">
-                    &larr;
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-white">Left</h4>
-                    <p className="text-[11px] font-semibold text-blue-400">Blue</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Rules, Mistakes, Scoring & Stars */}
-            <div className="rounded-3xl border border-border bg-surface p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
-              <div className="flex items-center gap-2 text-accent">
-                <Trophy size={18} />
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                  Rules &amp; Scoring
-                </p>
-              </div>
-
-              <h3 className="mt-2 text-xl font-bold text-white">
-                Mistakes, Scoring &amp; Stars
-              </h3>
-
-              <div className="mt-4 space-y-3">
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-400">
-                    <HelpCircle size={18} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Mistakes Don&apos;t End the Game</h4>
-                    <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      An incorrect input does not end the game; continue with the remaining sequence to complete your attempt.
+                      Use the controller D-pad to reproduce the directions in the same order.
+                      <br />
+                      Fixed mapping: Up = Red, Right = Yellow, Down = Green, Left = Blue.
+                      <br />
+                      An incorrect input does not end the game.
                     </p>
                   </div>
                 </div>
@@ -423,70 +337,17 @@ export default function TrainingPage() {
                     <Trophy size={18} />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-white">Level 1 Scoring (4 Steps)</h4>
+                    <h4 className="text-sm font-bold text-white">4. Score &amp; Stars</h4>
                     <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      Level 1 has a 4-step sequence. Each mistake reduces the score by 25 percentage points:
+                      Level 1 has 4 steps. Each mistake reduces the score by 25%.
+                      <br />
+                      4/4 = 100%, 3/4 = 75%, 2/4 = 50%, 1/4 = 25%, 0/4 = 0%.
+                      <br />
+                      90%+ = 3 stars, 70%+ = 2 stars, 50%+ = 1 star, below 50% = 0 stars.
                     </p>
-                    <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs text-white/70">
-                      <span className="rounded-lg bg-white/5 px-2 py-1">4/4 correct = 100%</span>
-                      <span className="rounded-lg bg-white/5 px-2 py-1">3/4 correct = 75%</span>
-                      <span className="rounded-lg bg-white/5 px-2 py-1">2/4 correct = 50%</span>
-                      <span className="rounded-lg bg-white/5 px-2 py-1">1/4 correct = 25%</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3.5">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-amber-400/30 bg-amber-400/10 text-amber-400">
-                    <Star size={18} />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">Star Ratings</h4>
-                    <p className="mt-0.5 text-xs leading-5 text-white/50">
-                      Earn stars based on your final sequence score:
-                    </p>
-                    <div className="mt-2 space-y-1 text-xs">
-                      <p className="text-white/80">
-                        <span className="font-bold text-amber-400">90%+</span> = 3 stars (perfect 4/4)
-                      </p>
-                      <p className="text-white/80">
-                        <span className="font-bold text-amber-400">70%+</span> = 2 stars (3/4 correct)
-                      </p>
-                      <p className="text-white/80">
-                        <span className="font-bold text-amber-400">50%+</span> = 1 star (2/4 correct)
-                      </p>
-                      <p className="text-white/50">
-                        <span className="font-bold text-white/40">below 50%</span> = 0 stars
-                      </p>
-                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-
-            {/* Level Availability */}
-            <div className="rounded-3xl border border-border bg-surface p-5 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-6">
-              <div className="flex items-center gap-2 text-accent">
-                <Layers size={18} />
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-                  Roadmap
-                </p>
-              </div>
-
-              <h3 className="mt-2 text-xl font-bold text-white">
-                Level Availability
-              </h3>
-
-              <p className="mt-2 text-sm leading-6 text-white/60">
-                Level 1 is currently implemented; later levels are coming soon with faster timings, longer sequences, and higher difficulty!
-              </p>
-
-              <Link
-                href="/playground/echo-memory/challenges/1"
-                className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-3.5 text-sm font-bold text-black transition hover:bg-accent/90 active:scale-[0.98]"
-              >
-                Play Level 1 Now
-              </Link>
             </div>
           </section>
         </div>
