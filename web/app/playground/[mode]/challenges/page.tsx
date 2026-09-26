@@ -10,6 +10,7 @@ import { getModeMeta } from "@/data/modes";
 import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
+import { ECHO_MEMORY_LEVELS } from "@/lib/echoMemory";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -20,15 +21,22 @@ export default function ChallengesPage() {
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
-  const displayLevels = isColourQuest ? COLOUR_QUEST_LEVELS : isReflexDash ? REFLEX_DASH_LEVELS : defaultLevels;
+  const isEchoMemory = params.mode === "echo-memory";
+  const displayLevels = isColourQuest
+    ? COLOUR_QUEST_LEVELS
+    : isReflexDash
+      ? REFLEX_DASH_LEVELS
+      : isEchoMemory
+        ? ECHO_MEMORY_LEVELS
+        : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
 
   useEffect(() => {
-    if (!isColourQuest && !isReflexDash) return;
+    if (!isColourQuest && !isReflexDash && !isEchoMemory) return;
 
     let isMounted = true;
-    const gameId = isColourQuest ? "color-quest" : "reflex-dash";
+    const gameId = isColourQuest ? "color-quest" : isReflexDash ? "reflex-dash" : "echo-memory";
     fetchAndSyncProgress(gameId)
       .then((data) => {
         if (isMounted && data.levels) {
@@ -42,9 +50,9 @@ export default function ChallengesPage() {
     return () => {
       isMounted = false;
     };
-  }, [isColourQuest, isReflexDash]);
+  }, [isColourQuest, isReflexDash, isEchoMemory]);
 
-  if (!isColourQuest && !isReflexDash) {
+  if (!isColourQuest && !isReflexDash && !isEchoMemory) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -105,14 +113,22 @@ export default function ChallengesPage() {
         </section>
 
         <section className="mt-8 grid grid-cols-2 gap-3">
-          {displayLevels.map((level) => (
-            <LevelCard
-              key={level.id}
-              level={level}
-              mode={params.mode as string}
-              progress={userProgress[level.id]}
-            />
-          ))}
+          {displayLevels.map((level) => {
+            const levelProgress: LevelProgress | undefined = isEchoMemory
+              ? level.id === 1
+                ? (userProgress[1] || { level: 1, bestScore: 0, stars: 0 as const, attempts: 0, unlocked: true })
+                : { level: level.id, bestScore: 0, stars: 0 as const, attempts: 0, unlocked: false }
+              : userProgress[level.id];
+
+            return (
+              <LevelCard
+                key={level.id}
+                level={level}
+                mode={params.mode as string}
+                progress={levelProgress}
+              />
+            );
+          })}
         </section>
       </div>
     </main>

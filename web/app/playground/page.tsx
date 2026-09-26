@@ -76,7 +76,6 @@ export default function Playground() {
             icon="memory"
             accent="accent"
             href="/playground/echo-memory"
-            isComingSoon={true}
           />
 
           <ModeCard

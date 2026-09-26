@@ -9,6 +9,7 @@ import {
   normalizeStars,
 } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
+import { ECHO_MEMORY_LEVELS } from "@/lib/echoMemory";
 import type { LevelProgress } from "@/types/colourQuest";
 
 export async function GET(request: Request) {
@@ -53,12 +54,17 @@ export async function GET(request: Request) {
 
     // Authoritative unlock computation
     const levelsMap: Record<number, LevelProgress> = {};
-    const gameLevels = game === "reflex-dash" ? REFLEX_DASH_LEVELS : COLOUR_QUEST_LEVELS;
+    const gameLevels =
+      game === "reflex-dash"
+        ? REFLEX_DASH_LEVELS
+        : game === "echo-memory"
+          ? ECHO_MEMORY_LEVELS
+          : COLOUR_QUEST_LEVELS;
     
     for (const lvlMeta of gameLevels) {
       const lvl = lvlMeta.id;
       const existing = dbMap[lvl];
-      const unlocked = isLevelUnlocked(lvl, dbMap);
+      const unlocked = game === "echo-memory" ? lvl === 1 : isLevelUnlocked(lvl, dbMap);
 
       levelsMap[lvl] = {
         level: lvl,

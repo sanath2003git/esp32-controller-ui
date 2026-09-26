@@ -8,7 +8,9 @@ import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import ReflexDashGame from "@/components/ReflexDashGame";
+import EchoMemoryGame from "@/components/EchoMemoryGame";
 import { getReflexDashLevel } from "@/lib/reflexDash";
+import { getEchoMemoryLevel } from "@/lib/echoMemory";
 import {
   calculateStars,
   createColorQuestRegionCommand,
@@ -48,13 +50,21 @@ export default function ChallengeLevelPage() {
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
+  const isEchoMemory = params.mode === "echo-memory";
   const modeMeta = getModeMeta(params.mode);
   const levelId = Number(params.level);
-  const levelMeta = isColourQuest ? getColourQuestLevel(levelId) : isReflexDash ? getReflexDashLevel(levelId) : undefined;
+  const reflexDashLevel = isReflexDash ? getReflexDashLevel(levelId) : undefined;
+  const echoMemoryLevel = isEchoMemory ? getEchoMemoryLevel(levelId) : undefined;
 
-  if (isReflexDash && levelMeta) {
-    return <ReflexDashGame levelId={levelId} levelMeta={levelMeta} />;
+  if (isReflexDash && reflexDashLevel) {
+    return <ReflexDashGame levelId={levelId} levelMeta={reflexDashLevel} />;
   }
+
+  if (isEchoMemory && echoMemoryLevel) {
+    return <EchoMemoryGame levelId={levelId} levelMeta={echoMemoryLevel} />;
+  }
+
+  const levelMeta = getColourQuestLevel(levelId);
 
   const [gameState, setGameState] = useState<ColourQuestGameState>("idle");
   const gameStateRef = useRef<ColourQuestGameState>("idle");
@@ -372,9 +382,11 @@ export default function ChallengeLevelPage() {
               {levelMeta.description}
             </p>
 
-            <p className="mt-2 text-xs italic text-accent/80">
-              Concept: {levelMeta.concept}
-            </p>
+            {levelMeta.concept && (
+              <p className="mt-2 text-xs italic text-accent/80">
+                Concept: {levelMeta.concept}
+              </p>
+            )}
           </div>
         </section>
 

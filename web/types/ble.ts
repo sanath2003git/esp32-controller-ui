@@ -6,6 +6,14 @@ import type {
   ColorQuestTaskMessage,
   ColorQuestTaskResultMessage,
 } from "@/types/colourQuest";
+import type {
+  EchoMemoryAbortedMessage,
+  EchoMemoryCommand,
+  EchoMemoryInputResultMessage,
+  EchoMemoryMessage,
+  EchoMemoryPhaseMessage,
+  EchoMemoryResultMessage,
+} from "@/types/echoMemory";
 
 export type RobotDeviceInfo = {
   deviceId: string;
@@ -85,7 +93,8 @@ export type RobotCommand =
   | BuzzerCommand
   | OledTextCommand
   | OledEmojiCommand
-  | ColorQuestCommand;
+  | ColorQuestCommand
+  | EchoMemoryCommand;
 
 export type DeviceInfoMessage = {
   type: "device_info";
@@ -115,7 +124,8 @@ export type BleMessage =
   | ColorQuestTaskMessage
   | ColorQuestTaskResultMessage
   | ColorQuestReadyMessage
-  | ColorQuestErrorMessage;
+  | ColorQuestErrorMessage
+  | EchoMemoryMessage;
 
 const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   red: { r: 255, g: 0, b: 0 },
@@ -233,6 +243,14 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     }
 
     if (
+      value.game === "echo-memory" &&
+      typeof value.score === "number" &&
+      Number.isFinite(value.score)
+    ) {
+      return value as EchoMemoryResultMessage;
+    }
+
+    if (
       typeof value.status === "string" &&
       typeof value.command === "string"
     ) {
@@ -256,6 +274,30 @@ export function parseBleMessage(value: unknown): BleMessage | null {
 
   if (value.type === "ready" && (value.game === "color-quest" || value.game === "colour-quest")) {
     return { ...value, game: "color-quest" } as ColorQuestReadyMessage;
+  }
+
+  if (value.type === "phase" && value.game === "echo-memory") {
+    if (
+      typeof value.level === "number" &&
+      typeof value.phase === "string" &&
+      (value.phase === "flash" || value.phase === "wait" || value.phase === "input")
+    ) {
+      return value as EchoMemoryPhaseMessage;
+    }
+  }
+
+  if (value.type === "input_result" && value.game === "echo-memory") {
+    if (
+      typeof value.level === "number" &&
+      typeof value.index === "number" &&
+      typeof value.correct === "boolean"
+    ) {
+      return value as EchoMemoryInputResultMessage;
+    }
+  }
+
+  if (value.type === "aborted" && value.game === "echo-memory") {
+    return value as EchoMemoryAbortedMessage;
   }
 
   if (value.type === "error" && typeof value.message === "string") {

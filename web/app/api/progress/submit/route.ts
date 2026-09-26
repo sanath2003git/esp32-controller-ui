@@ -12,6 +12,10 @@ import {
   normalizeStars,
 } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
+import {
+  ECHO_MEMORY_LEVELS,
+  calculateEchoMemoryStars,
+} from "@/lib/echoMemory";
 import type { LevelProgress } from "@/types/colourQuest";
 
 export async function POST(request: Request) {
@@ -30,11 +34,20 @@ export async function POST(request: Request) {
     const game = normalizeGameSlug(rawGame);
     const { level, score } = body;
 
+    const maxLevels =
+      game === "color-quest"
+        ? COLOUR_QUEST_LEVELS.length
+        : game === "reflex-dash"
+          ? REFLEX_DASH_LEVELS.length
+          : game === "echo-memory"
+            ? ECHO_MEMORY_LEVELS.length
+            : 0;
+
     if (
-      (game !== "color-quest" && game !== "reflex-dash") ||
+      (game !== "color-quest" && game !== "reflex-dash" && game !== "echo-memory") ||
       typeof level !== "number" ||
       level < 1 ||
-      level > (game === "color-quest" ? COLOUR_QUEST_LEVELS.length : REFLEX_DASH_LEVELS.length) ||
+      level > maxLevels ||
       typeof score !== "number" ||
       !Number.isFinite(score) ||
       score < 0
@@ -43,6 +56,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { success: false, error: "Invalid payload parameters" },
         { status: 400 }
+      );
+    }
+
+    if (game === "echo-memory" && level > 1) {
+      return NextResponse.json(
+        { success: false, error: "Echo Memory levels 2-6 are not implemented yet" },
+        { status: 403 }
       );
     }
 
@@ -66,7 +86,7 @@ export async function POST(request: Request) {
       };
     }
 
-    if (!isLevelUnlocked(level, existingMap)) {
+    if (game !== "echo-memory" && !isLevelUnlocked(level, existingMap)) {
       return NextResponse.json(
         { success: false, error: "Level is currently locked" },
         { status: 403 }
@@ -87,7 +107,11 @@ export async function POST(request: Request) {
     // So the client must send a normalized score for calculateStars to work properly, or we should use custom logic here.
     // Let's check what ReflexDashGame sends. It sends `score`, which is an integer. 
     // We should normalize it based on some max score. Wait, let's fix ReflexDashGame instead.
-    const finalAwardedStars = calculateStars(score);
+    const finalAwardedStars =
+      game === "echo-memory"
+        ? calculateEchoMemoryStars(Math.round(score * 100))
+        : calculateStars(score);
+
     const currentLevelRec = existingMap[level];
 
     const newBestScore = mergeBestScore(currentLevelRec?.bestScore, score);
@@ -127,12 +151,17 @@ export async function POST(request: Request) {
     }
 
     const levelsMap: Record<number, LevelProgress> = {};
-    const gameLevels = game === "reflex-dash" ? REFLEX_DASH_LEVELS : COLOUR_QUEST_LEVELS;
+    const gameLevels =
+      game === "reflex-dash"
+        ? REFLEX_DASH_LEVELS
+        : game === "echo-memory"
+          ? ECHO_MEMORY_LEVELS
+          : COLOUR_QUEST_LEVELS;
     
     for (const lvlMeta of gameLevels) {
       const lvl = lvlMeta.id;
       const existing = updatedDbMap[lvl];
-      const unlocked = isLevelUnlocked(lvl, updatedDbMap);
+      const unlocked = game === "echo-memory" ? lvl === 1 : isLevelUnlocked(lvl, updatedDbMap);
 
       levelsMap[lvl] = {
         level: lvl,
