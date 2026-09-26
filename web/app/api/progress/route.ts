@@ -9,7 +9,7 @@ import {
   normalizeStars,
 } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
-import { ECHO_MEMORY_LEVELS } from "@/lib/echoMemory";
+import { ECHO_MEMORY_LEVELS, isEchoMemoryLevelUnlocked } from "@/lib/echoMemory";
 import type { LevelProgress } from "@/types/colourQuest";
 
 export async function GET(request: Request) {
@@ -64,7 +64,10 @@ export async function GET(request: Request) {
     for (const lvlMeta of gameLevels) {
       const lvl = lvlMeta.id;
       const existing = dbMap[lvl];
-      const unlocked = game === "echo-memory" ? lvl === 1 : isLevelUnlocked(lvl, dbMap);
+      const unlocked =
+        game === "echo-memory"
+          ? isEchoMemoryLevelUnlocked(lvl, dbMap)
+          : isLevelUnlocked(lvl, dbMap);
 
       levelsMap[lvl] = {
         level: lvl,

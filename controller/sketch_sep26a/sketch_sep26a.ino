@@ -508,10 +508,13 @@ enum ReflexDashState { RDS_IDLE, RDS_ACTIVE_GO, RDS_ACTIVE_STOP, RDS_FEEDBACK };
 ReflexDashState reflexDashState = RDS_IDLE;
 
 // ========================================
-// ECHO MEMORY GAME ENGINE — LEVEL 1
+// ECHO MEMORY GAME ENGINE — LEVELS 1, 2, 3
 // ========================================
-// Level 1 uses the fixed directional mapping:
-// UP = Red, DOWN = Green, LEFT = Blue, RIGHT = Yellow.
+// Levels 1-3 use the fixed directional mapping:
+// UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue.
+// Level 1: 4 steps, 3.0s flash interval, 3.0s wait
+// Level 2: 5 steps, 1.5s flash interval, 3.0s wait
+// Level 3: 6 steps, 1.5s flash interval, 3.0s wait
 // The ESP32 owns the sequence, playback timing, input validation and score.
 enum EchoMemoryState {
   EMS_IDLE,
@@ -523,8 +526,12 @@ enum EchoMemoryState {
 
 EchoMemoryState echoMemoryState = EMS_IDLE;
 int echoMemoryLevel = 0;
-const uint8_t ECHO_MEMORY_SEQUENCE_LENGTH = 4;
-uint8_t echoMemorySequence[ECHO_MEMORY_SEQUENCE_LENGTH];
+const uint8_t ECHO_MEMORY_MAX_SEQUENCE_LENGTH = 6;
+uint8_t echoMemorySequence[ECHO_MEMORY_MAX_SEQUENCE_LENGTH];
+uint8_t echoMemorySequenceLength = 4;
+unsigned int echoMemoryFlashInterval = 3000;
+const unsigned long ECHO_MEMORY_GAP_MS = 400;
+bool echoMemoryFlashInGap = false;
 uint8_t echoMemoryFlashIndex = 0;
 unsigned long echoMemoryPhaseUntil = 0;
 unsigned long echoMemoryFeedbackUntil = 0;
@@ -1140,22 +1147,22 @@ void echoMemoryBeginInput() {
   echoMemoryInputIndex = 0;
   echoMemoryWrongCount = 0;
   echoMemoryState = EMS_INPUT;
-  echoMemoryShowOLED("REPEAT!", "Use joystick");
+  echoMemoryShowOLED("REPEAT!", "Use D-pad");
 
   JsonDocument phase;
   phase["type"] = "phase";
   phase["game"] = "echo-memory";
   phase["level"] = echoMemoryLevel;
   phase["phase"] = "input";
-  phase["length"] = ECHO_MEMORY_SEQUENCE_LENGTH;
+  phase["length"] = echoMemorySequenceLength;
   sendJson(phase);
 }
 
 void echoMemoryFinishLevel() {
   echoMemoryStopOutputs();
 
-  int correctCount = ECHO_MEMORY_SEQUENCE_LENGTH - echoMemoryWrongCount;
-  int scorePercent = (correctCount * 100) / ECHO_MEMORY_SEQUENCE_LENGTH;
+  int correctCount = echoMemorySequenceLength - echoMemoryWrongCount;
+  int scorePercent = (correctCount * 100) / echoMemorySequenceLength;
   int stars = 0;
   if (scorePercent >= 90)
     stars = 3;
@@ -1174,7 +1181,7 @@ void echoMemoryFinishLevel() {
   result["scorePercent"] = scorePercent;
   result["stars"] = stars;
   result["correct"] = correctCount;
-  result["total"] = ECHO_MEMORY_SEQUENCE_LENGTH;
+  result["total"] = echoMemorySequenceLength;
   sendJson(result);
 
   if (scorePercent >= 50) {
@@ -1204,26 +1211,41 @@ void echoMemoryFinishLevel() {
 }
 
 void echoMemoryStartLevel(int level) {
-  if (level != 1) {
-    sendError("Echo Memory Level 1 is implemented first");
+  if (level < 1 || level > 3) {
+    sendError("Echo Memory levels 1-3 are supported");
     return;
   }
 
   currentGame = GAME_ECHO_MEMORY;
-  echoMemoryLevel = 1;
+  echoMemoryLevel = level;
+  if (level == 1) {
+    echoMemorySequenceLength = 4;
+    echoMemoryFlashInterval = 3000;
+  } else if (level == 2) {
+    echoMemorySequenceLength = 5;
+    echoMemoryFlashInterval = 1500;
+  } else if (level == 3) {
+    echoMemorySequenceLength = 6;
+    echoMemoryFlashInterval = 1500;
+  }
+
   echoMemoryState = EMS_FLASHING;
   echoMemoryFlashIndex = 0;
+  echoMemoryFlashInGap = false;
   echoMemoryInputIndex = 0;
   echoMemoryWrongCount = 0;
 
   // Generate the complete sequence once. It is never sent to the web app.
-  for (uint8_t i = 0; i < ECHO_MEMORY_SEQUENCE_LENGTH; i++) {
+  for (uint8_t i = 0; i < echoMemorySequenceLength; i++) {
     echoMemorySequence[i] = random(0, 4);
   }
 
-  echoMemoryShowOLED("ECHO L1", "Watch carefully");
+  char oledTitle[16];
+  snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
+  echoMemoryShowOLED(oledTitle, "Watch carefully");
+
   echoMemoryShowDirection(echoMemorySequence[0]);
-  echoMemoryPhaseUntil = millis() + 3000;
+  echoMemoryPhaseUntil = millis() + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
 
   JsonDocument phase;
   phase["type"] = "phase";
@@ -1231,7 +1253,7 @@ void echoMemoryStartLevel(int level) {
   phase["level"] = echoMemoryLevel;
   phase["phase"] = "flash";
   phase["index"] = 0;
-  phase["length"] = ECHO_MEMORY_SEQUENCE_LENGTH;
+  phase["length"] = echoMemorySequenceLength;
   sendJson(phase);
 }
 
@@ -1260,14 +1282,14 @@ void echoMemoryAnswerDirection(int direction) {
   feedback["level"] = echoMemoryLevel;
   feedback["index"] = echoMemoryInputIndex;
   feedback["correct"] = correct;
-  feedback["score"] = ((int)(ECHO_MEMORY_SEQUENCE_LENGTH - echoMemoryWrongCount) * 100) /
-                      ECHO_MEMORY_SEQUENCE_LENGTH;
+  feedback["score"] = ((int)(echoMemorySequenceLength - echoMemoryWrongCount) * 100) /
+                      echoMemorySequenceLength;
   sendJson(feedback);
 
   echoMemoryInputIndex++;
   echoMemoryFeedbackUntil = millis() + 300;
 
-  if (echoMemoryInputIndex >= ECHO_MEMORY_SEQUENCE_LENGTH) {
+  if (echoMemoryInputIndex >= echoMemorySequenceLength) {
     echoMemoryFinishLevel();
   }
 }
@@ -1306,6 +1328,7 @@ void echoMemoryAbort() {
   echoMemoryState = EMS_IDLE;
   currentGame = GAME_NONE;
   echoMemoryLevel = 0;
+  echoMemoryFlashInGap = false;
   challengeShowIdle();
 
   JsonDocument response;
@@ -1319,33 +1342,42 @@ void updateEchoMemory() {
 
   if (echoMemoryState == EMS_FLASHING) {
     if ((long)(now - echoMemoryPhaseUntil) >= 0) {
-      echoMemoryFlashIndex++;
-
-      if (echoMemoryFlashIndex >= ECHO_MEMORY_SEQUENCE_LENGTH) {
+      if (!echoMemoryFlashInGap) {
+        // Step LED ON finished -> enter OFF gap so repeated directions are visually distinct
         echoMemoryStopOutputs();
-        echoMemoryState = EMS_WAIT;
-        echoMemoryPhaseUntil = now + 3000;
-        echoMemoryShowOLED("WAIT...", "Get ready");
-
-        JsonDocument phase;
-        phase["type"] = "phase";
-        phase["game"] = "echo-memory";
-        phase["level"] = echoMemoryLevel;
-        phase["phase"] = "wait";
-        phase["durationMs"] = 3000;
-        sendJson(phase);
+        echoMemoryFlashInGap = true;
+        echoMemoryPhaseUntil = now + ECHO_MEMORY_GAP_MS;
       } else {
-        echoMemoryShowDirection(echoMemorySequence[echoMemoryFlashIndex]);
-        echoMemoryPhaseUntil = now + 3000;
+        // OFF gap finished -> advance to next step or wait phase
+        echoMemoryFlashInGap = false;
+        echoMemoryFlashIndex++;
 
-        JsonDocument phase;
-        phase["type"] = "phase";
-        phase["game"] = "echo-memory";
-        phase["level"] = echoMemoryLevel;
-        phase["phase"] = "flash";
-        phase["index"] = echoMemoryFlashIndex;
-        phase["length"] = ECHO_MEMORY_SEQUENCE_LENGTH;
-        sendJson(phase);
+        if (echoMemoryFlashIndex >= echoMemorySequenceLength) {
+          echoMemoryStopOutputs();
+          echoMemoryState = EMS_WAIT;
+          echoMemoryPhaseUntil = now + 3000;
+          echoMemoryShowOLED("WAIT...", "Get ready");
+
+          JsonDocument phase;
+          phase["type"] = "phase";
+          phase["game"] = "echo-memory";
+          phase["level"] = echoMemoryLevel;
+          phase["phase"] = "wait";
+          phase["durationMs"] = 3000;
+          sendJson(phase);
+        } else {
+          echoMemoryShowDirection(echoMemorySequence[echoMemoryFlashIndex]);
+          echoMemoryPhaseUntil = now + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
+
+          JsonDocument phase;
+          phase["type"] = "phase";
+          phase["game"] = "echo-memory";
+          phase["level"] = echoMemoryLevel;
+          phase["phase"] = "flash";
+          phase["index"] = echoMemoryFlashIndex;
+          phase["length"] = echoMemorySequenceLength;
+          sendJson(phase);
+        }
       }
     }
   } else if (echoMemoryState == EMS_WAIT) {

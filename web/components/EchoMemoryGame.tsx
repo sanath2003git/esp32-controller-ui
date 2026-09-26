@@ -52,7 +52,7 @@ export default function EchoMemoryGame({
   const router = useRouter();
   const { status, send, lastMessage, openModal } = useBleContext();
 
-  const isImplemented = levelId === 1;
+  const isImplemented = levelMeta.isImplemented;
 
   const [gameState, setGameState] = useState<EchoMemoryGameState>("idle");
   const gameStateRef = useRef<EchoMemoryGameState>("idle");
@@ -65,12 +65,9 @@ export default function EchoMemoryGame({
   const [waitTimer, setWaitTimer] = useState<number>(3);
   const [inputStep, setInputStep] = useState<number>(0);
   const [isSubmittingInput, setIsSubmittingInput] = useState<boolean>(false);
-  const [stepResults, setStepResults] = useState<StepResult[]>([
-    { answered: false },
-    { answered: false },
-    { answered: false },
-    { answered: false },
-  ]);
+  const [stepResults, setStepResults] = useState<StepResult[]>(() =>
+    Array.from({ length: levelMeta.sequenceLength }, () => ({ answered: false }))
+  );
   const [stepFeedback, setStepFeedback] = useState<{
     correct: boolean;
     stepIndex: number;
@@ -131,10 +128,16 @@ export default function EchoMemoryGame({
     if (lastMessage.type === "phase" && lastMessage.game === "echo-memory") {
       if (lastMessage.phase === "flash") {
         const idx = lastMessage.index ?? 0;
+        const len = lastMessage.length ?? levelMeta.sequenceLength;
         setTimeout(() => {
           setGameState("flashing");
           setFlashIndex(idx);
           setStepFeedback(null);
+          setStepResults((prev) =>
+            prev.length === len
+              ? prev
+              : Array.from({ length: len }, () => ({ answered: false }))
+          );
         }, 0);
       } else if (lastMessage.phase === "wait") {
         clearTimers();
@@ -156,10 +159,16 @@ export default function EchoMemoryGame({
         }, 200);
       } else if (lastMessage.phase === "input") {
         clearTimers();
+        const len = lastMessage.length ?? levelMeta.sequenceLength;
         setTimeout(() => {
           setGameState("input");
           setInputStep(0);
           setIsSubmittingInput(false);
+          setStepResults((prev) =>
+            prev.length === len
+              ? prev
+              : Array.from({ length: len }, () => ({ answered: false }))
+          );
         }, 0);
       }
     }
@@ -230,9 +239,9 @@ export default function EchoMemoryGame({
         setGameState("idle");
       }, 0);
     }
-  }, [lastMessage, gameState, clearTimers, levelId]);
+  }, [lastMessage, gameState, clearTimers, levelId, levelMeta.sequenceLength]);
 
-  // Start Level 1 Challenge
+  // Start Challenge
   const handleStartGame = async () => {
     if (status !== "connected") {
       openModal();
@@ -240,24 +249,21 @@ export default function EchoMemoryGame({
     }
 
     if (!isImplemented) {
-      setErrorMessage("Only Level 1 is currently implemented.");
+      setErrorMessage("Only Levels 1 to 3 are currently implemented.");
       return;
     }
 
     try {
       setErrorMessage(null);
-      setStepResults([
-        { answered: false },
-        { answered: false },
-        { answered: false },
-        { answered: false },
-      ]);
+      setStepResults(
+        Array.from({ length: levelMeta.sequenceLength }, () => ({ answered: false }))
+      );
       setStepFeedback(null);
       setInputStep(0);
       setFlashIndex(0);
       setGameState("starting");
 
-      await send(createEchoMemoryStartCommand(1));
+      await send(createEchoMemoryStartCommand(levelId));
     } catch (err) {
       console.error("[ECHO MEMORY] Start command error:", err);
       setGameState("error");
@@ -269,7 +275,7 @@ export default function EchoMemoryGame({
 
   // Submit Directional Input
   const handleDirectionInput = async (dir: EchoMemoryDirection) => {
-    if (gameState !== "input" || isSubmittingInput || inputStep >= 4) {
+    if (gameState !== "input" || isSubmittingInput || inputStep >= levelMeta.sequenceLength) {
       return;
     }
 
@@ -352,7 +358,7 @@ export default function EchoMemoryGame({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-white/50">
-              Echo Memory Level 1 is the currently supported introductory challenge. Higher tiers will unlock in upcoming robot updates.
+              Echo Memory Levels 1–3 are currently supported. Higher tiers will unlock in upcoming robot updates.
             </p>
 
             <button
@@ -372,7 +378,7 @@ export default function EchoMemoryGame({
     <main className="min-h-screen pb-16">
       <SubPageHeader
         title={`Echo Memory \u00b7 Level ${levelMeta.id}`}
-        subtitle={`${levelMeta.difficulty} \u00b7 4-step sequence`}
+        subtitle={`${levelMeta.difficulty} \u00b7 ${levelMeta.sequenceLength}-step sequence`}
         backHref="/playground/echo-memory/challenges"
       />
 
@@ -389,10 +395,10 @@ export default function EchoMemoryGame({
 
           <div className="mt-3 flex items-center justify-between w-full border-t border-white/10 pt-3">
             <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-0.5 text-xs font-bold text-accent">
-              Level 1 · Easy
+              Level {levelMeta.id} · {levelMeta.difficulty}
             </span>
             <span className="text-xs font-medium text-white/50">
-              4 Steps · 3s Flash
+              {levelMeta.sequenceLength} Steps · {levelMeta.flashDuration} Flash
             </span>
           </div>
         </section>
@@ -448,9 +454,9 @@ export default function EchoMemoryGame({
             <div className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">Ready to begin?</span>
               <p className="mt-1 text-xs leading-5 text-white/60">
-                1. Watch your robot flash 4 lights one by one.<br />
+                1. Watch your robot flash {levelMeta.sequenceLength} lights one by one.<br />
                 2. Wait 3 seconds for the signal.<br />
-                3. Echo the 4 directions on your controller!
+                3. Echo the {levelMeta.sequenceLength} directions on your controller!
               </p>
             </div>
 
@@ -468,7 +474,7 @@ export default function EchoMemoryGame({
                 onClick={handleStartGame}
                 className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent px-4 py-4 text-base font-bold text-black transition-all hover:bg-accent/90 active:scale-[0.98] shadow-lg shadow-accent/20"
               >
-                <Play size={20} fill="currentColor" /> Start Level 1 Challenge
+                <Play size={20} fill="currentColor" /> Start Level {levelMeta.id} Challenge
               </button>
             )}
           </section>
@@ -496,7 +502,7 @@ export default function EchoMemoryGame({
                 {flashIndex + 1}
               </div>
               <span className="mt-3 text-xs text-white/50 font-semibold uppercase tracking-wider">
-                Flashing step {flashIndex + 1} of 4
+                Flashing step {flashIndex + 1} of {levelMeta.sequenceLength}
               </span>
             </div>
 
@@ -537,12 +543,20 @@ export default function EchoMemoryGame({
                 <Sparkles size={16} /> Phase 3: Echo Sequence
               </span>
               <span className="font-semibold text-white/80">
-                Step {Math.min(inputStep + 1, 4)} / 4
+                Step {Math.min(inputStep + 1, levelMeta.sequenceLength)} / {levelMeta.sequenceLength}
               </span>
             </div>
 
-            {/* Sequence 4-Step Tracker */}
-            <div className="grid grid-cols-4 gap-2 pt-1">
+            {/* Sequence Step Tracker */}
+            <div
+              className={`grid gap-2 pt-1 ${
+                levelMeta.sequenceLength === 6
+                  ? "grid-cols-6"
+                  : levelMeta.sequenceLength === 5
+                    ? "grid-cols-5"
+                    : "grid-cols-4"
+              }`}
+            >
               {stepResults.map((step, idx) => {
                 const isActive = inputStep === idx;
                 return (
@@ -594,7 +608,7 @@ export default function EchoMemoryGame({
               <button
                 type="button"
                 id="echo-btn-up"
-                disabled={isSubmittingInput || inputStep >= 4}
+                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
                 onClick={() => handleDirectionInput("up")}
                 className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.up.borderClass} ${ECHO_MEMORY_MAPPING.up.bgClass} ${ECHO_MEMORY_MAPPING.up.textClass} ${ECHO_MEMORY_MAPPING.up.glowClass}`}
                 aria-label="Input Up (Red)"
@@ -608,7 +622,7 @@ export default function EchoMemoryGame({
               <button
                 type="button"
                 id="echo-btn-left"
-                disabled={isSubmittingInput || inputStep >= 4}
+                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
                 onClick={() => handleDirectionInput("left")}
                 className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.left.borderClass} ${ECHO_MEMORY_MAPPING.left.bgClass} ${ECHO_MEMORY_MAPPING.left.textClass} ${ECHO_MEMORY_MAPPING.left.glowClass}`}
                 aria-label="Input Left (Blue)"
@@ -622,7 +636,7 @@ export default function EchoMemoryGame({
                 {isSubmittingInput ? (
                   <RotateCcw size={16} className="animate-spin text-accent" />
                 ) : (
-                  <span>L1</span>
+                  <span>L{levelMeta.id}</span>
                 )}
               </div>
 
@@ -630,7 +644,7 @@ export default function EchoMemoryGame({
               <button
                 type="button"
                 id="echo-btn-right"
-                disabled={isSubmittingInput || inputStep >= 4}
+                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
                 onClick={() => handleDirectionInput("right")}
                 className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.right.borderClass} ${ECHO_MEMORY_MAPPING.right.bgClass} ${ECHO_MEMORY_MAPPING.right.textClass} ${ECHO_MEMORY_MAPPING.right.glowClass}`}
                 aria-label="Input Right (Yellow)"
@@ -644,7 +658,7 @@ export default function EchoMemoryGame({
               <button
                 type="button"
                 id="echo-btn-down"
-                disabled={isSubmittingInput || inputStep >= 4}
+                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
                 onClick={() => handleDirectionInput("down")}
                 className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.down.borderClass} ${ECHO_MEMORY_MAPPING.down.bgClass} ${ECHO_MEMORY_MAPPING.down.textClass} ${ECHO_MEMORY_MAPPING.down.glowClass}`}
                 aria-label="Input Down (Green)"
@@ -675,14 +689,19 @@ export default function EchoMemoryGame({
       {currentResult && (
         <ResultModal
           isOpen={isModalOpen}
-          level={1}
+          level={levelId}
           score={currentResult.score}
           stars={currentResult.stars}
           bestScore={currentResult.score}
-          hasNextLevel={false}
-          isNextUnlocked={false}
+          hasNextLevel={levelId < 3}
+          isNextUnlocked={levelId < 3 && currentResult.stars >= 1}
           onReplay={handleReplay}
-          onNextLevel={handleExit}
+          onNextLevel={() => {
+            setIsModalOpen(false);
+            setCurrentResult(null);
+            setGameState("idle");
+            router.push(`/playground/echo-memory/challenges/${levelId + 1}`);
+          }}
           onBackToLevels={handleExit}
         />
       )}

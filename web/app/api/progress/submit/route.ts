@@ -15,6 +15,7 @@ import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
 import {
   ECHO_MEMORY_LEVELS,
   calculateEchoMemoryStars,
+  isEchoMemoryLevelUnlocked,
 } from "@/lib/echoMemory";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -59,9 +60,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (game === "echo-memory" && level > 1) {
+    if (game === "echo-memory" && level > 3) {
       return NextResponse.json(
-        { success: false, error: "Echo Memory levels 2-6 are not implemented yet" },
+        { success: false, error: "Echo Memory levels 4-6 are not implemented yet" },
         { status: 403 }
       );
     }
@@ -86,7 +87,12 @@ export async function POST(request: Request) {
       };
     }
 
-    if (game !== "echo-memory" && !isLevelUnlocked(level, existingMap)) {
+    const isUnlocked =
+      game === "echo-memory"
+        ? isEchoMemoryLevelUnlocked(level, existingMap)
+        : isLevelUnlocked(level, existingMap);
+
+    if (!isUnlocked) {
       return NextResponse.json(
         { success: false, error: "Level is currently locked" },
         { status: 403 }
@@ -161,7 +167,10 @@ export async function POST(request: Request) {
     for (const lvlMeta of gameLevels) {
       const lvl = lvlMeta.id;
       const existing = updatedDbMap[lvl];
-      const unlocked = game === "echo-memory" ? lvl === 1 : isLevelUnlocked(lvl, updatedDbMap);
+      const unlocked =
+        game === "echo-memory"
+          ? isEchoMemoryLevelUnlocked(lvl, updatedDbMap)
+          : isLevelUnlocked(lvl, updatedDbMap);
 
       levelsMap[lvl] = {
         level: lvl,

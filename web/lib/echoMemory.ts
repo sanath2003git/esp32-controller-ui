@@ -32,22 +32,22 @@ export const ECHO_MEMORY_LEVELS: EchoMemoryLevelMeta[] = [
   {
     id: 2,
     title: "Level 2",
-    description: "Coming soon. Faster pace and longer sequence.",
+    description: "5-step pattern at a faster pace. Watch closely, wait 3 seconds, then echo the sequence!",
     difficulty: "Easy",
     sequenceLength: 5,
     flashDuration: "1.5s",
     waitDuration: "3.0s",
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     id: 3,
     title: "Level 3",
-    description: "Coming soon. Challenging sequence.",
+    description: "6-step challenge sequence at high speed. Wait 3 seconds, then echo the sequence!",
     difficulty: "Easy",
     sequenceLength: 6,
     flashDuration: "1.5s",
     waitDuration: "3.0s",
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     id: 4,
@@ -82,7 +82,7 @@ export const ECHO_MEMORY_LEVELS: EchoMemoryLevelMeta[] = [
 ];
 
 /**
- * Fixed colour-to-direction mapping for Echo Memory Level 1:
+ * Fixed colour-to-direction mapping for Echo Memory Levels 1–3:
  * UP    = RED
  * RIGHT = YELLOW
  * DOWN  = GREEN
@@ -148,11 +148,21 @@ export function getEchoMemoryLevel(id: number): EchoMemoryLevelMeta | undefined 
 }
 
 /**
+ * Unlocking rules for Echo Memory:
  * Level 1 is always unlocked.
- * Levels 2-6 remain strictly not implemented / locked.
+ * Level 2 unlocks after completing Level 1 (stars = 3).
+ * Level 3 unlocks after completing Level 2 (stars = 3).
+ * Levels 4-6 remain strictly locked and not implemented.
  */
-export function isEchoMemoryLevelUnlocked(levelId: number): boolean {
-  return levelId === 1;
+export function isEchoMemoryLevelUnlocked(
+  levelId: number,
+  progressMap?: Record<number, { stars: number }>
+): boolean {
+  if (levelId === 1) return true;
+  if (levelId < 1 || levelId > 3) return false;
+  if (!progressMap) return false;
+  const prev = progressMap[levelId - 1];
+  return Boolean(prev && prev.stars >= 3);
 }
 
 /**

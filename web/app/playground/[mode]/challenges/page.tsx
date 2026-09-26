@@ -10,7 +10,7 @@ import { getModeMeta } from "@/data/modes";
 import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
-import { ECHO_MEMORY_LEVELS } from "@/lib/echoMemory";
+import { ECHO_MEMORY_LEVELS, isEchoMemoryLevelUnlocked } from "@/lib/echoMemory";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -115,9 +115,13 @@ export default function ChallengesPage() {
         <section className="mt-8 grid grid-cols-2 gap-3">
           {displayLevels.map((level) => {
             const levelProgress: LevelProgress | undefined = isEchoMemory
-              ? level.id === 1
-                ? (userProgress[1] || { level: 1, bestScore: 0, stars: 0 as const, attempts: 0, unlocked: true })
-                : { level: level.id, bestScore: 0, stars: 0 as const, attempts: 0, unlocked: false }
+              ? userProgress[level.id] || {
+                  level: level.id,
+                  bestScore: 0,
+                  stars: 0 as const,
+                  attempts: 0,
+                  unlocked: isEchoMemoryLevelUnlocked(level.id, userProgress),
+                }
               : userProgress[level.id];
 
             return (
