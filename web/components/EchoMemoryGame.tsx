@@ -18,16 +18,19 @@ import {
   CheckCircle2,
   XCircle,
   Megaphone,
+  BookOpen,
 } from "lucide-react";
 import SubPageHeader from "@/components/SubPageHeader";
 import ResultModal from "@/components/ResultModal";
 import DPad, { type DPadButtonCustomStyle, type DPadDirection } from "@/components/DPad";
 import { useBleContext } from "@/context/BleContext";
 import {
+  ECHO_COLOR_PALETTE,
   ECHO_MEMORY_MAPPING,
   createEchoMemoryAbortCommand,
   createEchoMemoryInputCommand,
   createEchoMemoryStartCommand,
+  getEchoColorVisual,
   isValidEchoMemoryResult,
   type EchoMemoryLevelMeta,
 } from "@/lib/echoMemory";
@@ -36,6 +39,7 @@ import type {
   EchoMemoryAction,
   EchoMemoryDirection,
   EchoMemoryGameState,
+  EchoMemoryPhaseMessage,
   EchoMemoryResultMessage,
 } from "@/types/echoMemory";
 
@@ -64,6 +68,8 @@ export default function EchoMemoryGame({
   }, [gameState]);
 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [dynamicMapping, setDynamicMapping] = useState<Record<string, string> | null>(null);
+  const [mappingTimer, setMappingTimer] = useState<number>(5);
   const [flashIndex, setFlashIndex] = useState<number>(0);
   const [waitTimer, setWaitTimer] = useState<number>(3);
   const [inputStep, setInputStep] = useState<number>(0);
@@ -109,6 +115,7 @@ export default function EchoMemoryGame({
   useEffect(() => {
     if (
       (gameState === "starting" ||
+        gameState === "mapping" ||
         gameState === "flashing" ||
         gameState === "waiting" ||
         gameState === "input") &&
@@ -127,9 +134,31 @@ export default function EchoMemoryGame({
   useEffect(() => {
     if (!lastMessage || gameState === "idle") return;
 
-    // 1. Phase messages (flash, wait, input)
+    // 1. Phase messages (mapping, flash, wait, input)
     if (lastMessage.type === "phase" && lastMessage.game === "echo-memory") {
-      if (lastMessage.phase === "flash") {
+      if (lastMessage.phase === "mapping") {
+        clearTimers();
+        const duration = Math.max(1, Math.round(((lastMessage as EchoMemoryPhaseMessage).durationMs ?? 5000) / 1000));
+        setTimeout(() => {
+          if (mappingObj) {
+            setDynamicMapping(mappingObj as Record<string, string>);
+          }
+          setGameState("mapping");
+          setMappingTimer(duration);
+        }, 0);
+
+        const startTime = Date.now();
+        countdownIntervalRef.current = setInterval(() => {
+          const elapsed = Math.floor((Date.now() - startTime) / 1000);
+          const remaining = Math.max(0, duration - elapsed);
+          setMappingTimer(remaining);
+          if (remaining <= 0 && countdownIntervalRef.current) {
+            clearInterval(countdownIntervalRef.current);
+            countdownIntervalRef.current = null;
+          }
+        }, 200);
+      } else if (lastMessage.phase === "flash") {
+        clearTimers();
         const idx = lastMessage.index ?? 0;
         const len = lastMessage.length ?? levelMeta.sequenceLength;
         setTimeout(() => {
@@ -252,7 +281,7 @@ export default function EchoMemoryGame({
     }
 
     if (!isImplemented) {
-      setErrorMessage("Echo Memory Levels 1 to 5 are currently implemented.");
+      setErrorMessage("Echo Memory Levels 1 to 6 are currently implemented.");
       return;
     }
 
@@ -264,6 +293,7 @@ export default function EchoMemoryGame({
       setStepFeedback(null);
       setInputStep(0);
       setFlashIndex(0);
+      setDynamicMapping(null);
       setGameState("starting");
 
       await send(createEchoMemoryStartCommand(levelId));
@@ -316,6 +346,7 @@ export default function EchoMemoryGame({
   const handleExit = () => {
     if (
       gameState === "starting" ||
+      gameState === "mapping" ||
       gameState === "flashing" ||
       gameState === "waiting" ||
       gameState === "input"
@@ -336,7 +367,7 @@ export default function EchoMemoryGame({
     void handleStartGame();
   };
 
-  // If level > 5 (Level 6 not implemented yet)
+  // If level > 6 (future levels not implemented)
   if (!isImplemented) {
     return (
       <main className="min-h-screen pb-16">
@@ -361,7 +392,7 @@ export default function EchoMemoryGame({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-white/50">
-              Echo Memory Levels 1–5 are currently supported. Level 6 will unlock in an upcoming robot update.
+              Echo Memory Levels 1–6 are currently supported. Further levels are not available.
             </p>
 
             <button
@@ -406,62 +437,119 @@ export default function EchoMemoryGame({
           </div>
         </section>
 
-        {/* Fixed Colour-to-Direction / Action Mapping Reference */}
+        {/* Colour-to-Direction / Action Mapping Reference */}
         <section className="rounded-3xl border border-white/10 bg-surface p-5 shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-white/40">
-              {levelId >= 4 ? "Fixed Color-to-Action Mapping" : "Fixed Color Mapping"}
+              {levelId === 6
+                ? "Dynamic Color-to-Action Mapping"
+                : levelId >= 4
+                  ? "Fixed Color-to-Action Mapping"
+                  : "Fixed Color Mapping"}
             </span>
             <span className="text-[11px] text-accent font-semibold">
-              {levelId >= 4 ? "Study the 6 actions" : "Study the directions"}
+              {levelId === 6
+                ? dynamicMapping
+                  ? "Study mapping below!"
+                  : "Generated per game"
+                : levelId >= 4
+                  ? "Study the 6 actions"
+                  : "Study the directions"}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            {(levelId >= 4
-              ? [
-                  ECHO_MEMORY_MAPPING.up,
-                  ECHO_MEMORY_MAPPING.down,
-                  ECHO_MEMORY_MAPPING.left,
-                  ECHO_MEMORY_MAPPING.right,
-                  ECHO_MEMORY_MAPPING.pet,
-                  ECHO_MEMORY_MAPPING.honk,
+            {levelId === 6 ? (
+              // Level 6 Dynamic Mapping
+              (
+                [
+                  { action: "up" as EchoMemoryAction, label: "UP" },
+                  { action: "down" as EchoMemoryAction, label: "DOWN" },
+                  { action: "left" as EchoMemoryAction, label: "LEFT" },
+                  { action: "right" as EchoMemoryAction, label: "RIGHT" },
+                  { action: "pet" as EchoMemoryAction, label: "PET", sub: "(Touch)" },
+                  { action: "honk" as EchoMemoryAction, label: "HONK", sub: "(Center)" },
                 ]
-              : [
-                  ECHO_MEMORY_MAPPING.up,
-                  ECHO_MEMORY_MAPPING.down,
-                  ECHO_MEMORY_MAPPING.left,
-                  ECHO_MEMORY_MAPPING.right,
-                ]
-            ).map((item) => (
-              <div
-                key={item.action}
-                className={`flex items-center gap-3 rounded-2xl border p-3 ${item.borderClass} bg-black/20`}
-              >
+              ).map((item) => {
+                const colorKey = dynamicMapping?.[item.action];
+                const visual = colorKey ? getEchoColorVisual(colorKey) : null;
+                return (
+                  <div
+                    key={item.action}
+                    className={`flex items-center gap-3 rounded-2xl border p-3 ${
+                      visual ? visual.borderClass : "border-white/10"
+                    } bg-black/20`}
+                  >
+                    <div
+                      className="h-4 w-4 rounded-full shadow-[0_0_10px_currentColor] shrink-0"
+                      style={{
+                        backgroundColor: visual ? visual.hex : "#555",
+                        color: visual ? visual.hex : "#555",
+                      }}
+                    />
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-black uppercase text-white flex items-center gap-1">
+                        {item.label}
+                        {item.sub && (
+                          <span className={`text-[9px] font-normal ${item.action === "pet" ? "text-purple-300" : "text-white"} opacity-80`}>
+                            {item.sub}
+                          </span>
+                        )}
+                      </span>
+                      <span className={`text-[11px] font-semibold ${visual ? visual.textClass : "text-white/40"}`}>
+                        {visual ? visual.color : "Pending start..."}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              // Levels 1-5 Fixed Mapping
+              (levelId >= 4
+                ? [
+                    ECHO_MEMORY_MAPPING.up,
+                    ECHO_MEMORY_MAPPING.down,
+                    ECHO_MEMORY_MAPPING.left,
+                    ECHO_MEMORY_MAPPING.right,
+                    ECHO_MEMORY_MAPPING.pet,
+                    ECHO_MEMORY_MAPPING.honk,
+                  ]
+                : [
+                    ECHO_MEMORY_MAPPING.up,
+                    ECHO_MEMORY_MAPPING.down,
+                    ECHO_MEMORY_MAPPING.left,
+                    ECHO_MEMORY_MAPPING.right,
+                  ]
+              ).map((item) => (
                 <div
-                  className="h-4 w-4 rounded-full shadow-[0_0_10px_currentColor] shrink-0"
-                  style={{ backgroundColor: item.hex, color: item.hex }}
-                />
-                <div className="flex flex-col text-left">
-                  <span className="text-xs font-black uppercase text-white flex items-center gap-1">
-                    {item.label}
-                    {item.action === "pet" && (
-                      <span className="text-[9px] font-normal text-purple-300 opacity-80">(Touch)</span>
-                    )}
-                    {item.action === "honk" && (
-                      <span className="text-[9px] font-normal text-orange-300 opacity-80">(Center)</span>
-                    )}
-                  </span>
-                  <span className={`text-[11px] font-semibold ${item.textClass}`}>
-                    {item.color}
-                  </span>
+                  key={item.action}
+                  className={`flex items-center gap-3 rounded-2xl border p-3 ${item.borderClass} bg-black/20`}
+                >
+                  <div
+                    className="h-4 w-4 rounded-full shadow-[0_0_10px_currentColor] shrink-0"
+                    style={{ backgroundColor: item.hex, color: item.hex }}
+                  />
+                  <div className="flex flex-col text-left">
+                    <span className="text-xs font-black uppercase text-white flex items-center gap-1">
+                      {item.label}
+                      {item.action === "pet" && (
+                        <span className="text-[9px] font-normal text-purple-300 opacity-80">(Touch)</span>
+                      )}
+                      {item.action === "honk" && (
+                        <span className="text-[9px] font-normal text-white opacity-80">(Center)</span>
+                      )}
+                    </span>
+                    <span className={`text-[11px] font-semibold ${item.textClass}`}>
+                      {item.color}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
           {levelId >= 4 && (
             <p className="mt-3 text-[11px] text-white/50 leading-relaxed border-t border-white/5 pt-2">
-              Note: <span className="text-purple-300 font-bold">PET</span> is performed by physically touching the robot&apos;s touch sensor. <span className="text-orange-300 font-bold">HONK</span> is the center button on the controller.
+              Note: <span className="text-purple-300 font-bold">PET</span> is performed by physically touching the robot&apos;s touch sensor. <span className="text-white font-bold">HONK</span> is the center button on the controller.
             </p>
           )}
         </section>
@@ -483,9 +571,19 @@ export default function EchoMemoryGame({
             <div className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">Ready to begin?</span>
               <p className="mt-1 text-xs leading-5 text-white/60">
-                1. Watch your robot flash {levelMeta.sequenceLength} {levelId >= 4 ? "colors across the full strip" : "lights"} one by one.<br />
-                2. Wait 3 seconds for the signal.<br />
-                3. Echo the {levelMeta.sequenceLength} {levelId >= 4 ? "actions using D-pad, Honk button, or Pet sensor" : "directions on your controller"}!
+                {levelId === 6 ? (
+                  <>
+                    1. Study the randomly generated color-to-action mapping.<br />
+                    2. Watch your robot flash 7 colors across the full strip.<br />
+                    3. Wait 3 seconds, then echo the 7 actions using D-pad, Honk, or Pet!
+                  </>
+                ) : (
+                  <>
+                    1. Watch your robot flash {levelMeta.sequenceLength} {levelId >= 4 ? "colors across the full strip" : "lights"} one by one.<br />
+                    2. Wait 3 seconds for the signal.<br />
+                    3. Echo the {levelMeta.sequenceLength} {levelId >= 4 ? "actions using D-pad, Honk button, or Pet sensor" : "directions on your controller"}!
+                  </>
+                )}
               </p>
             </div>
 
@@ -515,6 +613,29 @@ export default function EchoMemoryGame({
               <RotateCcw size={18} className="animate-spin" />
               Starting challenge on robot...
             </div>
+          </section>
+        )}
+
+        {/* Phase 0: Mapping Phase (Level 6 Dynamic Mapping) */}
+        {gameState === "mapping" && (
+          <section className="rounded-3xl border border-accent/40 bg-surface-light p-6 text-center shadow-2xl space-y-4">
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-accent uppercase tracking-widest">
+              <BookOpen size={18} className="animate-pulse" />
+              Phase 0: Study Generated Mapping
+            </div>
+
+            <div className="my-3 flex flex-col items-center">
+              <div className="h-20 w-20 rounded-full border-2 border-accent bg-accent/10 flex items-center justify-center text-accent text-4xl font-black animate-pulse shadow-[0_0_30px_rgba(0,229,255,0.4)]">
+                {mappingTimer}s
+              </div>
+              <span className="mt-3 text-xs text-white/50 font-semibold uppercase tracking-wider">
+                Study the mapping · Sequence begins shortly
+              </span>
+            </div>
+
+            <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
+              Each action has been assigned a dynamic color for this game. Memorize the color mapping before the LEDs flash!
+            </p>
           </section>
         )}
 
@@ -581,11 +702,13 @@ export default function EchoMemoryGame({
             {/* Sequence Step Tracker */}
             <div
               className={`grid gap-2 pt-1 ${
-                levelMeta.sequenceLength === 6
-                  ? "grid-cols-6"
-                  : levelMeta.sequenceLength === 5
-                    ? "grid-cols-5"
-                    : "grid-cols-4"
+                levelMeta.sequenceLength === 7
+                  ? "grid-cols-7"
+                  : levelMeta.sequenceLength === 6
+                    ? "grid-cols-6"
+                    : levelMeta.sequenceLength === 5
+                      ? "grid-cols-5"
+                      : "grid-cols-4"
               }`}
             >
               {stepResults.map((step, idx) => {
@@ -633,53 +756,74 @@ export default function EchoMemoryGame({
             )}
 
             {/* Directional Input D-Pad (Colour Quest styled) */}
-            <DPad
-              className="pt-2 pb-2"
-              onDirection={(dir) => handleActionInput(dir)}
-              onCenter={() => handleActionInput("honk")}
-              showCenter={levelId >= 4}
-              centerIcon={<Megaphone size={30} />}
-              centerAriaLabel="Honk (Orange)"
-              centerId="echo-btn-honk"
-              centerStyle={{
-                borderClass: ECHO_MEMORY_MAPPING.honk.borderClass,
-                bgClass: ECHO_MEMORY_MAPPING.honk.bgClass,
-                textClass: ECHO_MEMORY_MAPPING.honk.textClass,
-                glowClass: ECHO_MEMORY_MAPPING.honk.glowClass,
-                label: "HONK",
-              }}
-              directionStyles={{
-                up: {
-                  borderClass: ECHO_MEMORY_MAPPING.up.borderClass,
-                  bgClass: ECHO_MEMORY_MAPPING.up.bgClass,
-                  textClass: ECHO_MEMORY_MAPPING.up.textClass,
-                  glowClass: ECHO_MEMORY_MAPPING.up.glowClass,
-                  label: "RED",
-                },
-                left: {
-                  borderClass: ECHO_MEMORY_MAPPING.left.borderClass,
-                  bgClass: ECHO_MEMORY_MAPPING.left.bgClass,
-                  textClass: ECHO_MEMORY_MAPPING.left.textClass,
-                  glowClass: ECHO_MEMORY_MAPPING.left.glowClass,
-                  label: "BLUE",
-                },
-                right: {
-                  borderClass: ECHO_MEMORY_MAPPING.right.borderClass,
-                  bgClass: ECHO_MEMORY_MAPPING.right.bgClass,
-                  textClass: ECHO_MEMORY_MAPPING.right.textClass,
-                  glowClass: ECHO_MEMORY_MAPPING.right.glowClass,
-                  label: "YEL",
-                },
-                down: {
-                  borderClass: ECHO_MEMORY_MAPPING.down.borderClass,
-                  bgClass: ECHO_MEMORY_MAPPING.down.bgClass,
-                  textClass: ECHO_MEMORY_MAPPING.down.textClass,
-                  glowClass: ECHO_MEMORY_MAPPING.down.glowClass,
-                  label: "GRN",
-                },
-              }}
-              disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-            />
+            {(() => {
+              const isDynamic = levelId === 6 && Boolean(dynamicMapping);
+              const upVisual = isDynamic
+                ? getEchoColorVisual(dynamicMapping?.up)
+                : getEchoColorVisual("red");
+              const rightVisual = isDynamic
+                ? getEchoColorVisual(dynamicMapping?.right)
+                : getEchoColorVisual("yellow");
+              const downVisual = isDynamic
+                ? getEchoColorVisual(dynamicMapping?.down)
+                : getEchoColorVisual("green");
+              const leftVisual = isDynamic
+                ? getEchoColorVisual(dynamicMapping?.left)
+                : getEchoColorVisual("blue");
+              const honkVisual = isDynamic
+                ? getEchoColorVisual(dynamicMapping?.honk)
+                : getEchoColorVisual("white");
+
+              return (
+                <DPad
+                  className="pt-2 pb-2"
+                  onDirection={(dir) => handleActionInput(dir)}
+                  onCenter={() => handleActionInput("honk")}
+                  showCenter={levelId >= 4}
+                  centerIcon={<Megaphone size={30} />}
+                  centerAriaLabel={`Honk (${honkVisual.color})`}
+                  centerId="echo-btn-honk"
+                  centerStyle={{
+                    borderClass: honkVisual.borderClass,
+                    bgClass: honkVisual.bgClass,
+                    textClass: honkVisual.textClass,
+                    glowClass: honkVisual.glowClass,
+                    label: isDynamic ? honkVisual.badgeText : "HONK",
+                  }}
+                  directionStyles={{
+                    up: {
+                      borderClass: upVisual.borderClass,
+                      bgClass: upVisual.bgClass,
+                      textClass: upVisual.textClass,
+                      glowClass: upVisual.glowClass,
+                      label: upVisual.badgeText,
+                    },
+                    left: {
+                      borderClass: leftVisual.borderClass,
+                      bgClass: leftVisual.bgClass,
+                      textClass: leftVisual.textClass,
+                      glowClass: leftVisual.glowClass,
+                      label: leftVisual.badgeText,
+                    },
+                    right: {
+                      borderClass: rightVisual.borderClass,
+                      bgClass: rightVisual.bgClass,
+                      textClass: rightVisual.textClass,
+                      glowClass: rightVisual.glowClass,
+                      label: rightVisual.badgeText,
+                    },
+                    down: {
+                      borderClass: downVisual.borderClass,
+                      bgClass: downVisual.bgClass,
+                      textClass: downVisual.textClass,
+                      glowClass: downVisual.glowClass,
+                      label: downVisual.badgeText,
+                    },
+                  }}
+                  disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                />
+              );
+            })()}
 
             <p className="text-[11px] text-white/40">
               {levelId >= 4

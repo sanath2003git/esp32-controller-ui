@@ -280,7 +280,10 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     if (
       typeof value.level === "number" &&
       typeof value.phase === "string" &&
-      (value.phase === "flash" || value.phase === "wait" || value.phase === "input")
+      (value.phase === "mapping" ||
+        value.phase === "flash" ||
+        value.phase === "wait" ||
+        value.phase === "input")
     ) {
       return value as EchoMemoryPhaseMessage;
     }

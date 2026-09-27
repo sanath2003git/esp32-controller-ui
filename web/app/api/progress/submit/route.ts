@@ -60,9 +60,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (game === "echo-memory" && level > 5) {
+    if (game === "echo-memory" && level > 6) {
       return NextResponse.json(
-        { success: false, error: "Echo Memory level 6 is not implemented yet" },
+        { success: false, error: "Echo Memory levels beyond 6 do not exist" },
         { status: 403 }
       );
     }

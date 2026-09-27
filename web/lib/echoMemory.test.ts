@@ -14,7 +14,7 @@ import {
 
 describe("Echo Memory Domain Logic & Progression", () => {
   describe("6-Level Matrix", () => {
-    test("defines exactly 6 levels with L1-L5 implemented and L6 unimplemented", () => {
+    test("defines exactly 6 levels with L1-L6 fully implemented", () => {
       assert.equal(ECHO_MEMORY_LEVELS.length, 6);
 
       // L1: 4 steps, 3.0s flash, 3.0s wait, Easy
@@ -57,11 +57,11 @@ describe("Echo Memory Domain Logic & Progression", () => {
       assert.equal(ECHO_MEMORY_LEVELS[4].waitDuration, "3.0s");
       assert.equal(ECHO_MEMORY_LEVELS[4].isImplemented, true);
 
-      // L6: 7 steps, 1.5s flash, 3.0s wait, Hard, UNIMPLEMENTED
+      // L6: 7 steps, 1.5s flash, 3.0s wait, Hard, IMPLEMENTED
       assert.equal(ECHO_MEMORY_LEVELS[5].id, 6);
       assert.equal(ECHO_MEMORY_LEVELS[5].difficulty, "Hard");
       assert.equal(ECHO_MEMORY_LEVELS[5].sequenceLength, 7);
-      assert.equal(ECHO_MEMORY_LEVELS[5].isImplemented, false);
+      assert.equal(ECHO_MEMORY_LEVELS[5].isImplemented, true);
     });
   });
 
@@ -72,7 +72,7 @@ describe("Echo Memory Domain Logic & Progression", () => {
       assert.equal(ECHO_MEMORY_MAPPING.left.color, "Blue");
       assert.equal(ECHO_MEMORY_MAPPING.right.color, "Yellow");
       assert.equal(ECHO_MEMORY_MAPPING.pet.color, "Purple");
-      assert.equal(ECHO_MEMORY_MAPPING.honk.color, "Orange");
+      assert.equal(ECHO_MEMORY_MAPPING.honk.color, "White");
     });
   });
 

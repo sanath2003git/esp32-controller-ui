@@ -508,30 +508,32 @@ enum ReflexDashState { RDS_IDLE, RDS_ACTIVE_GO, RDS_ACTIVE_STOP, RDS_FEEDBACK };
 ReflexDashState reflexDashState = RDS_IDLE;
 
 // ========================================
-// ECHO MEMORY GAME ENGINE — LEVELS 1-5
+// ECHO MEMORY GAME ENGINE — LEVELS 1-6
 // ========================================
 // Levels 1-3 use the fixed directional mapping (regions):
 // UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue.
 // Levels 4-5 use the fixed action mapping (full strip):
-// UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue, PET = Purple, HONK = Orange.
+// UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue, PET = Purple, HONK = White.
+// Level 6 uses dynamic 1-to-1 color-to-action mapping across all 6 actions (full strip).
 // Level 1: 4 steps, 3.0s flash interval, 3.0s wait, 4 actions, regional LEDs
 // Level 2: 5 steps, 1.5s flash interval, 3.0s wait, 4 actions, regional LEDs
 // Level 3: 6 steps, 1.5s flash interval, 3.0s wait, 4 actions, regional LEDs
 // Level 4: 5 steps, 3.0s flash interval, 3.0s wait, 6 actions, full strip
 // Level 5: 6 steps, 1.5s flash interval, 3.0s wait, 6 actions, full strip
-// Level 6: remains unimplemented
+// Level 6: 7 steps, 1.5s flash interval, 3.0s wait, 6 actions, full strip, dynamic color mapping
 // The ESP32 owns the sequence, playback timing, input validation and score.
 enum EchoMemoryAction {
-  EMA_UP = 0,     // Red
-  EMA_RIGHT = 1,  // Yellow
-  EMA_DOWN = 2,   // Green
-  EMA_LEFT = 3,   // Blue
-  EMA_PET = 4,    // Purple
-  EMA_HONK = 5    // Orange
+  EMA_UP = 0,     // Red in fixed mapping
+  EMA_RIGHT = 1,  // Yellow in fixed mapping
+  EMA_DOWN = 2,   // Green in fixed mapping
+  EMA_LEFT = 3,   // Blue in fixed mapping
+  EMA_PET = 4,    // Purple in fixed mapping
+  EMA_HONK = 5    // White RGB(255, 255, 255) in fixed mapping
 };
 
 enum EchoMemoryState {
   EMS_IDLE,
+  EMS_MAPPING,
   EMS_FLASHING,
   EMS_WAIT,
   EMS_INPUT,
@@ -546,6 +548,9 @@ uint8_t echoMemorySequenceLength = 4;
 unsigned int echoMemoryFlashInterval = 3000;
 uint8_t echoMemoryActionCount = 4;
 bool echoMemoryFullStrip = false;
+// Dynamic 1-to-1 mapping from action ID (0..5) to color ID (0..5)
+// Color IDs: 0: Red, 1: Yellow, 2: Green, 3: Blue, 4: Purple, 5: White
+uint8_t echoMemoryActionColor[6] = {0, 1, 2, 3, 4, 5};
 const unsigned long ECHO_MEMORY_GAP_MS = 400;
 bool echoMemoryFlashInGap = false;
 uint8_t echoMemoryFlashIndex = 0;
@@ -1136,26 +1141,35 @@ void echoMemoryShowOLED(const char *title, const char *detail = nullptr) {
   display.display();
 }
 
+void echoMemoryPlayHonkSound() {
+  tone(PIN_BUZZER, 440, 70);
+  delay(75);
+  tone(PIN_BUZZER, 580, 90);
+  delay(95);
+  noTone(PIN_BUZZER);
+}
+
 void echoMemoryShowAction(uint8_t action) {
   if (echoMemoryFullStrip) {
-    switch (action) {
-    case EMA_UP:
+    uint8_t colorIdx = echoMemoryActionColor[action];
+    switch (colorIdx) {
+    case 0:
       setStripColor(255, 0, 0);     // Red
       break;
-    case EMA_RIGHT:
+    case 1:
       setStripColor(255, 180, 0);   // Yellow
       break;
-    case EMA_DOWN:
+    case 2:
       setStripColor(0, 255, 0);     // Green
       break;
-    case EMA_LEFT:
+    case 3:
       setStripColor(0, 0, 255);     // Blue
       break;
-    case EMA_PET:
+    case 4:
       setStripColor(150, 0, 255);   // Purple
       break;
-    case EMA_HONK:
-      setStripColor(255, 120, 0);   // Orange
+    case 5:
+      setStripColor(255, 255, 255); // White RGB(255, 255, 255)
       break;
     default:
       return;
@@ -1261,13 +1275,14 @@ void echoMemoryFinishLevel() {
 }
 
 void echoMemoryStartLevel(int level) {
-  if (level < 1 || level > 5) {
-    sendError("Echo Memory levels 1-5 are supported");
+  if (level < 1 || level > 6) {
+    sendError("Echo Memory levels 1-6 are supported");
     return;
   }
 
   currentGame = GAME_ECHO_MEMORY;
   echoMemoryLevel = level;
+  echoMemoryStopOutputs();
   if (level == 1) {
     echoMemorySequenceLength = 4;
     echoMemoryFlashInterval = 3000;
@@ -1293,9 +1308,28 @@ void echoMemoryStartLevel(int level) {
     echoMemoryFlashInterval = 1500;
     echoMemoryActionCount = 6;
     echoMemoryFullStrip = true;
+  } else if (level == 6) {
+    echoMemorySequenceLength = 7;
+    echoMemoryFlashInterval = 1500;
+    echoMemoryActionCount = 6;
+    echoMemoryFullStrip = true;
   }
 
-  echoMemoryState = EMS_FLASHING;
+  // Setup color mapping:
+  // L1-L5: fixed identity mapping (UP=Red, RIGHT=Yellow, DOWN=Green, LEFT=Blue, PET=Purple, HONK=White)
+  // L6: dynamic 1-to-1 bijection (Fisher-Yates shuffle across the 6 colors)
+  for (uint8_t i = 0; i < 6; i++) {
+    echoMemoryActionColor[i] = i;
+  }
+  if (level == 6) {
+    for (uint8_t i = 5; i > 0; i--) {
+      uint8_t j = random(0, i + 1);
+      uint8_t tmp = echoMemoryActionColor[i];
+      echoMemoryActionColor[i] = echoMemoryActionColor[j];
+      echoMemoryActionColor[j] = tmp;
+    }
+  }
+
   echoMemoryFlashIndex = 0;
   echoMemoryFlashInGap = false;
   echoMemoryInputIndex = 0;
@@ -1306,21 +1340,46 @@ void echoMemoryStartLevel(int level) {
     echoMemorySequence[i] = random(0, echoMemoryActionCount);
   }
 
-  char oledTitle[16];
-  snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
-  echoMemoryShowOLED(oledTitle, "Watch carefully");
+  if (level == 6) {
+    echoMemoryState = EMS_MAPPING;
+    echoMemoryPhaseUntil = millis() + 5000;
 
-  echoMemoryShowAction(echoMemorySequence[0]);
-  echoMemoryPhaseUntil = millis() + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
+    char oledTitle[16];
+    snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
+    echoMemoryShowOLED(oledTitle, "Study mapping");
 
-  JsonDocument phase;
-  phase["type"] = "phase";
-  phase["game"] = "echo-memory";
-  phase["level"] = echoMemoryLevel;
-  phase["phase"] = "flash";
-  phase["index"] = 0;
-  phase["length"] = echoMemorySequenceLength;
-  sendJson(phase);
+    JsonDocument phase;
+    phase["type"] = "phase";
+    phase["game"] = "echo-memory";
+    phase["level"] = echoMemoryLevel;
+    phase["phase"] = "mapping";
+    phase["durationMs"] = 5000;
+    const char *colNames[6] = {"red", "yellow", "green", "blue", "purple", "white"};
+    const char *actNames[6] = {"up", "right", "down", "left", "pet", "honk"};
+    JsonObject mObj = phase["mapping"].to<JsonObject>();
+    for (uint8_t a = 0; a < 6; a++) {
+      mObj[actNames[a]] = colNames[echoMemoryActionColor[a]];
+    }
+    sendJson(phase);
+  } else {
+    echoMemoryState = EMS_FLASHING;
+
+    char oledTitle[16];
+    snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
+    echoMemoryShowOLED(oledTitle, "Watch carefully");
+
+    echoMemoryShowAction(echoMemorySequence[0]);
+    echoMemoryPhaseUntil = millis() + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
+
+    JsonDocument phase;
+    phase["type"] = "phase";
+    phase["game"] = "echo-memory";
+    phase["level"] = echoMemoryLevel;
+    phase["phase"] = "flash";
+    phase["index"] = 0;
+    phase["length"] = echoMemorySequenceLength;
+    sendJson(phase);
+  }
 }
 
 void echoMemoryAnswerAction(int action) {
@@ -1330,6 +1389,11 @@ void echoMemoryAnswerAction(int action) {
     return;
   if ((long)(millis() - echoMemoryFeedbackUntil) < 0)
     return;
+
+  // When HONK action is received, play short distinct horn sound first
+  if (action == EMA_HONK) {
+    echoMemoryPlayHonkSound();
+  }
 
   bool correct = (action == echoMemorySequence[echoMemoryInputIndex]);
 
@@ -1356,10 +1420,10 @@ void echoMemoryAnswerAction(int action) {
   echoMemoryFeedbackUntil = millis() + 300;
 
   if (echoMemoryInputIndex >= echoMemorySequenceLength) {
-  // Keep the correct/incorrect feedback visible briefly
-  delay(300);
-  echoMemoryFinishLevel();
-}
+    // Keep the correct/incorrect feedback visible briefly
+    delay(300);
+    echoMemoryFinishLevel();
+  }
 }
 
 void echoMemoryAnswerDirection(int direction) {
@@ -1438,7 +1502,29 @@ void echoMemoryAbort() {
 void updateEchoMemory() {
   unsigned long now = millis();
 
-  if (echoMemoryState == EMS_FLASHING) {
+  if (echoMemoryState == EMS_MAPPING) {
+    if ((long)(now - echoMemoryPhaseUntil) >= 0) {
+      echoMemoryState = EMS_FLASHING;
+      echoMemoryFlashIndex = 0;
+      echoMemoryFlashInGap = false;
+
+      char oledTitle[16];
+      snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
+      echoMemoryShowOLED(oledTitle, "Watch carefully");
+
+      echoMemoryShowAction(echoMemorySequence[0]);
+      echoMemoryPhaseUntil = now + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
+
+      JsonDocument phase;
+      phase["type"] = "phase";
+      phase["game"] = "echo-memory";
+      phase["level"] = echoMemoryLevel;
+      phase["phase"] = "flash";
+      phase["index"] = 0;
+      phase["length"] = echoMemorySequenceLength;
+      sendJson(phase);
+    }
+  } else if (echoMemoryState == EMS_FLASHING) {
     if ((long)(now - echoMemoryPhaseUntil) >= 0) {
       if (!echoMemoryFlashInGap) {
         // Step LED ON finished -> enter OFF gap so repeated directions are visually distinct

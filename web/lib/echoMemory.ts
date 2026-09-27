@@ -73,23 +73,23 @@ export const ECHO_MEMORY_LEVELS: EchoMemoryLevelMeta[] = [
   {
     id: 6,
     title: "Level 6",
-    description: "Coming soon. Dynamic mapping boss level.",
+    description: "Hard tier: 7-step sequence with dynamic color-to-action mapping across all 6 actions!",
     difficulty: "Hard",
     sequenceLength: 7,
     flashDuration: "1.5s",
     waitDuration: "3.0s",
-    isImplemented: false,
+    isImplemented: true,
   },
 ];
 
 /**
- * Fixed colour-to-action mapping for Echo Memory:
+ * Fixed colour-to-action mapping for Echo Memory (L1-L5):
  * UP    = RED
  * RIGHT = YELLOW
  * DOWN  = GREEN
  * LEFT  = BLUE
  * PET   = PURPLE (Robot Touch Sensor)
- * HONK  = ORANGE (Center Controller Button)
+ * HONK  = WHITE (Center Controller Button)
  */
 export const ECHO_MEMORY_MAPPING: Record<
   EchoMemoryAction,
@@ -136,7 +136,7 @@ export const ECHO_MEMORY_MAPPING: Record<
     bgClass: "bg-emerald-500/20 hover:bg-emerald-500/30",
     textClass: "text-emerald-400",
     borderClass: "border-emerald-500/40",
-    glowClass: "shadow-[0_0_20px_rgba(16,185,129,0.35)]",
+    glowClass: "shadow-[0_0_20px_rgba(160,185,129,0.35)]",
   },
   left: {
     action: "left",
@@ -162,14 +162,94 @@ export const ECHO_MEMORY_MAPPING: Record<
   honk: {
     action: "honk",
     label: "HONK",
-    color: "Orange",
-    hex: "#F97316",
-    bgClass: "bg-orange-500/20 hover:bg-orange-500/30",
-    textClass: "text-orange-400",
-    borderClass: "border-orange-500/40",
-    glowClass: "shadow-[0_0_20px_rgba(249,115,22,0.35)]",
+    color: "White",
+    hex: "#FFFFFF",
+    bgClass: "bg-white/20 hover:bg-white/30",
+    textClass: "text-white",
+    borderClass: "border-white/40",
+    glowClass: "shadow-[0_0_20px_rgba(255,255,255,0.35)]",
   },
 };
+
+export type EchoColorVisual = {
+  name: string;
+  color: string;
+  hex: string;
+  bgClass: string;
+  textClass: string;
+  borderClass: string;
+  glowClass: string;
+  badgeText: string;
+};
+
+export const ECHO_COLOR_PALETTE: Record<string, EchoColorVisual> = {
+  red: {
+    name: "red",
+    color: "Red",
+    hex: "#EF4444",
+    bgClass: "bg-red-500/20 hover:bg-red-500/30",
+    textClass: "text-red-400",
+    borderClass: "border-red-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(239,68,68,0.35)]",
+    badgeText: "RED",
+  },
+  yellow: {
+    name: "yellow",
+    color: "Yellow",
+    hex: "#EAB308",
+    bgClass: "bg-yellow-500/20 hover:bg-yellow-500/30",
+    textClass: "text-yellow-400",
+    borderClass: "border-yellow-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(234,179,8,0.35)]",
+    badgeText: "YEL",
+  },
+  green: {
+    name: "green",
+    color: "Green",
+    hex: "#10B981",
+    bgClass: "bg-emerald-500/20 hover:bg-emerald-500/30",
+    textClass: "text-emerald-400",
+    borderClass: "border-emerald-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(16,185,129,0.35)]",
+    badgeText: "GRN",
+  },
+  blue: {
+    name: "blue",
+    color: "Blue",
+    hex: "#3B82F6",
+    bgClass: "bg-blue-500/20 hover:bg-blue-500/30",
+    textClass: "text-blue-400",
+    borderClass: "border-blue-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(59,130,246,0.35)]",
+    badgeText: "BLU",
+  },
+  purple: {
+    name: "purple",
+    color: "Purple",
+    hex: "#A855F7",
+    bgClass: "bg-purple-500/20 hover:bg-purple-500/30",
+    textClass: "text-purple-400",
+    borderClass: "border-purple-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(168,85,247,0.35)]",
+    badgeText: "PUR",
+  },
+  white: {
+    name: "white",
+    color: "White",
+    hex: "#FFFFFF",
+    bgClass: "bg-white/20 hover:bg-white/30",
+    textClass: "text-white",
+    borderClass: "border-white/40",
+    glowClass: "shadow-[0_0_20px_rgba(255,255,255,0.35)]",
+    badgeText: "WHT",
+  },
+};
+
+export function getEchoColorVisual(colorName?: string): EchoColorVisual {
+  if (!colorName) return ECHO_COLOR_PALETTE.red;
+  const key = colorName.toLowerCase().trim();
+  return ECHO_COLOR_PALETTE[key] || ECHO_COLOR_PALETTE.red;
+}
 
 export function getEchoMemoryLevel(id: number): EchoMemoryLevelMeta | undefined {
   return ECHO_MEMORY_LEVELS.find((l) => l.id === id);

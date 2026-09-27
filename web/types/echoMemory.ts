@@ -8,7 +8,7 @@ export type EchoMemoryColor =
   | "green"
   | "blue"
   | "purple"
-  | "orange";
+  | "white";
 
 export type EchoMemoryStartCommand = {
   command: "challenge";
@@ -32,7 +32,7 @@ export type EchoMemoryCommand =
   | EchoMemoryInputCommand
   | EchoMemoryAbortCommand;
 
-export type EchoMemoryPhaseType = "flash" | "wait" | "input";
+export type EchoMemoryPhaseType = "mapping" | "flash" | "wait" | "input";
 
 export type EchoMemoryPhaseMessage = {
   type: "phase";
@@ -42,6 +42,7 @@ export type EchoMemoryPhaseMessage = {
   index?: number;
   length?: number;
   durationMs?: number;
+  mapping?: Record<EchoMemoryAction, string>;
 };
 
 export type EchoMemoryInputResultMessage = {
@@ -78,6 +79,7 @@ export type EchoMemoryMessage =
 export type EchoMemoryGameState =
   | "idle"
   | "starting"
+  | "mapping"
   | "flashing"
   | "waiting"
   | "input"
