@@ -138,7 +138,9 @@ export default function EchoMemoryGame({
     if (lastMessage.type === "phase" && lastMessage.game === "echo-memory") {
       if (lastMessage.phase === "mapping") {
         clearTimers();
-        const duration = Math.max(1, Math.round(((lastMessage as EchoMemoryPhaseMessage).durationMs ?? 5000) / 1000));
+        const phaseMsg = lastMessage as EchoMemoryPhaseMessage;
+        const duration = Math.max(1, Math.round((phaseMsg.durationMs ?? 5000) / 1000));
+        const mappingObj = phaseMsg.mapping;
         setTimeout(() => {
           if (mappingObj) {
             setDynamicMapping(mappingObj as Record<string, string>);
