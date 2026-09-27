@@ -1,6 +1,7 @@
 import type { LevelDifficulty } from "@/data/levels";
 import type {
   EchoMemoryAbortCommand,
+  EchoMemoryAction,
   EchoMemoryDirection,
   EchoMemoryInputCommand,
   EchoMemoryResultMessage,
@@ -52,22 +53,22 @@ export const ECHO_MEMORY_LEVELS: EchoMemoryLevelMeta[] = [
   {
     id: 4,
     title: "Level 4",
-    description: "Coming soon. Physical action memory.",
+    description: "Medium tier: 5-step sequence with physical actions (Pet & Honk). The entire LED strip flashes!",
     difficulty: "Medium",
     sequenceLength: 5,
     flashDuration: "3.0s",
     waitDuration: "3.0s",
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     id: 5,
     title: "Level 5",
-    description: "Coming soon. Fast expanded actions.",
+    description: "Medium tier challenge: 6-step fast sequence with all actions across the entire strip!",
     difficulty: "Medium",
     sequenceLength: 6,
     flashDuration: "1.5s",
     waitDuration: "3.0s",
-    isImplemented: false,
+    isImplemented: true,
   },
   {
     id: 6,
@@ -82,16 +83,19 @@ export const ECHO_MEMORY_LEVELS: EchoMemoryLevelMeta[] = [
 ];
 
 /**
- * Fixed colour-to-direction mapping for Echo Memory Levels 1–3:
+ * Fixed colour-to-action mapping for Echo Memory:
  * UP    = RED
  * RIGHT = YELLOW
  * DOWN  = GREEN
  * LEFT  = BLUE
+ * PET   = PURPLE (Robot Touch Sensor)
+ * HONK  = ORANGE (Center Controller Button)
  */
 export const ECHO_MEMORY_MAPPING: Record<
-  EchoMemoryDirection,
+  EchoMemoryAction,
   {
-    direction: EchoMemoryDirection;
+    action: EchoMemoryAction;
+    direction?: EchoMemoryDirection;
     label: string;
     color: string;
     hex: string;
@@ -102,6 +106,7 @@ export const ECHO_MEMORY_MAPPING: Record<
   }
 > = {
   up: {
+    action: "up",
     direction: "up",
     label: "UP",
     color: "Red",
@@ -112,6 +117,7 @@ export const ECHO_MEMORY_MAPPING: Record<
     glowClass: "shadow-[0_0_20px_rgba(239,68,68,0.35)]",
   },
   right: {
+    action: "right",
     direction: "right",
     label: "RIGHT",
     color: "Yellow",
@@ -122,6 +128,7 @@ export const ECHO_MEMORY_MAPPING: Record<
     glowClass: "shadow-[0_0_20px_rgba(234,179,8,0.35)]",
   },
   down: {
+    action: "down",
     direction: "down",
     label: "DOWN",
     color: "Green",
@@ -132,6 +139,7 @@ export const ECHO_MEMORY_MAPPING: Record<
     glowClass: "shadow-[0_0_20px_rgba(16,185,129,0.35)]",
   },
   left: {
+    action: "left",
     direction: "left",
     label: "LEFT",
     color: "Blue",
@@ -140,6 +148,26 @@ export const ECHO_MEMORY_MAPPING: Record<
     textClass: "text-blue-400",
     borderClass: "border-blue-500/40",
     glowClass: "shadow-[0_0_20px_rgba(59,130,246,0.35)]",
+  },
+  pet: {
+    action: "pet",
+    label: "PET",
+    color: "Purple",
+    hex: "#A855F7",
+    bgClass: "bg-purple-500/20 hover:bg-purple-500/30",
+    textClass: "text-purple-400",
+    borderClass: "border-purple-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(168,85,247,0.35)]",
+  },
+  honk: {
+    action: "honk",
+    label: "HONK",
+    color: "Orange",
+    hex: "#F97316",
+    bgClass: "bg-orange-500/20 hover:bg-orange-500/30",
+    textClass: "text-orange-400",
+    borderClass: "border-orange-500/40",
+    glowClass: "shadow-[0_0_20px_rgba(249,115,22,0.35)]",
   },
 };
 
@@ -150,16 +178,18 @@ export function getEchoMemoryLevel(id: number): EchoMemoryLevelMeta | undefined 
 /**
  * Unlocking rules for Echo Memory:
  * Level 1 is always unlocked.
- * Level 2 unlocks after completing Level 1 (stars = 3).
- * Level 3 unlocks after completing Level 2 (stars = 3).
- * Levels 4-6 remain strictly locked and not implemented.
+ * Level 2 unlocks after completing Level 1 (stars >= 3).
+ * Level 3 unlocks after completing Level 2 (stars >= 3).
+ * Level 4 unlocks after completing Level 3 (stars >= 3).
+ * Level 5 unlocks after completing Level 4 (stars >= 3).
+ * Level 6 unlocks after completing Level 5 (stars >= 3).
  */
 export function isEchoMemoryLevelUnlocked(
   levelId: number,
   progressMap?: Record<number, { stars: number }>
 ): boolean {
   if (levelId === 1) return true;
-  if (levelId < 1 || levelId > 3) return false;
+  if (levelId < 1 || levelId > 6) return false;
   if (!progressMap) return false;
   const prev = progressMap[levelId - 1];
   return Boolean(prev && prev.stars >= 3);
@@ -187,11 +217,12 @@ export function createEchoMemoryStartCommand(level = 1): EchoMemoryStartCommand 
   };
 }
 
-export function createEchoMemoryInputCommand(dir: EchoMemoryDirection): EchoMemoryInputCommand {
+export function createEchoMemoryInputCommand(action: EchoMemoryAction): EchoMemoryInputCommand {
   return {
     command: "input",
     game: "echo-memory",
-    dir,
+    action,
+    dir: action,
   };
 }
 

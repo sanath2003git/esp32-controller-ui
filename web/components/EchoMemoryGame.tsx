@@ -17,9 +17,11 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
+  Megaphone,
 } from "lucide-react";
 import SubPageHeader from "@/components/SubPageHeader";
 import ResultModal from "@/components/ResultModal";
+import DPad, { type DPadButtonCustomStyle, type DPadDirection } from "@/components/DPad";
 import { useBleContext } from "@/context/BleContext";
 import {
   ECHO_MEMORY_MAPPING,
@@ -31,6 +33,7 @@ import {
 } from "@/lib/echoMemory";
 import { submitAndPersistLevelResult } from "@/lib/progressStore";
 import type {
+  EchoMemoryAction,
   EchoMemoryDirection,
   EchoMemoryGameState,
   EchoMemoryResultMessage,
@@ -39,7 +42,7 @@ import type {
 type StepResult = {
   answered: boolean;
   correct?: boolean;
-  direction?: EchoMemoryDirection;
+  action?: EchoMemoryAction;
 };
 
 export default function EchoMemoryGame({
@@ -249,7 +252,7 @@ export default function EchoMemoryGame({
     }
 
     if (!isImplemented) {
-      setErrorMessage("Only Levels 1 to 3 are currently implemented.");
+      setErrorMessage("Echo Memory Levels 1 to 5 are currently implemented.");
       return;
     }
 
@@ -273,8 +276,8 @@ export default function EchoMemoryGame({
     }
   };
 
-  // Submit Directional Input
-  const handleDirectionInput = async (dir: EchoMemoryDirection) => {
+  // Submit Action Input (Up, Down, Left, Right, Honk)
+  const handleActionInput = async (action: EchoMemoryAction) => {
     if (gameState !== "input" || isSubmittingInput || inputStep >= levelMeta.sequenceLength) {
       return;
     }
@@ -291,12 +294,12 @@ export default function EchoMemoryGame({
       setStepResults((prev) => {
         const next = [...prev];
         if (next[inputStep]) {
-          next[inputStep] = { ...next[inputStep], direction: dir };
+          next[inputStep] = { ...next[inputStep], action };
         }
         return next;
       });
 
-      await send(createEchoMemoryInputCommand(dir));
+      await send(createEchoMemoryInputCommand(action));
 
       // Watchdog in case firmware misses reply
       if (inputWatchdogRef.current) clearTimeout(inputWatchdogRef.current);
@@ -333,7 +336,7 @@ export default function EchoMemoryGame({
     void handleStartGame();
   };
 
-  // If level > 1 (Levels 2-6 not implemented)
+  // If level > 5 (Level 6 not implemented yet)
   if (!isImplemented) {
     return (
       <main className="min-h-screen pb-16">
@@ -358,7 +361,7 @@ export default function EchoMemoryGame({
             </h2>
 
             <p className="mt-2 text-sm leading-6 text-white/50">
-              Echo Memory Levels 1–3 are currently supported. Higher tiers will unlock in upcoming robot updates.
+              Echo Memory Levels 1–5 are currently supported. Level 6 will unlock in an upcoming robot update.
             </p>
 
             <button
@@ -366,7 +369,7 @@ export default function EchoMemoryGame({
               onClick={() => router.push("/playground/echo-memory/challenges/1")}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-4 py-3.5 text-sm font-bold text-black transition hover:bg-primary/90 active:scale-[0.98]"
             >
-              Play Level 1 Now
+              Back to Level 1
             </button>
           </section>
         </div>
@@ -403,21 +406,36 @@ export default function EchoMemoryGame({
           </div>
         </section>
 
-        {/* Fixed Colour-to-Direction Mapping Reference */}
+        {/* Fixed Colour-to-Direction / Action Mapping Reference */}
         <section className="rounded-3xl border border-white/10 bg-surface p-5 shadow-lg">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold uppercase tracking-wider text-white/40">
-              Fixed Color Mapping
+              {levelId >= 4 ? "Fixed Color-to-Action Mapping" : "Fixed Color Mapping"}
             </span>
             <span className="text-[11px] text-accent font-semibold">
-              Study the directions
+              {levelId >= 4 ? "Study the 6 actions" : "Study the directions"}
             </span>
           </div>
 
           <div className="grid grid-cols-2 gap-2.5">
-            {Object.values(ECHO_MEMORY_MAPPING).map((item) => (
+            {(levelId >= 4
+              ? [
+                  ECHO_MEMORY_MAPPING.up,
+                  ECHO_MEMORY_MAPPING.down,
+                  ECHO_MEMORY_MAPPING.left,
+                  ECHO_MEMORY_MAPPING.right,
+                  ECHO_MEMORY_MAPPING.pet,
+                  ECHO_MEMORY_MAPPING.honk,
+                ]
+              : [
+                  ECHO_MEMORY_MAPPING.up,
+                  ECHO_MEMORY_MAPPING.down,
+                  ECHO_MEMORY_MAPPING.left,
+                  ECHO_MEMORY_MAPPING.right,
+                ]
+            ).map((item) => (
               <div
-                key={item.direction}
+                key={item.action}
                 className={`flex items-center gap-3 rounded-2xl border p-3 ${item.borderClass} bg-black/20`}
               >
                 <div
@@ -425,8 +443,14 @@ export default function EchoMemoryGame({
                   style={{ backgroundColor: item.hex, color: item.hex }}
                 />
                 <div className="flex flex-col text-left">
-                  <span className="text-xs font-black uppercase text-white">
+                  <span className="text-xs font-black uppercase text-white flex items-center gap-1">
                     {item.label}
+                    {item.action === "pet" && (
+                      <span className="text-[9px] font-normal text-purple-300 opacity-80">(Touch)</span>
+                    )}
+                    {item.action === "honk" && (
+                      <span className="text-[9px] font-normal text-orange-300 opacity-80">(Center)</span>
+                    )}
                   </span>
                   <span className={`text-[11px] font-semibold ${item.textClass}`}>
                     {item.color}
@@ -435,6 +459,11 @@ export default function EchoMemoryGame({
               </div>
             ))}
           </div>
+          {levelId >= 4 && (
+            <p className="mt-3 text-[11px] text-white/50 leading-relaxed border-t border-white/5 pt-2">
+              Note: <span className="text-purple-300 font-bold">PET</span> is performed by physically touching the robot&apos;s touch sensor. <span className="text-orange-300 font-bold">HONK</span> is the center button on the controller.
+            </p>
+          )}
         </section>
 
         {/* Error notification */}
@@ -454,9 +483,9 @@ export default function EchoMemoryGame({
             <div className="flex flex-col items-center">
               <span className="text-lg font-bold text-white">Ready to begin?</span>
               <p className="mt-1 text-xs leading-5 text-white/60">
-                1. Watch your robot flash {levelMeta.sequenceLength} lights one by one.<br />
+                1. Watch your robot flash {levelMeta.sequenceLength} {levelId >= 4 ? "colors across the full strip" : "lights"} one by one.<br />
                 2. Wait 3 seconds for the signal.<br />
-                3. Echo the {levelMeta.sequenceLength} directions on your controller!
+                3. Echo the {levelMeta.sequenceLength} {levelId >= 4 ? "actions using D-pad, Honk button, or Pet sensor" : "directions on your controller"}!
               </p>
             </div>
 
@@ -507,7 +536,9 @@ export default function EchoMemoryGame({
             </div>
 
             <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
-              Look closely at the robot&apos;s physical LED strip. Remember each directional colour in order!
+              {levelId >= 4
+                ? "Look closely at the robot's entire LED strip. Remember each action colour in order!"
+                : "Look closely at the robot's physical LED strip. Remember each directional colour in order!"}
             </p>
           </section>
         )}
@@ -601,76 +632,59 @@ export default function EchoMemoryGame({
               </div>
             )}
 
-            {/* Directional Input D-Pad */}
-            <div className="mx-auto pt-2 pb-2 grid max-w-[210px] grid-cols-3 gap-2.5">
-              <div />
-              {/* UP - RED */}
-              <button
-                type="button"
-                id="echo-btn-up"
-                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-                onClick={() => handleDirectionInput("up")}
-                className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.up.borderClass} ${ECHO_MEMORY_MAPPING.up.bgClass} ${ECHO_MEMORY_MAPPING.up.textClass} ${ECHO_MEMORY_MAPPING.up.glowClass}`}
-                aria-label="Input Up (Red)"
-              >
-                <ArrowUp size={28} />
-                <span className="text-[10px] font-black uppercase mt-0.5">RED</span>
-              </button>
-              <div />
-
-              {/* LEFT - BLUE */}
-              <button
-                type="button"
-                id="echo-btn-left"
-                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-                onClick={() => handleDirectionInput("left")}
-                className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.left.borderClass} ${ECHO_MEMORY_MAPPING.left.bgClass} ${ECHO_MEMORY_MAPPING.left.textClass} ${ECHO_MEMORY_MAPPING.left.glowClass}`}
-                aria-label="Input Left (Blue)"
-              >
-                <ArrowLeft size={28} />
-                <span className="text-[10px] font-black uppercase mt-0.5">BLUE</span>
-              </button>
-
-              {/* Center Guide / Indicator */}
-              <div className="flex aspect-square items-center justify-center rounded-2xl border border-white/5 bg-black/30 text-white/30 text-xs font-black">
-                {isSubmittingInput ? (
-                  <RotateCcw size={16} className="animate-spin text-accent" />
-                ) : (
-                  <span>L{levelMeta.id}</span>
-                )}
-              </div>
-
-              {/* RIGHT - YELLOW */}
-              <button
-                type="button"
-                id="echo-btn-right"
-                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-                onClick={() => handleDirectionInput("right")}
-                className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.right.borderClass} ${ECHO_MEMORY_MAPPING.right.bgClass} ${ECHO_MEMORY_MAPPING.right.textClass} ${ECHO_MEMORY_MAPPING.right.glowClass}`}
-                aria-label="Input Right (Yellow)"
-              >
-                <ArrowRight size={28} />
-                <span className="text-[10px] font-black uppercase mt-0.5">YEL</span>
-              </button>
-
-              <div />
-              {/* DOWN - GREEN */}
-              <button
-                type="button"
-                id="echo-btn-down"
-                disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-                onClick={() => handleDirectionInput("down")}
-                className={`flex aspect-square flex-col items-center justify-center rounded-2xl border transition-all active:scale-95 ${ECHO_MEMORY_MAPPING.down.borderClass} ${ECHO_MEMORY_MAPPING.down.bgClass} ${ECHO_MEMORY_MAPPING.down.textClass} ${ECHO_MEMORY_MAPPING.down.glowClass}`}
-                aria-label="Input Down (Green)"
-              >
-                <ArrowDown size={28} />
-                <span className="text-[10px] font-black uppercase mt-0.5">GRN</span>
-              </button>
-              <div />
-            </div>
+            {/* Directional Input D-Pad (Colour Quest styled) */}
+            <DPad
+              className="pt-2 pb-2"
+              onDirection={(dir) => handleActionInput(dir)}
+              onCenter={() => handleActionInput("honk")}
+              showCenter={levelId >= 4}
+              centerIcon={<Megaphone size={30} />}
+              centerAriaLabel="Honk (Orange)"
+              centerId="echo-btn-honk"
+              centerStyle={{
+                borderClass: ECHO_MEMORY_MAPPING.honk.borderClass,
+                bgClass: ECHO_MEMORY_MAPPING.honk.bgClass,
+                textClass: ECHO_MEMORY_MAPPING.honk.textClass,
+                glowClass: ECHO_MEMORY_MAPPING.honk.glowClass,
+                label: "HONK",
+              }}
+              directionStyles={{
+                up: {
+                  borderClass: ECHO_MEMORY_MAPPING.up.borderClass,
+                  bgClass: ECHO_MEMORY_MAPPING.up.bgClass,
+                  textClass: ECHO_MEMORY_MAPPING.up.textClass,
+                  glowClass: ECHO_MEMORY_MAPPING.up.glowClass,
+                  label: "RED",
+                },
+                left: {
+                  borderClass: ECHO_MEMORY_MAPPING.left.borderClass,
+                  bgClass: ECHO_MEMORY_MAPPING.left.bgClass,
+                  textClass: ECHO_MEMORY_MAPPING.left.textClass,
+                  glowClass: ECHO_MEMORY_MAPPING.left.glowClass,
+                  label: "BLUE",
+                },
+                right: {
+                  borderClass: ECHO_MEMORY_MAPPING.right.borderClass,
+                  bgClass: ECHO_MEMORY_MAPPING.right.bgClass,
+                  textClass: ECHO_MEMORY_MAPPING.right.textClass,
+                  glowClass: ECHO_MEMORY_MAPPING.right.glowClass,
+                  label: "YEL",
+                },
+                down: {
+                  borderClass: ECHO_MEMORY_MAPPING.down.borderClass,
+                  bgClass: ECHO_MEMORY_MAPPING.down.bgClass,
+                  textClass: ECHO_MEMORY_MAPPING.down.textClass,
+                  glowClass: ECHO_MEMORY_MAPPING.down.glowClass,
+                  label: "GRN",
+                },
+              }}
+              disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+            />
 
             <p className="text-[11px] text-white/40">
-              Tap the color button matching each step. Mistakes will not stop the game!
+              {levelId >= 4
+                ? "Tap matching arrow/honk button, or touch robot sensor to Pet. Mistakes will not stop the game!"
+                : "Tap the color button matching each step. Mistakes will not stop the game!"}
             </p>
           </section>
         )}
@@ -693,8 +707,8 @@ export default function EchoMemoryGame({
           score={currentResult.score}
           stars={currentResult.stars}
           bestScore={currentResult.score}
-          hasNextLevel={levelId < 3}
-          isNextUnlocked={levelId < 3 && currentResult.stars >= 1}
+          hasNextLevel={levelId < 6}
+          isNextUnlocked={levelId < 6 && currentResult.stars >= 3}
           onReplay={handleReplay}
           onNextLevel={() => {
             setIsModalOpen(false);

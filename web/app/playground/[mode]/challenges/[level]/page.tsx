@@ -9,6 +9,7 @@ import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import ReflexDashGame from "@/components/ReflexDashGame";
 import EchoMemoryGame from "@/components/EchoMemoryGame";
+import DPad, { type DPadDirection } from "@/components/DPad";
 import { getReflexDashLevel } from "@/lib/reflexDash";
 import { getEchoMemoryLevel } from "@/lib/echoMemory";
 import {
@@ -496,47 +497,18 @@ export default function ChallengeLevelPage() {
             )}
 
             {/* Region Selection Buttons (D-Pad Layout) */}
-            <div className="mx-auto mt-6 grid max-w-[200px] grid-cols-3 gap-2">
-              <div />
-              <button
-                type="button"
-                onClick={() => handleRegionAnswer("front")}
-                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                aria-label="Front (Top)"
-              >
-                <ArrowUp size={32} />
-              </button>
-              <div />
-
-              <button
-                type="button"
-                onClick={() => handleRegionAnswer("left")}
-                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                aria-label="Left"
-              >
-                <ArrowLeft size={32} />
-              </button>
-              <div />
-              <button
-                type="button"
-                onClick={() => handleRegionAnswer("right")}
-                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                aria-label="Right"
-              >
-                <ArrowRight size={32} />
-              </button>
-
-              <div />
-              <button
-                type="button"
-                onClick={() => handleRegionAnswer("back")}
-                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                aria-label="Back (Bottom)"
-              >
-                <ArrowDown size={32} />
-              </button>
-              <div />
-            </div>
+            <DPad
+              className="mt-6"
+              onDirection={(dir) => {
+                const map: Record<DPadDirection, ColorQuestRegion> = {
+                  up: "front",
+                  left: "left",
+                  right: "right",
+                  down: "back",
+                };
+                handleRegionAnswer(map[dir]);
+              }}
+            />
           </section>
         )}
 

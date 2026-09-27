@@ -1,6 +1,14 @@
 export type EchoMemoryDirection = "up" | "right" | "down" | "left";
 
-export type EchoMemoryColor = "red" | "yellow" | "green" | "blue";
+export type EchoMemoryAction = EchoMemoryDirection | "pet" | "honk";
+
+export type EchoMemoryColor =
+  | "red"
+  | "yellow"
+  | "green"
+  | "blue"
+  | "purple"
+  | "orange";
 
 export type EchoMemoryStartCommand = {
   command: "challenge";
@@ -11,7 +19,8 @@ export type EchoMemoryStartCommand = {
 export type EchoMemoryInputCommand = {
   command: "input";
   game?: "echo-memory";
-  dir: EchoMemoryDirection;
+  action?: EchoMemoryAction;
+  dir?: EchoMemoryAction;
 };
 
 export type EchoMemoryAbortCommand = {

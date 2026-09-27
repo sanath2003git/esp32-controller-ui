@@ -508,14 +508,28 @@ enum ReflexDashState { RDS_IDLE, RDS_ACTIVE_GO, RDS_ACTIVE_STOP, RDS_FEEDBACK };
 ReflexDashState reflexDashState = RDS_IDLE;
 
 // ========================================
-// ECHO MEMORY GAME ENGINE — LEVELS 1, 2, 3
+// ECHO MEMORY GAME ENGINE — LEVELS 1-5
 // ========================================
-// Levels 1-3 use the fixed directional mapping:
+// Levels 1-3 use the fixed directional mapping (regions):
 // UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue.
-// Level 1: 4 steps, 3.0s flash interval, 3.0s wait
-// Level 2: 5 steps, 1.5s flash interval, 3.0s wait
-// Level 3: 6 steps, 1.5s flash interval, 3.0s wait
+// Levels 4-5 use the fixed action mapping (full strip):
+// UP = Red, RIGHT = Yellow, DOWN = Green, LEFT = Blue, PET = Purple, HONK = Orange.
+// Level 1: 4 steps, 3.0s flash interval, 3.0s wait, 4 actions, regional LEDs
+// Level 2: 5 steps, 1.5s flash interval, 3.0s wait, 4 actions, regional LEDs
+// Level 3: 6 steps, 1.5s flash interval, 3.0s wait, 4 actions, regional LEDs
+// Level 4: 5 steps, 3.0s flash interval, 3.0s wait, 6 actions, full strip
+// Level 5: 6 steps, 1.5s flash interval, 3.0s wait, 6 actions, full strip
+// Level 6: remains unimplemented
 // The ESP32 owns the sequence, playback timing, input validation and score.
+enum EchoMemoryAction {
+  EMA_UP = 0,     // Red
+  EMA_RIGHT = 1,  // Yellow
+  EMA_DOWN = 2,   // Green
+  EMA_LEFT = 3,   // Blue
+  EMA_PET = 4,    // Purple
+  EMA_HONK = 5    // Orange
+};
+
 enum EchoMemoryState {
   EMS_IDLE,
   EMS_FLASHING,
@@ -526,10 +540,12 @@ enum EchoMemoryState {
 
 EchoMemoryState echoMemoryState = EMS_IDLE;
 int echoMemoryLevel = 0;
-const uint8_t ECHO_MEMORY_MAX_SEQUENCE_LENGTH = 6;
+const uint8_t ECHO_MEMORY_MAX_SEQUENCE_LENGTH = 8;
 uint8_t echoMemorySequence[ECHO_MEMORY_MAX_SEQUENCE_LENGTH];
 uint8_t echoMemorySequenceLength = 4;
 unsigned int echoMemoryFlashInterval = 3000;
+uint8_t echoMemoryActionCount = 4;
+bool echoMemoryFullStrip = false;
 const unsigned long ECHO_MEMORY_GAP_MS = 400;
 bool echoMemoryFlashInGap = false;
 uint8_t echoMemoryFlashIndex = 0;
@@ -537,6 +553,8 @@ unsigned long echoMemoryPhaseUntil = 0;
 unsigned long echoMemoryFeedbackUntil = 0;
 uint8_t echoMemoryInputIndex = 0;
 uint8_t echoMemoryWrongCount = 0;
+
+void echoMemoryHandlePet();
 
 int rdLevel = 0;
 int rdPhaseCount = 0;
@@ -1118,28 +1136,56 @@ void echoMemoryShowOLED(const char *title, const char *detail = nullptr) {
   display.display();
 }
 
-void echoMemoryShowDirection(uint8_t direction) {
-  clearStripBuffer();
-
-  // Direction/index mapping follows joystickToDirection():
-  // 0 = UP/front, 1 = RIGHT, 2 = DOWN/back, 3 = LEFT.
-  switch (direction) {
-  case 0:
-    setRegionColor(REGION_FRONT, 255, 0, 0);       // Red
-    break;
-  case 1:
-    setRegionColor(REGION_RIGHT, 255, 180, 0);     // Yellow
-    break;
-  case 2:
-    setRegionColor(REGION_BACK, 0, 255, 0);        // Green
-    break;
-  case 3:
-    setRegionColor(REGION_LEFT, 0, 0, 255);        // Blue
-    break;
-  default:
-    return;
+void echoMemoryShowAction(uint8_t action) {
+  if (echoMemoryFullStrip) {
+    switch (action) {
+    case EMA_UP:
+      setStripColor(255, 0, 0);     // Red
+      break;
+    case EMA_RIGHT:
+      setStripColor(255, 180, 0);   // Yellow
+      break;
+    case EMA_DOWN:
+      setStripColor(0, 255, 0);     // Green
+      break;
+    case EMA_LEFT:
+      setStripColor(0, 0, 255);     // Blue
+      break;
+    case EMA_PET:
+      setStripColor(150, 0, 255);   // Purple
+      break;
+    case EMA_HONK:
+      setStripColor(255, 120, 0);   // Orange
+      break;
+    default:
+      return;
+    }
+  } else {
+    clearStripBuffer();
+    // Direction/index mapping follows joystickToDirection():
+    // 0 = UP/front, 1 = RIGHT, 2 = DOWN/back, 3 = LEFT.
+    switch (action) {
+    case EMA_UP:
+      setRegionColor(REGION_FRONT, 255, 0, 0);       // Red
+      break;
+    case EMA_RIGHT:
+      setRegionColor(REGION_RIGHT, 255, 180, 0);     // Yellow
+      break;
+    case EMA_DOWN:
+      setRegionColor(REGION_BACK, 0, 255, 0);        // Green
+      break;
+    case EMA_LEFT:
+      setRegionColor(REGION_LEFT, 0, 0, 255);        // Blue
+      break;
+    default:
+      return;
+    }
   }
   strip.show();
+}
+
+void echoMemoryShowDirection(uint8_t direction) {
+  echoMemoryShowAction(direction);
 }
 
 void echoMemoryBeginInput() {
@@ -1147,7 +1193,11 @@ void echoMemoryBeginInput() {
   echoMemoryInputIndex = 0;
   echoMemoryWrongCount = 0;
   echoMemoryState = EMS_INPUT;
-  echoMemoryShowOLED("REPEAT!", "Use D-pad");
+  if (echoMemoryLevel >= 4) {
+    echoMemoryShowOLED("REPEAT!", "D-pad, Honk, Pet");
+  } else {
+    echoMemoryShowOLED("REPEAT!", "Use D-pad");
+  }
 
   JsonDocument phase;
   phase["type"] = "phase";
@@ -1211,8 +1261,8 @@ void echoMemoryFinishLevel() {
 }
 
 void echoMemoryStartLevel(int level) {
-  if (level < 1 || level > 3) {
-    sendError("Echo Memory levels 1-3 are supported");
+  if (level < 1 || level > 5) {
+    sendError("Echo Memory levels 1-5 are supported");
     return;
   }
 
@@ -1221,12 +1271,28 @@ void echoMemoryStartLevel(int level) {
   if (level == 1) {
     echoMemorySequenceLength = 4;
     echoMemoryFlashInterval = 3000;
+    echoMemoryActionCount = 4;
+    echoMemoryFullStrip = false;
   } else if (level == 2) {
     echoMemorySequenceLength = 5;
     echoMemoryFlashInterval = 1500;
+    echoMemoryActionCount = 4;
+    echoMemoryFullStrip = false;
   } else if (level == 3) {
     echoMemorySequenceLength = 6;
     echoMemoryFlashInterval = 1500;
+    echoMemoryActionCount = 4;
+    echoMemoryFullStrip = false;
+  } else if (level == 4) {
+    echoMemorySequenceLength = 5;
+    echoMemoryFlashInterval = 3000;
+    echoMemoryActionCount = 6;
+    echoMemoryFullStrip = true;
+  } else if (level == 5) {
+    echoMemorySequenceLength = 6;
+    echoMemoryFlashInterval = 1500;
+    echoMemoryActionCount = 6;
+    echoMemoryFullStrip = true;
   }
 
   echoMemoryState = EMS_FLASHING;
@@ -1237,14 +1303,14 @@ void echoMemoryStartLevel(int level) {
 
   // Generate the complete sequence once. It is never sent to the web app.
   for (uint8_t i = 0; i < echoMemorySequenceLength; i++) {
-    echoMemorySequence[i] = random(0, 4);
+    echoMemorySequence[i] = random(0, echoMemoryActionCount);
   }
 
   char oledTitle[16];
   snprintf(oledTitle, sizeof(oledTitle), "ECHO L%d", echoMemoryLevel);
   echoMemoryShowOLED(oledTitle, "Watch carefully");
 
-  echoMemoryShowDirection(echoMemorySequence[0]);
+  echoMemoryShowAction(echoMemorySequence[0]);
   echoMemoryPhaseUntil = millis() + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
 
   JsonDocument phase;
@@ -1257,15 +1323,15 @@ void echoMemoryStartLevel(int level) {
   sendJson(phase);
 }
 
-void echoMemoryAnswerDirection(int direction) {
+void echoMemoryAnswerAction(int action) {
   if (echoMemoryState != EMS_INPUT)
     return;
-  if (direction < 0 || direction > 3)
+  if (action < 0 || action >= echoMemoryActionCount)
     return;
   if ((long)(millis() - echoMemoryFeedbackUntil) < 0)
     return;
 
-  bool correct = direction == echoMemorySequence[echoMemoryInputIndex];
+  bool correct = (action == echoMemorySequence[echoMemoryInputIndex]);
 
   if (correct) {
     playTone(2400, 100);
@@ -1290,36 +1356,68 @@ void echoMemoryAnswerDirection(int direction) {
   echoMemoryFeedbackUntil = millis() + 300;
 
   if (echoMemoryInputIndex >= echoMemorySequenceLength) {
-    echoMemoryFinishLevel();
-  }
+  // Keep the correct/incorrect feedback visible briefly
+  delay(300);
+  echoMemoryFinishLevel();
+}
+}
+
+void echoMemoryAnswerDirection(int direction) {
+  echoMemoryAnswerAction(direction);
 }
 
 void echoMemoryHandleInput(JsonDocument &doc) {
   if (echoMemoryState != EMS_INPUT)
     return;
 
-  int direction = -1;
+  int action = -1;
 
-  if (doc.containsKey("dir")) {
+  if (doc.containsKey("action")) {
+    const char *act = doc["action"] | "";
+    if (strcasecmp(act, "up") == 0)
+      action = EMA_UP;
+    else if (strcasecmp(act, "right") == 0)
+      action = EMA_RIGHT;
+    else if (strcasecmp(act, "down") == 0)
+      action = EMA_DOWN;
+    else if (strcasecmp(act, "left") == 0)
+      action = EMA_LEFT;
+    else if (strcasecmp(act, "pet") == 0)
+      action = EMA_PET;
+    else if (strcasecmp(act, "honk") == 0)
+      action = EMA_HONK;
+  } else if (doc.containsKey("dir")) {
     const char *dir = doc["dir"] | "";
     if (strcasecmp(dir, "up") == 0)
-      direction = 0;
+      action = EMA_UP;
     else if (strcasecmp(dir, "right") == 0)
-      direction = 1;
+      action = EMA_RIGHT;
     else if (strcasecmp(dir, "down") == 0)
-      direction = 2;
+      action = EMA_DOWN;
     else if (strcasecmp(dir, "left") == 0)
-      direction = 3;
+      action = EMA_LEFT;
+    else if (strcasecmp(dir, "honk") == 0)
+      action = EMA_HONK;
+    else if (strcasecmp(dir, "pet") == 0)
+      action = EMA_PET;
   } else if (doc.containsKey("x") && doc.containsKey("y")) {
     int x = constrain((int)(doc["x"] | 512), 0, 1023);
     int y = constrain((int)(doc["y"] | 512), 0, 1023);
-    direction = joystickToDirection(x, y);
+    action = joystickToDirection(x, y);
   }
 
-  if (direction >= 0) {
-    echoMemoryAnswerDirection(direction);
+  if (action >= 0) {
+    echoMemoryAnswerAction(action);
   } else {
-    sendError("Echo Memory input needs dir or x/y");
+    sendError("Echo Memory input needs dir, action, or x/y");
+  }
+}
+
+void echoMemoryHandlePet() {
+  if (currentGame == GAME_ECHO_MEMORY && echoMemoryState == EMS_INPUT) {
+    if (echoMemoryLevel >= 4) {
+      echoMemoryAnswerAction(EMA_PET);
+    }
   }
 }
 
@@ -1366,7 +1464,7 @@ void updateEchoMemory() {
           phase["durationMs"] = 3000;
           sendJson(phase);
         } else {
-          echoMemoryShowDirection(echoMemorySequence[echoMemoryFlashIndex]);
+          echoMemoryShowAction(echoMemorySequence[echoMemoryFlashIndex]);
           echoMemoryPhaseUntil = now + (echoMemoryFlashInterval - ECHO_MEMORY_GAP_MS);
 
           JsonDocument phase;
@@ -1383,6 +1481,11 @@ void updateEchoMemory() {
   } else if (echoMemoryState == EMS_WAIT) {
     if ((long)(now - echoMemoryPhaseUntil) >= 0) {
       echoMemoryBeginInput();
+    }
+  } else if (echoMemoryState == EMS_INPUT) {
+    if (echoMemoryFeedbackUntil != 0 && (long)(now - echoMemoryFeedbackUntil) >= 0) {
+      echoMemoryStopOutputs();
+      echoMemoryFeedbackUntil = 0;
     }
   } else if (echoMemoryState == EMS_RESULT) {
     if ((long)(now - echoMemoryPhaseUntil) >= 0) {
@@ -2605,6 +2708,7 @@ void updateTouchState() {
       currentTouchEvent = "double_tap";
     }
     tapCount = 0;
+    echoMemoryHandlePet();
   }
 
   // Handle continuous hold
@@ -2612,6 +2716,7 @@ void updateTouchState() {
     currentTouchEvent = "hold";
     holdTriggered =
         true; // prevent re-triggering constantly if we only want one hold event
+    echoMemoryHandlePet();
   }
 }
 
