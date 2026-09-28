@@ -1142,10 +1142,12 @@ void echoMemoryShowOLED(const char *title, const char *detail = nullptr) {
 }
 
 void echoMemoryPlayHonkSound() {
-  tone(PIN_BUZZER, 440, 70);
-  delay(75);
-  tone(PIN_BUZZER, 580, 90);
-  delay(95);
+  tone(PIN_BUZZER, 400, 100);
+  delay(110);
+  tone(PIN_BUZZER, 550, 100);
+  delay(110);
+  tone(PIN_BUZZER, 750, 180);
+  delay(190);
   noTone(PIN_BUZZER);
 }
 
