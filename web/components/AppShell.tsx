@@ -14,7 +14,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const isAuthPage = pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
   const isRcMode = pathname.startsWith("/rc-mode");
   const showAppComponents = Boolean(isSignedIn && !isAuthPage);
-  const isGamePage = pathname.includes("/challenges/");
+  const isGamePage = /\/challenges\/\d+$/.test(pathname);
   const showAppHeader = showAppComponents && !isRcMode && !isGamePage;
   const showBottomNav = showAppComponents && !isGamePage;
 

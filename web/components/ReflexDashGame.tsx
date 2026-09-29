@@ -237,7 +237,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
 
 
   return (
-    <main className="min-h-[100dvh] portrait:fixed portrait:inset-auto portrait:top-1/2 portrait:left-1/2 portrait:h-[100dvw] portrait:w-[100dvh] portrait:min-h-0 portrait:min-w-0 portrait:-translate-x-1/2 portrait:-translate-y-1/2 portrait:rotate-90 portrait:overflow-x-hidden bg-background">
+    <main className="min-h-screen pb-16 bg-background">
       <SubPageHeader
         title={`Reflex Dash \u00b7 Level ${levelMeta.id}`}
         subtitle={`${levelMeta.difficulty} \u00b7 ${levelMeta.timing}`}
@@ -270,7 +270,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
 
         {gameState === "playing" && (
           <div 
-            className="fixed inset-0 z-50 bg-[#0a0f16] flex flex-row items-center justify-between p-6 sm:p-10 overflow-hidden touch-none text-white select-none"
+            className="fixed inset-0 z-50 bg-[#0a0f16] flex flex-col landscape:flex-row items-center justify-between p-6 sm:p-10 overflow-hidden touch-none text-white select-none gap-6 landscape:gap-0"
           >
             {/* Subtle Tech Grid Background */}
             <div className="absolute inset-0 pointer-events-none opacity-20" 
