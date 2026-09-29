@@ -182,6 +182,11 @@ export function BleProvider({ children }: { children: ReactNode }) {
       setIsHandshakeComplete(true);
       setControlOwner("mobile"); // BLE connected -> Mobile App owns control
       setIsModalOpen(false);
+
+      // Automatically request telemetry streaming from robot
+      void client.configureTelemetry(true, 100).catch((err) => {
+        console.warn("[BleContext] Telemetry config request failed:", err);
+      });
     } catch (error) {
       console.error("[BLE CONNECT ERROR]", error);
       client.disconnect();
