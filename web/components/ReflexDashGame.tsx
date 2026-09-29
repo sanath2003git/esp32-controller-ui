@@ -8,7 +8,8 @@ import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { submitAndPersistLevelResult } from "@/lib/progressStore";
 import { calculateStars } from "@/lib/colourQuest";
-import { Play, AlertCircle, Gamepad2, ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from "lucide-react";
+import ControlPanel from "@/components/ControlPanel";
+import { Play, AlertCircle, X, Clock, Target, Gamepad2 } from "lucide-react";
 
 type Color = { name: string; hex: string; action: "GO" | "STOP" };
 
@@ -27,8 +28,18 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   const { status, send, openModal, setColor, move, stop, lastEventMessage } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
+  const isGameActiveRef = useRef(false);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [score, setScore] = useState(0);
+  const [score, setScoreState] = useState(0);
+  const scoreRef = useRef(0);
+  const maxPossibleScoreRef = useRef(0);
+  const setScore = useCallback((action: React.SetStateAction<number>) => {
+    setScoreState((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      scoreRef.current = next;
+      return next;
+    });
+  }, []);
   const [isDriving, setIsDriving] = useState(false);
   const [currentColor, setCurrentColor] = useState<Color | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -84,11 +95,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
 
   const handleDrive = (dir: "forward" | "backward" | "left" | "right" | null) => {
     setIsDriving(dir !== null);
-    if (dir === null) {
-      stop();
-    } else {
-      move(dir);
-    }
+    // Note: ControlPanel handles BLE move() and stop() internally for us.
   };
 
   const nextPhase = useCallback(() => {
@@ -104,6 +111,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, [gameState, status]);
 
   const handleLevelComplete = useCallback(async (finalScore: number) => {
+    isGameActiveRef.current = false;
     setGameState("completed");
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
@@ -111,6 +119,13 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     setCurrentColor(null);
     sendColorToRobot("#000000"); // turn off LED
     stop();
+    
+    if (status === "connected") {
+      // Send abort ONLY if the user manually aborted, or if we need to ensure the robot stops.
+      // But if handleLevelComplete was triggered by the robot's 'response', it's already stopped.
+      // We can safely send abort just in case.
+      send({ command: "abort" } as any).catch(console.error);
+    }
     
     try {
       const result = await submitAndPersistLevelResult("reflex-dash", levelId, finalScore);
@@ -134,21 +149,24 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, [levelId]);
 
   const startGame = () => {
+    isGameActiveRef.current = true;
     setGameState("playing");
     setScore(0);
+    maxPossibleScoreRef.current = 0;
     setTimeLeft(totalDuration / 1000);
     
     // Start game timer just for visual countdown
     gameTimerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
-        if (prev <= 1 && status !== "connected") {
-          // Only auto-end offline. If connected, wait for robot 'response'.
-          const expectedPerfectScore = (totalDuration / 1000);
-          const normalizedScore = Math.min(Math.max(score / expectedPerfectScore, 0), 1);
+        if (prev <= 1) {
+          // Frontend is now the absolute source of truth for time and score!
+          // We know exactly how many points a perfect player would have earned.
+          const maxPoints = Math.max(1, maxPossibleScoreRef.current);
+          const normalizedScore = Math.min(Math.max(scoreRef.current / maxPoints, 0), 1);
           handleLevelComplete(normalizedScore);
           return 0;
         }
-        return Math.max(0, prev - 1);
+        return prev - 1;
       });
     }, 1000);
 
@@ -160,6 +178,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   };
 
   const abortGame = useCallback(() => {
+    isGameActiveRef.current = false;
     setGameState("idle");
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
@@ -168,7 +187,8 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
     sendColorToRobot("#000000"); // turn off LED
     stop();
     if (status === "connected") {
-      send({ command: "abort" } as any);
+      // Abort command tells ESP32 to immediately stop the game loop
+      send({ command: "abort" } as any).catch(console.error);
     }
     router.push(`/playground/reflex-dash/challenges`);
   }, [router, send, status]);
@@ -186,11 +206,11 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
           hex: msg.hex,
           action: msg.isGo ? "GO" : "STOP",
         });
-        setScore(Math.floor((msg.score || 0) * 100));
-      } else if (msg.type === "response") {
-        handleLevelComplete(msg.score);
+        // We no longer sync score from ESP32, frontend tracks it perfectly.
       } else if (msg.type === "aborted") {
-        abortGame();
+        if (isGameActiveRef.current) {
+          abortGame();
+        }
       }
     }
   }, [lastEventMessage, gameState, handleLevelComplete, abortGame]);
@@ -204,17 +224,21 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, []);
 
   useEffect(() => {
-    if (gameState !== "playing") return; // Allow visual scoring to run while connected so UI is responsive
+    if (gameState !== "playing") return;
 
     if (drivingScoreTimerRef.current) {
       clearInterval(drivingScoreTimerRef.current);
-      drivingScoreTimerRef.current = null;
     }
 
-    if (isDriving) {
-      drivingScoreTimerRef.current = setInterval(() => {
-        if (!currentColor) return;
-        
+    drivingScoreTimerRef.current = setInterval(() => {
+      if (!currentColor) return;
+      
+      // The perfect score ceiling rises every 500ms a GO color is active
+      if (currentColor.action === "GO") {
+        maxPossibleScoreRef.current += 1;
+      }
+
+      if (isDriving) {
         if (currentColor.action === "GO") {
           setScore(s => s + 1);
           setMessage("Great driving!");
@@ -222,18 +246,21 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
           setScore(s => Math.max(0, s - 3));
           setMessage("STOP! You are losing points!");
         }
-      }, 500); // add/subtract points every 500ms while driving
-    } else {
-      if (currentColor && currentColor.action === "GO") {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
-        setMessage("You should be moving!");
+      } else {
+        if (currentColor.action === "GO") {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setMessage("You should be moving!");
+        } else {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setMessage(null);
+        }
       }
-    }
+    }, 500);
 
     return () => {
       if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     };
-  }, [isDriving, currentColor, gameState, status]);
+  }, [isDriving, currentColor, gameState]);
 
 
   return (
@@ -258,6 +285,24 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
                 <p className="text-sm text-white/80 mb-2">{levelMeta.description}</p>
               </div>
             </section>
+
+            {/* Color Legend Card */}
+            <div className="mt-4 w-full rounded-2xl border border-white/10 bg-surface-light p-4 shadow-lg">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/50 mb-3 text-left">Command Legend</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {colors.current.map(c => (
+                  <div key={c.hex} className="flex items-center gap-2 rounded-xl bg-black/20 p-2 border border-white/5">
+                    <div className="h-4 w-4 rounded-full flex-shrink-0" style={{ backgroundColor: c.hex, boxShadow: `0 0 8px ${c.hex}80` }} />
+                    <span className="text-xs font-semibold text-white/80 truncate">{c.name}</span>
+                    <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
+                      c.action === "GO" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                    }`}>
+                      {c.action}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             
             <button
               onClick={startGame}
@@ -269,117 +314,71 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         )}
 
         {gameState === "playing" && (
-          <div 
-            className="fixed inset-0 z-50 bg-[#0a0f16] flex flex-col landscape:flex-row items-center justify-between p-6 sm:p-10 overflow-hidden touch-none text-white select-none gap-6 landscape:gap-0"
-          >
-            {/* Subtle Tech Grid Background */}
-            <div className="absolute inset-0 pointer-events-none opacity-20" 
-                 style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)', backgroundSize: '40px 40px' }} />
-
-            {/* Left controls: Circular Up/Down Pad */}
-            <div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-full border-4 border-white/10 bg-white/5 flex flex-col overflow-hidden shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.05)] backdrop-blur-md">
-              <button 
-                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
-                 onPointerDown={() => handleDrive("forward")} 
-                 onPointerUp={() => handleDrive(null)}
-                 onPointerLeave={() => handleDrive(null)}
-                 onContextMenu={(e) => e.preventDefault()}
-              >
-                <ArrowUp size={48} className="text-white/50 pointer-events-none" />
-              </button>
-              
-              {/* Center Divider / Crosshair detail */}
-              <div className="absolute top-1/2 left-0 right-0 h-[2px] bg-white/10 -translate-y-1/2 pointer-events-none" />
-              <div className="absolute top-1/2 left-1/2 w-8 h-8 rounded-full border-2 border-white/20 -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-[#0a0f16]" />
-
-              <button 
-                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
-                 onPointerDown={() => handleDrive("backward")} 
-                 onPointerUp={() => handleDrive(null)}
-                 onPointerLeave={() => handleDrive(null)}
-                 onContextMenu={(e) => e.preventDefault()}
-              >
-                <ArrowDown size={48} className="text-white/50 pointer-events-none" />
-              </button>
-            </div>
-
-            {/* Middle: Timer, Score, Current Color, Exit button */}
-            <div className="flex flex-col items-center justify-center flex-1 mx-4 sm:mx-10 relative h-full">
-              {/* HUD Header */}
-              <div className="absolute top-0 flex items-center justify-between w-full max-w-sm text-white/50 font-black tracking-[0.2em] uppercase text-[10px] sm:text-xs">
-                 <div className="flex flex-col items-center">
-                   <span className="opacity-50">Time</span>
-                   <span className="text-white text-lg sm:text-xl">{timeLeft}s</span>
-                 </div>
-                 <div className="flex flex-col items-center">
-                   <span className="opacity-50">Score</span>
-                   <span className="text-white text-lg sm:text-xl">{score}</span>
-                 </div>
-              </div>
-
-              <div 
-                className="w-full max-w-[280px] sm:max-w-xs aspect-video rounded-[2rem] flex flex-col items-center justify-center border-2 sm:border-4 transition-colors shadow-[0_0_50px_rgba(0,0,0,0.5)] relative overflow-hidden mt-6"
-                style={{ 
-                  backgroundColor: currentColor ? `${currentColor.hex}15` : 'rgba(255,255,255,0.02)',
-                  borderColor: currentColor ? currentColor.hex : 'rgba(255,255,255,0.1)'
-                }}
-              >
-                {/* Internal HUD corners */}
-                <div className="absolute top-3 left-3 w-4 h-4 border-t-2 border-l-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
-                <div className="absolute top-3 right-3 w-4 h-4 border-t-2 border-r-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
-                <div className="absolute bottom-3 left-3 w-4 h-4 border-b-2 border-l-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
-                <div className="absolute bottom-3 right-3 w-4 h-4 border-b-2 border-r-2 opacity-50" style={{ borderColor: currentColor ? currentColor.hex : 'white' }} />
-
-                {currentColor ? (
-                  <div className="flex flex-col items-center">
-                     <span className="text-4xl sm:text-5xl font-black tracking-widest uppercase drop-shadow-lg" style={{ color: currentColor.hex, textShadow: `0 0 20px ${currentColor.hex}` }}>
-                       {currentColor.name}
+          <div className="fixed inset-0 z-50 bg-background overflow-hidden p-3 sm:p-4 pb-8 touch-none">
+            <ControlPanel
+              mode="challenge"
+              game="reflex-dash"
+              isGameActive={true}
+              onDrive={handleDrive}
+              customControls={
+                <div className="flex flex-col gap-3 w-full">
+                  {/* Top Bar with Score and Abort */}
+                  <div className="flex justify-between items-center w-full z-10 shrink-0 bg-black/40 p-2.5 rounded-2xl border border-white/5">
+                     <span className="font-black uppercase tracking-[0.2em] text-accent text-sm flex items-center gap-2">
+                       <Target size={16} /> Score: {score}
                      </span>
-                     {message && (
-                       <span className="mt-3 text-[10px] sm:text-xs font-bold uppercase tracking-widest opacity-90 animate-pulse bg-black/40 px-3 py-1 rounded-full" style={{ color: currentColor.hex }}>
-                         {message}
-                       </span>
-                     )}
+                     <button onClick={abortGame} className="px-3 py-1.5 border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-full font-bold text-[10px] uppercase tracking-wider transition-colors flex items-center gap-1">
+                       <X size={12} /> Abort
+                     </button>
                   </div>
-                ) : (
-                  <span className="text-white/30 font-bold tracking-[0.2em] uppercase text-sm">Awaiting Signal</span>
-                )}
-              </div>
 
-              <button 
-                onClick={abortGame} 
-                className="absolute bottom-0 text-white/30 text-[10px] sm:text-xs uppercase tracking-widest font-bold hover:text-white/80 transition-colors border border-white/10 px-4 py-2 rounded-full bg-white/5 active:bg-white/20"
-              >
-                Abort Challenge
-              </button>
-            </div>
+                  {/* Info Cards (Timer, Color) */}
+                  <div className="flex w-full shrink-0 justify-between gap-3 z-10">
+                    {/* Timer Card */}
+                    <div className="flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/10 bg-black/40 text-white/50 shadow-inner relative overflow-hidden">
+                      <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Clock size={10} /> Timer
+                      </span>
+                      <span className="text-xl font-black text-white">
+                        {timeLeft === 0 && status === "connected" && gameState === "playing" ? "Calc..." : `${timeLeft}s`}
+                      </span>
+                    </div>
+                    
+                    {/* Color Card */}
+                    <div 
+                      className="flex h-12 flex-1 flex-col items-center justify-center gap-0 rounded-2xl border bg-black/40 text-white transition-colors shadow-inner relative overflow-hidden"
+                      style={{
+                        borderColor: currentColor ? currentColor.hex : 'rgba(255,255,255,0.1)',
+                        boxShadow: currentColor ? `0 0 15px ${currentColor.hex}33 inset` : 'none'
+                      }}
+                    >
+                      {/* Subtle background glow for the color card */}
+                      {currentColor && (
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundColor: currentColor.hex }} />
+                      )}
+                      
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-white/60">Target Color</span>
+                      {currentColor ? (
+                        <span className="text-lg font-black tracking-widest uppercase drop-shadow-md" style={{ color: currentColor.hex, textShadow: `0 0 10px ${currentColor.hex}88` }}>
+                          {currentColor.name}
+                        </span>
+                      ) : (
+                        <span className="text-lg font-black text-white/30">--</span>
+                      )}
+                    </div>
+                  </div>
 
-            {/* Right controls: Circular Left/Right Pad */}
-            <div className="relative w-40 h-40 sm:w-56 sm:h-56 rounded-full border-4 border-white/10 bg-white/5 flex flex-row overflow-hidden shrink-0 shadow-[0_0_30px_rgba(255,255,255,0.05)] backdrop-blur-md">
-              <button 
-                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
-                 onPointerDown={() => handleDrive("left")} 
-                 onPointerUp={() => handleDrive(null)}
-                 onPointerLeave={() => handleDrive(null)}
-                 onContextMenu={(e) => e.preventDefault()}
-              >
-                <ArrowLeft size={48} className="text-white/50 pointer-events-none" />
-              </button>
-              
-              {/* Center Divider / Crosshair detail */}
-              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-white/10 -translate-x-1/2 pointer-events-none" />
-              <div className="absolute top-1/2 left-1/2 w-8 h-8 rounded-full border-2 border-white/20 -translate-x-1/2 -translate-y-1/2 pointer-events-none bg-[#0a0f16]" />
-
-              <button 
-                 className="flex-1 flex items-center justify-center bg-transparent active:bg-white/20 transition-colors"
-                 onPointerDown={() => handleDrive("right")} 
-                 onPointerUp={() => handleDrive(null)}
-                 onPointerLeave={() => handleDrive(null)}
-                 onContextMenu={(e) => e.preventDefault()}
-              >
-                <ArrowRight size={48} className="text-white/50 pointer-events-none" />
-              </button>
-            </div>
+                  {/* Message popup if any */}
+                  <div className="w-full h-8 flex items-center justify-center z-10 shrink-0">
+                    {message && currentColor && (
+                      <span className="text-[11px] font-black uppercase tracking-widest opacity-90 animate-pulse bg-black/60 px-5 py-2 rounded-full border border-white/10 shadow-lg" style={{ color: currentColor.hex }}>
+                        {message}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              }
+            />
           </div>
         )}
       </div>

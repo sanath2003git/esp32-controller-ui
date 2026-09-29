@@ -56,6 +56,7 @@ type ControlPanelProps = {
   onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
   onDrive?: (dir: MovementDirection | null) => void;
   customTelemetry?: React.ReactNode;
+  customControls?: React.ReactNode;
 };
 
 type ObstaclePosition =
@@ -88,10 +89,10 @@ const modeLabel: Record<ControlPanelMode, string> = {
 };
 
 const obstaclePositionClass: Record<ObstaclePosition, string> = {
-  "front-left": "left-0 top-3",
-  "front-right": "right-0 top-3",
-  "rear-left": "bottom-3 left-0",
-  "rear-right": "bottom-3 right-0",
+  "front-left": "left-0 top-1 sm:top-3",
+  "front-right": "right-0 top-1 sm:top-3",
+  "rear-left": "bottom-1 sm:bottom-3 left-0",
+  "rear-right": "bottom-1 sm:bottom-3 right-0",
 };
 
 function ObstacleIndicator({
@@ -154,6 +155,7 @@ export default function ControlPanel({
   onInputDirection,
   onDrive,
   customTelemetry,
+  customControls,
 }: ControlPanelProps) {
   const { status, telemetry, move, stop, send } =
     useBleContext();
@@ -168,6 +170,11 @@ export default function ControlPanel({
     sudden: false,
     pit: false,
   });
+
+  const gameStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    gameStartRef.current = Date.now();
+  }, [game]);
 
   const activeMovementDirection =
     useRef<MovementDirection | null>(null);
@@ -192,11 +199,14 @@ export default function ControlPanel({
     const pit = telemetry?.pit.detected ?? false;
 
     if (sudden && !previousAlerts.current.sudden) {
-      setAlertToast({
-        id: Date.now(),
-        message: "Sudden motion detected",
-        tone: "warning",
-      });
+      const isGameJustStarted = Date.now() - gameStartRef.current < 2500;
+      if (!isGameJustStarted) {
+        setAlertToast({
+          id: Date.now(),
+          message: "Sudden motion detected",
+          tone: "warning",
+        });
+      }
     } else if (pit && !previousAlerts.current.pit) {
       setAlertToast({
         id: Date.now(),
@@ -378,7 +388,7 @@ export default function ControlPanel({
               : "Offline"}
         </div>
       </div>
-      <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
+      <div className={`mt-3 flex min-h-0 flex-col gap-2 ${game === "reflex-dash" ? "flex-[3]" : "flex-1"}`}>
       {customTelemetry ? (
         <div className="flex-1 overflow-hidden">
           {customTelemetry}
@@ -439,15 +449,15 @@ export default function ControlPanel({
                       heading,
                     )} degrees`
               }
-              className="flex h-20 w-20 items-center justify-center rounded-3xl border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
+              className={`flex items-center justify-center rounded-2xl border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500 ${game === "reflex-dash" ? "h-10 w-10" : "h-14 w-14"}`}
               style={{
                 transform: `rotate(${heading ?? 0}deg)`,
               }}
             >
-              <div className="absolute top-2 h-0 w-0 border-x-[8px] border-b-[12px] border-x-transparent border-b-accent" />
+              <div className={`absolute h-0 w-0 border-x-transparent border-b-accent ${game === "reflex-dash" ? "top-1 border-x-[4px] border-b-[6px]" : "top-1.5 border-x-[6px] border-b-[8px]"}`} />
 
               <Bot
-                size={40}
+                size={game === "reflex-dash" ? 20 : 28}
                 strokeWidth={1.65}
                 className="text-primary"
               />
@@ -553,7 +563,7 @@ export default function ControlPanel({
         </div>
       )}
 
-      <div className="mt-3 flex min-h-0 flex-1 flex-col">
+      <div className={`mt-3 flex min-h-0 flex-col ${game === "reflex-dash" ? "flex-[7]" : "flex-1"}`}>
         <div className="flex flex-col min-h-0 flex-1">
           <div className="flex shrink-0 items-center justify-end">
             {isColorQuestActive && (
@@ -562,6 +572,11 @@ export default function ControlPanel({
               </span>
             )}
           </div>
+          {customControls && (
+            <div className="w-full shrink-0 my-2 z-10">
+              {customControls}
+            </div>
+          )}
 
           <div className="mx-auto mt-1 flex min-h-0 flex-1 w-full flex-col justify-center">
             <JoystickController

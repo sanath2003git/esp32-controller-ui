@@ -151,11 +151,12 @@ export function mergeBestStars(
 export function calculateGameProgress(
   progressMap: Record<number, { stars: number }>
 ): { completedLevels: number; totalLevels: number; progressPercentage: number } {
-  const totalLevels = COLOUR_QUEST_LEVELS.length;
+  const totalLevels = Object.keys(progressMap).length || 1;
   let completedLevels = 0;
 
-  for (let i = 1; i <= totalLevels; i++) {
-    if (progressMap[i] && progressMap[i].stars > 0) {
+  for (const key of Object.keys(progressMap)) {
+    const lvl = parseInt(key, 10);
+    if (progressMap[lvl] && progressMap[lvl].stars > 0) {
       completedLevels++;
     }
   }
