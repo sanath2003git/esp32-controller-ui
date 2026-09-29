@@ -4,7 +4,6 @@ import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { Bluetooth, Cpu } from "lucide-react";
 
-
 import { useBleContext } from "@/context/BleContext";
 import type { RobotState } from "@/types/robot";
 
@@ -66,7 +65,7 @@ export default function AppHeader() {
 
   const isConnected = robot.connectionStatus === "connected";
 
-  const robotBattery = telemetry?.battery_percentage ?? 0;
+  const robotBattery = telemetry?.battery?.robot ?? 0;
   const remoteBattery = 0;
 
   return (

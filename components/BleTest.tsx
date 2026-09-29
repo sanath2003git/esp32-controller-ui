@@ -14,7 +14,7 @@ export default function BleTest() {
     deviceName,
     lastMessage,
     connect,
-    send,
+    sendDirectionInput,
     disconnect,
   } = useBleContext();
 
@@ -29,14 +29,9 @@ export default function BleTest() {
     }
   }
 
-  async function sendBlueCommand() {
+  async function sendTestMotion() {
     try {
-      await send({
-        command: "color",
-        r: 0,
-        g: 0,
-        b: 255,
-      });
+      await sendDirectionInput("forward");
     } catch (error) {
       console.error("[BLE TEST]", error);
     }
@@ -103,10 +98,10 @@ export default function BleTest() {
         <>
           <button
             type="button"
-            onClick={sendBlueCommand}
+            onClick={sendTestMotion}
             className="mt-4 flex w-full items-center justify-center rounded-xl bg-accent px-4 py-3 text-sm font-bold text-black"
           >
-            Test Blue LED
+            Test Forward Motion Input
           </button>
 
           <button
@@ -123,7 +118,7 @@ export default function BleTest() {
       {lastMessage !== null && (
         <div className="mt-4">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-white/30">
-            Latest BLE message
+            Latest Protocol v1 message
           </p>
 
           <pre className="mt-2 overflow-x-auto rounded-xl bg-black/30 p-3 text-xs text-accent">

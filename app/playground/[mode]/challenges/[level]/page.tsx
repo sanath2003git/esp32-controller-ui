@@ -3,17 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import SubPageHeader from "@/components/SubPageHeader";
-import ControlPanel from "@/components/ControlPanel";
 import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import {
   calculateStars,
-  createColorQuestRegionCommand,
-  createColorQuestStartCommand,
   getColourQuestLevel,
   isLevelUnlocked,
-  isValidColorQuestResult,
 } from "@/lib/colourQuest";
 import {
   fetchAndSyncProgress,
@@ -42,7 +38,15 @@ import {
 export default function ChallengeLevelPage() {
   const params = useParams<{ mode: string; level: string }>();
   const router = useRouter();
-  const { status, send, lastMessage, openModal } = useBleContext();
+  const {
+    status,
+    startGame,
+    sendDirectionInput,
+    abortGame,
+    lastMessage,
+    gameResult: protocolGameResult,
+    openModal,
+  } = useBleContext();
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const modeMeta = getModeMeta(params.mode);
@@ -126,7 +130,7 @@ export default function ChallengeLevelPage() {
     }
   }, []);
 
-  // Handle game start
+  // Handle game start via Protocol v1
   const handleStartLevel = async () => {
     if (gameState === "starting" || gameState === "playing") {
       return;
@@ -149,8 +153,7 @@ export default function ChallengeLevelPage() {
       setGameState("starting");
       processedMessageRef.current = null;
 
-      const command = createColorQuestStartCommand(levelId);
-      await send(command);
+      await startGame("color_quest", levelId);
 
       setGameState("playing");
 
@@ -203,11 +206,18 @@ export default function ChallengeLevelPage() {
     [clearTimeoutTimer, levelId]
   );
 
-  // Send region answer to firmware
+  // Send region answer using Protocol v1 direction input
   const handleRegionAnswer = async (region: ColorQuestRegion) => {
     if (gameState !== "playing" || status !== "connected") return;
+    const regionDirMap: Record<ColorQuestRegion, "up" | "right" | "down" | "left"> = {
+      front: "up",
+      right: "right",
+      back: "down",
+      left: "left",
+    };
+
     try {
-      await send(createColorQuestRegionCommand(region));
+      await sendDirectionInput(regionDirMap[region]);
     } catch (err) {
       console.warn("[REGION ANSWER ERROR]", err);
     }
@@ -219,49 +229,37 @@ export default function ChallengeLevelPage() {
     correctCount: number;
   } | null>(null);
 
-  // BLE message listener
+  // Protocol v1 Game Result and event listener
   useEffect(() => {
-    if (gameState !== "playing" || !lastMessage) return;
+    if (gameState !== "playing") return;
 
-    if (lastMessage.type === "task" && (lastMessage.game === "color-quest" || lastMessage.game === "colour-quest")) {
-      const taskData = {
-        index: lastMessage.index,
-        phase: (lastMessage.phase as "memorize" | "answer") || "memorize",
-        input: lastMessage.input || "region",
-        target: lastMessage.target,
-        options: lastMessage.options,
-      };
-      setTimeout(() => {
-        setActiveTask(taskData);
-        setTaskFeedback(null);
-      }, 0);
-    } else if (
-      lastMessage.type === "task_result" &&
-      (lastMessage.game === "color-quest" || lastMessage.game === "colour-quest")
-    ) {
-      const feedback = {
-        correct: lastMessage.correct,
-        timeout: lastMessage.timeout,
-        correctCount: lastMessage.correctCount ?? 0,
-      };
-      setTimeout(() => {
-        setTaskFeedback(feedback);
-      }, 0);
+    if (protocolGameResult) {
+      const normScore = protocolGameResult.score > 1 ? protocolGameResult.score / 100 : protocolGameResult.score;
+      const messageKey = `${protocolGameResult.game}-${normScore}-${protocolGameResult.level ?? levelId}`;
+      if (processedMessageRef.current !== messageKey) {
+        processedMessageRef.current = messageKey;
+        handleGameResult(normScore);
+      }
+      return;
+    }
+
+    if (!lastMessage) return;
+
+    if (lastMessage.type === "game_result") {
+      const rawScore = (lastMessage.payload as { score?: number }).score ?? 0;
+      const normScore = rawScore > 1 ? rawScore / 100 : rawScore;
+      const messageKey = `result-${normScore}-${levelId}`;
+      if (processedMessageRef.current !== messageKey) {
+        processedMessageRef.current = messageKey;
+        handleGameResult(normScore);
+      }
     } else if (lastMessage.type === "error") {
-      const msg = lastMessage.message;
+      const msg = (lastMessage.payload as { message?: string }).message ?? "Protocol error";
       setTimeout(() => {
         setErrorMessage(`Firmware error: ${msg}`);
       }, 0);
-    } else if (isValidColorQuestResult(lastMessage)) {
-      const messageKey = `${lastMessage.game}-${lastMessage.score}-${lastMessage.level ?? levelId}`;
-      if (processedMessageRef.current === messageKey) {
-        return; // Prevent duplicate response processing
-      }
-      processedMessageRef.current = messageKey;
-
-      handleGameResult(lastMessage.score);
     }
-  }, [gameState, lastMessage, handleGameResult, levelId]);
+  }, [gameState, lastMessage, protocolGameResult, handleGameResult, levelId]);
 
   // Handle BLE disconnection while playing
   useEffect(() => {
@@ -277,7 +275,7 @@ export default function ChallengeLevelPage() {
 
   const handleExit = () => {
     if (gameState === "playing" || gameState === "starting") {
-      void send({ command: "abort" }).catch((e) => console.error("[ABORT ERROR]", e));
+      void abortGame().catch((e) => console.error("[ABORT ERROR]", e));
     }
     clearTimeoutTimer();
     router.push(`/playground/${params.mode}/challenges`);

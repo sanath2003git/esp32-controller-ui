@@ -368,7 +368,7 @@ function ChallengeCarousel() {
 
 /* ─── Main component ──────────────────────────────── */
 export default function HomeDashboard() {
-  const { status, send, openModal, lastMessage } = useBleContext();
+  const { status, openModal } = useBleContext();
   const router = useRouter();
 
   const isConnected = status === "connected";
@@ -420,9 +420,7 @@ export default function HomeDashboard() {
   }, [petFullscreen]);
 
   const sendRgb = (r: number, g: number, b: number) => {
-    void send({ command: "color", r, g, b }).catch((err: unknown) => {
-      console.error("[HOME] Color send failed", err);
-    });
+    // Local state preview
   };
 
   /* Send expression to robot */
@@ -430,11 +428,6 @@ export default function HomeDashboard() {
     setSelectedExpression(id);
     setExpressionAnimating(true);
     setTimeout(() => setExpressionAnimating(false), 700);
-    try {
-      await send({ command: "oled_emoji", emoji_id: id } as Parameters<typeof send>[0]);
-    } catch {
-      // silently ignore when disconnected
-    }
   };
 
   const handleExpressionChange = (
