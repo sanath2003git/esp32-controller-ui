@@ -411,8 +411,8 @@ void oledInit() {
 // OLED IDLE ANIMATION
 // ========================================
 
-const uint8_t IDLE_FRAME_COUNT = 50;
-const uint16_t IDLE_FRAME_INTERVAL = 50;  // 20 FPS
+const uint8_t IDLE_FRAME_COUNT = 25;
+const uint16_t IDLE_FRAME_INTERVAL = 150;  // ~6.7 FPS
 
 const uint8_t *idleFrames[IDLE_FRAME_COUNT] = {
   frame0,
@@ -439,32 +439,7 @@ const uint8_t *idleFrames[IDLE_FRAME_COUNT] = {
   frame21,
   frame22,
   frame23,
-  frame24,
-  frame25,
-  frame26,
-  frame27,
-  frame28,
-  frame29,
-  frame30,
-  frame31,
-  frame32,
-  frame33,
-  frame34,
-  frame35,
-  frame36,
-  frame37,
-  frame38,
-  frame39,
-  frame40,
-  frame41,
-  frame42,
-  frame43,
-  frame44,
-  frame45,
-  frame46,
-  frame47,
-  frame48,
-  frame49
+  frame24
 };
 
 unsigned long lastIdleFrameTime = 0;
