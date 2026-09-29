@@ -18,11 +18,12 @@ const COLORS = {
   yellow: { name: "Yellow", hex: "#EAB308" },
   purple: { name: "Purple", hex: "#A855F7" },
   cyan: { name: "Cyan", hex: "#06B6D4" },
+  magenta: { name: "Magenta", hex: "#EC4899" },
 };
 
 export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number, levelMeta: any }) {
   const router = useRouter();
-  const { status, send, openModal, setColor, move, stop, lastMessage } = useBleContext();
+  const { status, send, openModal, setColor, move, stop, lastEventMessage } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
   const [timeLeft, setTimeLeft] = useState(0);
@@ -51,7 +52,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         { ...COLORS.green, action: "GO" },
         { ...COLORS.blue, action: "GO" },
         { ...COLORS.red, action: "STOP" },
-        { ...COLORS.yellow, action: "STOP" }
+        { ...COLORS.magenta, action: "STOP" }
       ] as Color[];
     } else {
       return [
@@ -59,8 +60,8 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         { ...COLORS.blue, action: "GO" },
         { ...COLORS.cyan, action: "GO" },
         { ...COLORS.red, action: "STOP" },
-        { ...COLORS.yellow, action: "STOP" },
-        { ...COLORS.purple, action: "STOP" }
+        { ...COLORS.magenta, action: "STOP" },
+        { ...COLORS.yellow, action: "STOP" }
       ] as Color[];
     }
   };
@@ -172,11 +173,12 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
   }, [router, send, status]);
 
   useEffect(() => {
-    if (gameState !== "playing" || !lastMessage) return;
+    if (!lastEventMessage) return;
     
-    const msg = lastMessage as any;
+    const msg = lastEventMessage as any;
     if (msg.game === "reflex-dash") {
       if (msg.type === "event" && msg.event === "phase_start") {
+        if (gameState !== "playing") setGameState("playing");
         setCurrentColor({
           name: msg.colorName,
           hex: msg.hex,
@@ -189,7 +191,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         abortGame();
       }
     }
-  }, [lastMessage, gameState, handleLevelComplete, abortGame]);
+  }, [lastEventMessage, gameState, handleLevelComplete, abortGame]);
 
   useEffect(() => {
     return () => {

@@ -1015,9 +1015,9 @@ void rdCreatePhase() {
         colorName = "Red";
       } else {
         r = 255;
-        g = 255;
-        b = 0;
-        colorName = "Yellow";
+        g = 0;
+        b = 255;
+        colorName = "Magenta";
       }
     }
   } else {
@@ -1049,14 +1049,14 @@ void rdCreatePhase() {
         colorName = "Red";
       } else if (c == 1) {
         r = 255;
+        g = 0;
+        b = 255;
+        colorName = "Magenta";
+      } else {
+        r = 255;
         g = 255;
         b = 0;
         colorName = "Yellow";
-      } else {
-        r = 128;
-        g = 0;
-        b = 128;
-        colorName = "Purple";
       }
     }
   }
