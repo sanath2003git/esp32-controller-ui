@@ -207,7 +207,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
 
   const beep = useCallback(
     async (freq = 2000, duration = 100) => {
-      await send({ command: "buzzer", freq, duration });
+      await send({ command: "buzz", freq, duration });
     },
     [send],
   );

@@ -12,13 +12,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { isSignedIn } = useAuth();
 
   const isAuthPage = pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
+  const isRcMode = pathname.startsWith("/rc-mode");
   const showAppComponents = Boolean(isSignedIn && !isAuthPage);
+  const showAppHeader = showAppComponents && !isRcMode;
 
   return (
     <>
       {showAppComponents && (
         <>
-          <AppHeader />
+          {showAppHeader && <AppHeader />}
           <BluetoothNotificationBanner />
           <BluetoothConnectionGate />
         </>

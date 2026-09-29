@@ -63,7 +63,7 @@ export type ColorCommand = {
 };
 
 export type BuzzerCommand = {
-  command: "buzzer";
+  command: "buzz";
   freq?: number;
   duration?: number;
 };

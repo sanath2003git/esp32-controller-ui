@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -444,11 +445,7 @@ export default function HomeDashboard() {
   };
 
   const handleControllerButton = () => {
-    if (!isConnected) {
-      openModal();
-    } else {
-      router.push("/rc-mode");
-    }
+    router.push("/rc-mode");
   };
 
   const currentMood = MOOD_LABELS[selectedExpression];
@@ -500,11 +497,10 @@ export default function HomeDashboard() {
             </button>
 
             {/* Controller button — dark circle, gamepad icon, connection dot */}
-            <button
-              type="button"
+            <Link
+              href="/rc-mode"
               id="pet-status-controller-btn"
-              onClick={handleControllerButton}
-              aria-label={isConnected ? "Open controller" : "Connect to robot"}
+              aria-label="Open controller"
               className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
             >
               <Gamepad2 size={22} className="text-white/70" />
@@ -518,7 +514,7 @@ export default function HomeDashboard() {
                     : "bg-danger shadow-[0_0_6px_rgba(255,77,103,0.9)]"
                   }`}
               />
-            </button>
+            </Link>
           </div>
         </div>
 
