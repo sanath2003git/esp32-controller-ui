@@ -128,7 +128,8 @@ export default function ControlPanel({
   activeTask,
   onInputDirection,
 }: ControlPanelProps) {
-  const { status, telemetry, sendDirectionInput, stop } = useBleContext();
+  const { status, telemetry, sendJoystickInput, sendDirectionInput } =
+    useBleContext();
 
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
@@ -183,14 +184,18 @@ export default function ControlPanel({
   }, [alertToast]);
 
   const handleJoystickDirection = ({ dx, dy }: JoystickDirection) => {
+    if (!isConnected) return;
+
+    const mag = Math.min(1.0, Math.hypot(dx, dy));
+
     if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
       if (activeMovementDirection.current !== null) {
+        activeMovementDirection.current = null;
         if (!isColorQuestActive) {
-          void stop().catch((error: unknown) => {
+          void sendJoystickInput(0, 0, 0).catch((error: unknown) => {
             console.error("[CONTROL PANEL] Stop command failed", error);
           });
         }
-        activeMovementDirection.current = null;
       }
       return;
     }
@@ -220,13 +225,10 @@ export default function ControlPanel({
         ? "right"
         : "left";
 
-    if (activeMovementDirection.current === nextDirection) {
-      return;
-    }
-
-    activeMovementDirection.current = nextDirection;
-
     if (isColorQuestActive) {
+      if (activeMovementDirection.current === nextDirection) return;
+      activeMovementDirection.current = nextDirection;
+
       const inputDirection =
         nextDirection === "forward"
           ? "up"
@@ -241,8 +243,10 @@ export default function ControlPanel({
       return;
     }
 
-    void sendDirectionInput(nextDirection).catch((error: unknown) => {
-      console.error("[CONTROL PANEL] Movement command failed", error);
+    // Free Ride Mode: send continuous Protocol v1 normalized joystick input
+    activeMovementDirection.current = nextDirection;
+    void sendJoystickInput(dx, dy, mag).catch((error: unknown) => {
+      console.error("[CONTROL PANEL] Joystick input failed", error);
     });
   };
 
@@ -250,9 +254,9 @@ export default function ControlPanel({
     if (activeMovementDirection.current !== null) {
       activeMovementDirection.current = null;
 
-      if (!isColorQuestActive) {
-        void stop().catch((error: unknown) => {
-          console.error("[CONTROL PANEL] Stop command failed", error);
+      if (!isColorQuestActive && isConnected) {
+        void sendJoystickInput(0, 0, 0).catch((error: unknown) => {
+          console.error("[CONTROL PANEL] Joystick release stop failed", error);
         });
       }
     }
