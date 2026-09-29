@@ -1,4 +1,58 @@
-"use client";
+// Minimal Web Bluetooth type shims for environments where DOM lib lacks them
+declare global {
+  interface Navigator {
+    bluetooth?: {
+      requestDevice(
+        options:
+          | {
+              filters: Array<{ name?: string; services?: string[] }>;
+              optionalServices?: string[];
+            }
+          | {
+              acceptAllDevices: boolean;
+              optionalServices?: string[];
+            }
+      ): Promise<BluetoothDevice>;
+    };
+  }
+
+  interface BluetoothRemoteGATTCharacteristic {
+    value: DataView | null;
+    startNotifications(): Promise<void>;
+    writeValue(data: BufferSource): Promise<void>;
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject
+    ): void;
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject
+    ): void;
+  }
+
+  interface BluetoothRemoteGATTServer {
+    connect(): Promise<BluetoothRemoteGATTServer>;
+    getPrimaryService(uuid: string): Promise<{
+      getCharacteristic(
+        uuid: string
+      ): Promise<BluetoothRemoteGATTCharacteristic>;
+    }>;
+    connected?: boolean;
+    disconnect(): void;
+  }
+
+  interface BluetoothDevice {
+    gatt?: BluetoothRemoteGATTServer | null;
+    addEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject
+    ): void;
+    removeEventListener(
+      type: string,
+      listener: EventListenerOrEventListenerObject
+    ): void;
+  }
+}
 
 import {
   BLE_DEVICE_NAME,

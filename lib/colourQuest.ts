@@ -1,9 +1,3 @@
-import type {
-  ColorQuestInputRegionCommand,
-  ColorQuestRegion,
-  ColorQuestResult,
-  ColorQuestStartCommand,
-} from "@/types/colourQuest";
 import type { LevelDifficulty } from "@/data/levels";
 
 export type LevelMeta = {
@@ -163,46 +157,5 @@ export function calculateGameProgress(
     completedLevels,
     totalLevels,
     progressPercentage,
-  };
-}
-
-/**
- * Validates whether an incoming object is a valid ColorQuestResult BLE message.
- */
-export function isValidColorQuestResult(val: unknown): val is ColorQuestResult {
-  if (typeof val !== "object" || val === null) return false;
-  const obj = val as Record<string, unknown>;
-  return (
-    obj.type === "response" &&
-    (obj.game === "color-quest" || obj.game === "colour-quest") &&
-    typeof obj.score === "number" &&
-    Number.isFinite(obj.score) &&
-    obj.score >= 0 &&
-    obj.score <= 1
-  );
-}
-
-/**
- * Creates a strongly typed BLE start command payload for Colour Quest.
- */
-export function createColorQuestStartCommand(
-  level: number
-): ColorQuestStartCommand {
-  return {
-    command: "challenge",
-    game: "color-quest",
-    level,
-  };
-}
-
-/**
- * Creates a region input command payload for Colour Quest.
- */
-export function createColorQuestRegionCommand(
-  region: ColorQuestRegion
-): ColorQuestInputRegionCommand {
-  return {
-    command: "input",
-    region,
   };
 }

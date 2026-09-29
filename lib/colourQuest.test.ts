@@ -6,9 +6,7 @@ import {
   mergeBestScore,
   mergeBestStars,
   calculateGameProgress,
-  isValidColorQuestResult,
   normalizeGameSlug,
-  createColorQuestRegionCommand,
   COLOUR_QUEST_LEVELS,
 } from "./colourQuest.js";
 
@@ -16,12 +14,12 @@ describe("Colour Quest Domain Logic & Protocol", () => {
   describe("6-Level Matrix", () => {
     test("defines exact 6 levels with difficulties and timings", () => {
       assert.equal(COLOUR_QUEST_LEVELS.length, 6);
-      assert.equal(COLOUR_QUEST_LEVELS[0].timing, "Normal");
-      assert.equal(COLOUR_QUEST_LEVELS[1].timing, "Fast");
-      assert.equal(COLOUR_QUEST_LEVELS[2].timing, "Normal");
-      assert.equal(COLOUR_QUEST_LEVELS[3].timing, "Faster");
-      assert.equal(COLOUR_QUEST_LEVELS[4].timing, "Fast");
-      assert.equal(COLOUR_QUEST_LEVELS[5].timing, "Fastest");
+      assert.equal(COLOUR_QUEST_LEVELS[0].timing, "5 seconds");
+      assert.equal(COLOUR_QUEST_LEVELS[1].timing, "2.5 seconds");
+      assert.equal(COLOUR_QUEST_LEVELS[2].timing, "5 seconds");
+      assert.equal(COLOUR_QUEST_LEVELS[3].timing, "2.5 seconds");
+      assert.equal(COLOUR_QUEST_LEVELS[4].timing, "5 seconds");
+      assert.equal(COLOUR_QUEST_LEVELS[5].timing, "2.5 seconds");
     });
   });
 
@@ -31,19 +29,6 @@ describe("Colour Quest Domain Logic & Protocol", () => {
       assert.equal(normalizeGameSlug("color-quest"), "color-quest");
       assert.equal(normalizeGameSlug("COLOUR-QUEST"), "color-quest");
       assert.equal(normalizeGameSlug(""), "color-quest");
-    });
-  });
-
-  describe("createColorQuestRegionCommand", () => {
-    test("creates valid region input payload", () => {
-      assert.deepEqual(createColorQuestRegionCommand("front"), {
-        command: "input",
-        region: "front",
-      });
-      assert.deepEqual(createColorQuestRegionCommand("back"), {
-        command: "input",
-        region: "back",
-      });
     });
   });
 
@@ -113,30 +98,6 @@ describe("Colour Quest Domain Logic & Protocol", () => {
       assert.equal(result.completedLevels, 2);
       assert.equal(result.totalLevels, 6);
       assert.equal(result.progressPercentage, 33);
-    });
-  });
-
-  describe("isValidColorQuestResult", () => {
-    test("validates legitimate BLE response with score and optional level/correct metrics", () => {
-      assert.equal(
-        isValidColorQuestResult({
-          type: "response",
-          game: "color-quest",
-          score: 0.7,
-          level: 1,
-          correct: 7,
-          tasks: 10,
-        }),
-        true
-      );
-    });
-
-    test("rejects invalid score, wrong game, or malformed structure", () => {
-      assert.equal(isValidColorQuestResult(null), false);
-      assert.equal(isValidColorQuestResult({ type: "response", game: "color-quest", score: -0.1 }), false);
-      assert.equal(isValidColorQuestResult({ type: "response", game: "color-quest", score: 1.5 }), false);
-      assert.equal(isValidColorQuestResult({ type: "response", game: "echo-memory", score: 0.8 }), false);
-      assert.equal(isValidColorQuestResult({ type: "telemetry" }), false);
     });
   });
 });

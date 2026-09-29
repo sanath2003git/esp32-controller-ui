@@ -17,11 +17,12 @@ import {
   TrafficCone,
   Trophy,
   X,
+  type LucideIcon,
 } from "lucide-react";
 
 import { useBleContext } from "@/context/BleContext";
 import ColorWheelModal from "@/components/ColorWheelModal";
-import { fetchAndSyncProgress, getTrustLevel, incrementTrustLevel } from "@/lib/progressStore";
+import { fetchAndSyncProgress, getTrustLevel } from "@/lib/progressStore";
 
 /* ─── Trust tips ──────────────────────────────────── */
 const TRUST_TIPS = [
@@ -130,7 +131,7 @@ type ExpressionId = (typeof EXPRESSIONS)[number]["id"];
 type ChallengeData = {
   id: string;
   name: string;
-  icon: any;
+  icon: LucideIcon;
   accent: string;
   done: number;
   total: number;
@@ -381,12 +382,10 @@ export default function HomeDashboard() {
   const [petFullscreen, setPetFullscreen] = useState(false);
   const [trustOpen, setTrustOpen] = useState(false);
 
-  const [trustLevel, setTrustLevel] = useState(50);
+  const [trustLevel, setTrustLevel] = useState<number>(getTrustLevel);
 
-  // Initialize and listen for trust changes
+  // Listen for trust changes
   useEffect(() => {
-    setTrustLevel(getTrustLevel());
-
     const onTrustChange = (e: Event) => {
       const ce = e as CustomEvent<number>;
       setTrustLevel(ce.detail);
@@ -394,8 +393,6 @@ export default function HomeDashboard() {
     window.addEventListener("trustLevelChanged", onTrustChange);
     return () => window.removeEventListener("trustLevelChanged", onTrustChange);
   }, []);
-
-
 
   /* Auto-switch expression based on connection status */
   useEffect(() => {
@@ -419,7 +416,7 @@ export default function HomeDashboard() {
     return () => document.body.classList.remove("pet-fullscreen");
   }, [petFullscreen]);
 
-  const sendRgb = (r: number, g: number, b: number) => {
+  const sendRgb = () => {
     // Local state preview
   };
 
