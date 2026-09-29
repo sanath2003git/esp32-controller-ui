@@ -52,8 +52,8 @@ const BleContext = createContext<BleContextValue | null>(null);
 export function BleProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<BleClient | null>(null);
   const statusRef = useRef<BleStatus>("disconnected");
-  const lastHoldTimeRef = useRef<number>(Date.now());
-  const lastDecayTimeRef = useRef<number>(Date.now());
+  const lastHoldTimeRef = useRef<number>(0);
+  const lastDecayTimeRef = useRef<number>(0);
 
   const [status, setStatus] = useState<BleStatus>("disconnected");
   const [deviceName, setDeviceName] = useState<string | null>(null);
