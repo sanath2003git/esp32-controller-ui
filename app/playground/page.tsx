@@ -89,11 +89,11 @@ export default function Playground() {
           />
 
           <ModeCard
-            title="Reflex Dash"
+            title="Reflex Arc"
             description="Single-colour alert / safe point reflex testing."
             icon="reflex"
             accent="warning"
-            href="/playground/reflex-dash"
+            href="/playground/reflex-arc"
             isComingSoon={true}
           />
         </div>

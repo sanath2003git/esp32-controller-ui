@@ -40,6 +40,8 @@ export default function ChallengeLevelPage() {
   const router = useRouter();
   const {
     status,
+    selectGame,
+    selectLevel,
     startGame,
     sendDirectionInput,
     abortGame,
@@ -152,6 +154,18 @@ export default function ChallengeLevelPage() {
       setActiveTask(null);
       setGameState("starting");
       processedMessageRef.current = null;
+
+      try {
+        await selectGame("color_quest");
+      } catch (err) {
+        console.warn("[CHALLENGE] selectGame warning:", err);
+      }
+
+      try {
+        await selectLevel("color_quest", levelId);
+      } catch (err) {
+        console.warn("[CHALLENGE] selectLevel warning:", err);
+      }
 
       await startGame("color_quest", levelId);
 
