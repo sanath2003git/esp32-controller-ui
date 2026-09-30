@@ -138,6 +138,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const closeModal = useCallback(() => setIsModalOpen(false), []);
 
   const clearState = useCallback(() => {
+    console.info("[BleContext] Clearing BLE application state");
     setStatus("disconnected");
     setIsHandshakeComplete(false);
     setDeviceName(null);
@@ -152,8 +153,10 @@ export function BleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const connect = useCallback(async () => {
+    console.info("[BleContext] Connect requested", { status });
     if (status === "connecting" || status === "connected") return;
 
+    console.info("[BleContext] Connection state: connecting");
     setStatus("connecting");
     setProtocolError(null);
 
@@ -175,20 +178,26 @@ export function BleProvider({ children }: { children: ReactNode }) {
     client.onMessage((msg) => setLastMessage(msg));
 
     try {
+      console.info("[BleContext] Protocol client connect started");
       const info = await client.connect();
+      console.info("[BleContext] Handshake and device info completed", info);
       setDeviceInfo(info);
       setDeviceName(info?.name ?? "Elxie Robot");
+      console.info("[BleContext] Connection state: connected");
       setStatus("connected");
       setIsHandshakeComplete(true);
       setControlOwner("mobile"); // BLE connected -> Mobile App owns control
       setIsModalOpen(false);
 
       // Automatically request telemetry streaming from robot
-      void client.configureTelemetry(true, 100).catch((err) => {
+      console.info("[BleContext] Requesting telemetry stream", { enabled: true, intervalMs: 100 });
+      void client.configureTelemetry(true, 100).then((ack) => {
+        console.info("[BleContext] Telemetry configuration acknowledged", ack);
+      }).catch((err) => {
         console.warn("[BleContext] Telemetry config request failed:", err);
       });
     } catch (error) {
-      console.error("[BLE CONNECT ERROR]", error);
+      console.error("[BleContext] BLE connect/handshake flow failed", error);
       client.disconnect();
       clientRef.current = null;
       clearState();
@@ -197,6 +206,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   }, [status, clearState]);
 
   const disconnect = useCallback(() => {
+    console.info("[BleContext] Disconnect requested by application");
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;

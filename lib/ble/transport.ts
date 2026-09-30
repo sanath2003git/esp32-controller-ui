@@ -106,6 +106,12 @@ export class BleTransport {
    * Connect to the Web Bluetooth device matching Nordic UART Service (NUS).
    */
   async connect(deviceName?: string): Promise<void> {
+    console.info("[BLE Transport] Starting Web Bluetooth connection", {
+      requestedName: deviceName ?? BLE_DEVICE_NAME,
+      serviceUuid: BLE_SERVICE_UUID,
+      rxCharacteristicUuid: BLE_RX_CHARACTERISTIC_UUID,
+      txCharacteristicUuid: BLE_TX_CHARACTERISTIC_UUID,
+    });
     if (!navigator.bluetooth) {
       throw new Error("Web Bluetooth is not supported by this browser.");
     }
@@ -123,11 +129,14 @@ export class BleTransport {
       optionalServices: [BLE_SERVICE_UUID],
     });
 
+    console.info("[BLE Transport] Device selected", { name: this.device.name });
+
     if (!this.device.gatt) {
       throw new Error("Bluetooth GATT server is unavailable.");
     }
 
     const server = await this.device.gatt.connect();
+    console.info("[BLE Transport] GATT server connected", { connected: server.connected });
 
     const service = await server.getPrimaryService(BLE_SERVICE_UUID);
 
@@ -140,6 +149,7 @@ export class BleTransport {
     );
 
     await this.txCharacteristic.startNotifications();
+    console.info("[BLE Transport] TX notifications started");
 
     this.txCharacteristic.addEventListener(
       "characteristicvaluechanged",
@@ -152,6 +162,7 @@ export class BleTransport {
     );
 
     this.notifyConnectionState(true);
+    console.info("[BLE Transport] Connection setup complete");
   }
 
   /**
@@ -159,6 +170,11 @@ export class BleTransport {
    */
   disconnect(): void {
     const device = this.device;
+    console.info("[BLE Transport] Local disconnect requested", {
+      deviceName: device?.name,
+      wasConnected: Boolean(device?.gatt?.connected),
+      queuedWrites: this.writeQueue.length,
+    });
     this.cleanup();
 
     if (device?.gatt?.connected) {
@@ -184,6 +200,10 @@ export class BleTransport {
     }
 
     return new Promise((resolve, reject) => {
+      console.debug("[BLE Transport] Write queued", {
+        bytes: bytes.byteLength,
+        queueLength: this.writeQueue.length + 1,
+      });
       this.writeQueue.push({ data: bytes, resolve, reject });
 
       while (this.writeQueue.length > MAX_QUEUE_SIZE) {
@@ -257,10 +277,13 @@ export class BleTransport {
         }
 
         try {
+          console.debug("[BLE Transport] Writing characteristic", { bytes: item.data.byteLength });
           await characteristic.writeValue(item.data.buffer as ArrayBuffer);
           this.lastWriteAt = performance.now();
+          console.debug("[BLE Transport] Characteristic write completed", { bytes: item.data.byteLength });
           item.resolve();
         } catch (error) {
+          console.error("[BLE Transport] Characteristic write failed", error);
           item.reject(
             error instanceof Error ? error : new Error("BLE write failed."),
           );
@@ -278,6 +301,10 @@ export class BleTransport {
     if (!characteristic?.value) return;
 
     const chunk = new TextDecoder().decode(characteristic.value);
+    console.debug("[BLE Transport] Notification received", {
+      bytes: characteristic.value.byteLength,
+      chunk,
+    });
     this.rxBuffer += chunk;
 
     if (this.rxBuffer.includes("\n") || this.rxBuffer.includes("\r")) {
@@ -288,6 +315,7 @@ export class BleTransport {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        console.info("[BLE Transport] Complete line received", trimmed);
 
         // Emit raw string to subscribers (no JSON parsing in transport)
         for (const subscriber of this.messageSubscribers) {
@@ -302,11 +330,19 @@ export class BleTransport {
   };
 
   private handleDisconnect = (): void => {
+    console.warn("[BLE Transport] GATT server disconnected", {
+      deviceName: this.device?.name,
+      queuedWrites: this.writeQueue.length,
+    });
     this.cleanup();
     this.notifyConnectionState(false);
   };
 
   private notifyConnectionState(connected: boolean): void {
+    console.info("[BLE Transport] Connection state changed", {
+      connected,
+      subscribers: this.connectionSubscribers.size,
+    });
     for (const subscriber of this.connectionSubscribers) {
       try {
         subscriber(connected);
@@ -317,6 +353,10 @@ export class BleTransport {
   }
 
   private cleanup(): void {
+    console.debug("[BLE Transport] Cleaning up transport", {
+      deviceName: this.device?.name,
+      queuedWrites: this.writeQueue.length,
+    });
     if (this.txCharacteristic) {
       this.txCharacteristic.removeEventListener(
         "characteristicvaluechanged",

@@ -72,10 +72,13 @@ export class ProtocolClient {
    * Connect transport, perform Protocol v1 handshake, and fetch device info.
    */
   async connect(deviceName?: string): Promise<DeviceInfoPayload | null> {
+    console.info("[ProtocolClient] Beginning connection and handshake", { deviceName });
     await this.transport.connect(deviceName);
+    console.info("[ProtocolClient] Transport connected; sending hello");
 
     try {
       const helloAck = await this.sendHello();
+      console.info("[ProtocolClient] Hello acknowledgement received", helloAck);
       if (!helloAck.accepted) {
         throw new Error(
           `Protocol v1 handshake rejected by robot (version ${helloAck.protocolVersion}).`,
@@ -83,9 +86,12 @@ export class ProtocolClient {
       }
 
       this.isHandshakeDone = true;
+      console.info("[ProtocolClient] Handshake complete; requesting device info");
       const info = await this.requestDeviceInfo();
+      console.info("[ProtocolClient] Device info received", info);
       return info;
     } catch (error) {
+      console.error("[ProtocolClient] Connect/handshake failed", error);
       this.disconnect();
       throw error;
     }
@@ -95,6 +101,7 @@ export class ProtocolClient {
    * Disconnect transport and cleanup pending requests/state.
    */
   disconnect(): void {
+    console.info("[ProtocolClient] Disconnect requested", { pendingRequests: this.pendingRequests.size });
     this.isHandshakeDone = false;
     this.rejectAllPendingRequests("Protocol client disconnected.");
     this.transport.disconnect();
@@ -323,7 +330,9 @@ export class ProtocolClient {
   >(type: TType, payload: TPayload): Promise<void> {
     const envelope = this.constructEnvelope(type, payload);
     const json = JSON.stringify(envelope);
+    console.debug("[ProtocolClient] Sending message", { type, json });
     await this.transport.write(json);
+    console.debug("[ProtocolClient] Message write completed", { type });
   }
 
   private async sendRequest<TResponsePayload>(
@@ -334,10 +343,12 @@ export class ProtocolClient {
     const id = this.generateMessageId();
     const envelope = this.constructEnvelope(type, payload, id);
     const json = JSON.stringify(envelope);
+    console.info("[ProtocolClient] Sending correlated request", { type, id, timeoutMs, json });
 
     return new Promise<TResponsePayload>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(id);
+        console.error("[ProtocolClient] Request timed out", { type, id, timeoutMs });
         reject(
           new Error(
             `Protocol v1 request timed out after ${timeoutMs}ms (type: ${type}, id: ${id})`,
@@ -351,7 +362,10 @@ export class ProtocolClient {
         timeoutId,
       });
 
-      this.transport.write(json).catch((err) => {
+      this.transport.write(json).then(() => {
+        console.debug("[ProtocolClient] Request write completed", { type, id });
+      }).catch((err) => {
+        console.error("[ProtocolClient] Request write failed", { type, id, error: err });
         const req = this.pendingRequests.get(id);
         if (req) {
           clearTimeout(req.timeoutId);
@@ -369,6 +383,7 @@ export class ProtocolClient {
 
     this.unsubscribeTransportConnection =
       this.transport.subscribeToConnectionChange((connected) => {
+        console.info("[ProtocolClient] Transport connection event", { connected, pendingRequests: this.pendingRequests.size });
         if (!connected) {
           this.isHandshakeDone = false;
           this.rejectAllPendingRequests("Transport connection lost.");
@@ -377,6 +392,7 @@ export class ProtocolClient {
   }
 
   private handleRawMessage(raw: string): void {
+    console.info("[ProtocolClient] Incoming raw message", raw);
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -396,6 +412,7 @@ export class ProtocolClient {
     }
 
     const message = parsed as InboundProtocolMessage;
+    console.info("[ProtocolClient] Parsed protocol message", { type: message.type, id: message.id, payload: message.payload });
 
     // Dispatch to raw generic message subscribers
     for (const sub of this.genericMessageSubscribers) {
@@ -408,6 +425,7 @@ export class ProtocolClient {
 
     // Resolve correlated pending request if `id` matches
     if (message.id && this.pendingRequests.has(message.id)) {
+      console.info("[ProtocolClient] Matched response to pending request", { type: message.type, id: message.id });
       const pending = this.pendingRequests.get(message.id);
       if (pending) {
         clearTimeout(pending.timeoutId);
@@ -424,6 +442,8 @@ export class ProtocolClient {
           pending.resolve(message.payload);
         }
       }
+    } else if (message.id) {
+      console.warn("[ProtocolClient] Received response with no matching pending request", { type: message.type, id: message.id, pendingIds: [...this.pendingRequests.keys()] });
     }
 
     // Dispatch to specific event type handlers
@@ -517,6 +537,7 @@ export class ProtocolClient {
   }
 
   private rejectAllPendingRequests(reason: string): void {
+    console.warn("[ProtocolClient] Rejecting pending requests", { reason, requestIds: [...this.pendingRequests.keys()] });
     for (const [id, pending] of this.pendingRequests.entries()) {
       clearTimeout(pending.timeoutId);
       pending.reject(new Error(`Request cancelled (${id}): ${reason}`));
