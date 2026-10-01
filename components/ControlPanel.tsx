@@ -6,10 +6,36 @@ import {
   Bot,
   Compass,
   Gauge,
-  Lightbulb,
+  Palette,
   Target,
   TriangleAlert,
+  Volume2,
 } from "lucide-react";
+
+const PerformanceModeIcon = ({ size = 24, className = "" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    {/* Tachometer / Gauge Outer Arch */}
+    <path d="M3 14A9 9 0 0 1 19.5 7.5" />
+
+    {/* Gauge Needle pointing towards high performance (top-right) */}
+    <line x1="12" y1="14" x2="17" y2="9" />
+    <circle cx="12" cy="14" r="1" fill="currentColor" />
+
+    {/* Lightning bolt inside the gauge */}
+    <path d="M11 14h3l-3.5 5.5v-3.5H8l3.5-5.5v3.5Z" />
+  </svg>
+);
 
 import JoystickController, {
   type JoystickDirection,
@@ -17,7 +43,6 @@ import JoystickController, {
 import ColorWheelModal from "@/components/ColorWheelModal";
 
 import { useBleContext } from "@/context/BleContext";
-import { error } from "console";
 import { JoyStickDir } from "@/types/protocol";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
@@ -34,6 +59,8 @@ type ControlPanelProps = {
   isGameActive?: boolean;
   activeTask?: ActiveTaskInfo | null;
   onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
+  customTelemetry?: React.ReactNode;
+  customControls?: React.ReactNode;
 };
 
 type ObstaclePosition =
@@ -63,10 +90,10 @@ const modeLabel: Record<ControlPanelMode, string> = {
 };
 
 const obstaclePositionClass: Record<ObstaclePosition, string> = {
-  "front-left": "left-0 top-3",
-  "front-right": "right-0 top-3",
-  "rear-left": "bottom-3 left-0",
-  "rear-right": "bottom-3 right-0",
+  "front-left": "left-0 top-1 sm:top-3",
+  "front-right": "right-0 top-1 sm:top-3",
+  "rear-left": "bottom-1 sm:bottom-3 left-0",
+  "rear-right": "bottom-1 sm:bottom-3 right-0",
 };
 
 function ObstacleIndicator({
@@ -125,33 +152,30 @@ export default function ControlPanel({
   isGameActive = false,
   activeTask,
   onInputDirection,
+  customTelemetry,
+  customControls,
 }: ControlPanelProps) {
-  const { status, telemetry, sendJoystickInput } =
-    useBleContext();
+  const { status, telemetry, sendJoystickInput } = useBleContext();
 
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
-
   const [alertToast, setAlertToast] = useState<AlertToast | null>(null);
+  const [performanceMode, setPerformanceMode] = useState(false);
 
   const previousAlerts = useRef({
     sudden: false,
     pit: false,
   });
 
+  const gameStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    gameStartRef.current = Date.now();
+  }, [game]);
+
   const activeMovementDirection = useRef<JoyStickDir | null>(null);
-  const lastSentMovementDirection = useRef<JoyStickDir | null>(null);
 
   const isConnected = status === "connected";
-
-  useEffect(() => {
-    if (!isConnected) {
-      activeMovementDirection.current = null;
-      lastSentMovementDirection.current = null;
-    }
-  }, [isConnected]);
-  const isColorQuestActive =
-    (game === "color-quest" || mode === "challenge") && isGameActive;
+  const isColorQuestActive = game === "color-quest" && isGameActive;
 
   const heading = telemetry?.direction ?? null;
   const obstacle = telemetry?.obstacle;
@@ -161,11 +185,14 @@ export default function ControlPanel({
     const pit = telemetry?.pit.detected ?? false;
 
     if (sudden && !previousAlerts.current.sudden) {
-      setAlertToast({
-        id: Date.now(),
-        message: "Sudden motion detected",
-        tone: "warning",
-      });
+      const isGameJustStarted = Date.now() - gameStartRef.current < 2500;
+      if (!isGameJustStarted) {
+        setAlertToast({
+          id: Date.now(),
+          message: "Sudden motion detected",
+          tone: "warning",
+        });
+      }
     } else if (pit && !previousAlerts.current.pit) {
       setAlertToast({
         id: Date.now(),
@@ -192,20 +219,23 @@ export default function ControlPanel({
   const handleJoystickDirection = ({ dx, dy }: JoystickDirection) => {
     if (!isConnected) return;
 
-    const mag = Math.min(1.0, Math.hypot(dx, dy));
+    const magnitude = performanceMode ? 0.9 : 0.6;
 
     if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
-      activeMovementDirection.current = null;
+      if (activeMovementDirection.current !== null) {
+        activeMovementDirection.current = null;
+        void sendJoystickInput("none", 0).catch((error: unknown) => {
+          console.error("[CONTROL PANEL] Joystick stop command failed", error);
+        });
+      }
       return;
     }
 
     const absDx = Math.abs(dx);
     const absDy = Math.abs(dy);
     const current = activeMovementDirection.current;
-    const currentAxisIsVertical =
-      current === "up" || current === "down";
-    const currentAxisIsHorizontal =
-      current === "right" || current === "left";
+    const currentAxisIsVertical = current === "up" || current === "down";
+    const currentAxisIsHorizontal = current === "right" || current === "left";
 
     let useVerticalAxis: boolean;
     if (currentAxisIsVertical) {
@@ -224,17 +254,23 @@ export default function ControlPanel({
         ? "right"
         : "left";
 
+    if (activeMovementDirection.current === nextDirection) {
+      return;
+    }
+
     activeMovementDirection.current = nextDirection;
-    if (lastSentMovementDirection.current === nextDirection) return;
-    lastSentMovementDirection.current = nextDirection;
-    void sendJoystickInput(nextDirection, mag).catch((error: unknown) => {
-      console.error("[CONTROL PANEL] Joystick input failed", error);
+    const inputDirection = nextDirection;
+
+    void sendJoystickInput(nextDirection, magnitude).catch((error: unknown) => {
+      console.error("[CONTROL PANEL] Joystick input command failed", error);
     });
-    onInputDirection?.(nextDirection);
+    onInputDirection?.(inputDirection);
   };
 
   const handleJoystickRelease = () => {
-    activeMovementDirection.current = "none";
+    if (activeMovementDirection.current === null || !isConnected) return;
+
+    activeMovementDirection.current = null;
     void sendJoystickInput("none", 0).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Joystick release stop failed", error);
     });
@@ -242,16 +278,27 @@ export default function ControlPanel({
 
   const sendRgb = (r: number, g: number, b: number) => {
     setLedColor({ r, g, b });
+    console.log("[Control Panel]: sendColor", { r, g, b });
+  };
+
+  const togglePerfomanceMode = () => {
+    setPerformanceMode((active) => !active);
+  };
+
+  const sendHonk = () => {
+    console.log("[Control Panel]: sending honk");
   };
 
   const ledHex = ledColor
-    ? `#${[ledColor.r, ledColor.g, ledColor.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
+    ? `#${[ledColor.r, ledColor.g, ledColor.b]
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("")}`
     : null;
 
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
-      className="overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
+      className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -274,136 +321,144 @@ export default function ControlPanel({
         </div>
       </div>
 
-      {/* LED Color section */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-          LED Color
-        </p>
+      <div
+        className={`mt-3 flex min-h-0 flex-col gap-2 ${game === "reflex-dash" ? "flex-[3]" : "flex-1"
+          }`}
+      >
+        {customTelemetry ? (
+          <div className="flex-1 overflow-hidden">{customTelemetry}</div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col justify-between rounded-3xl border border-border bg-black/20 px-4 py-4">
+            <div className="flex shrink-0 items-center justify-between text-xs text-white/45">
+              <span className="flex items-center gap-1.5">
+                <Compass size={14} className="text-accent" />
+                Heading
+              </span>
 
-        <button
-          type="button"
-          id="control-panel-color-wheel-btn"
-          disabled={!isConnected}
-          aria-label="Open robot LED color picker"
-          onClick={() => setColorWheelOpen(true)}
-          className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${isConnected
-            ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
-            : "cursor-not-allowed border-border bg-black/10 opacity-40"
-            }`}
-        >
-          <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
-            <defs>
-              <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-                <stop offset="100%" stopColor="white" stopOpacity="0" />
-              </radialGradient>
-              <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#ff0000" />
-                <stop offset="16%" stopColor="#ffff00" />
-                <stop offset="33%" stopColor="#00ff00" />
-                <stop offset="50%" stopColor="#00ffff" />
-                <stop offset="66%" stopColor="#0000ff" />
-                <stop offset="83%" stopColor="#ff00ff" />
-                <stop offset="100%" stopColor="#ff0000" />
-              </linearGradient>
-            </defs>
-            <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
-            <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
-            <circle cx="8" cy="8" r="3" fill="#080b14" />
-          </svg>
+              <strong className="font-mono text-sm text-white">
+                {heading === null ? "--°" : `${Math.round(heading)}°`}
+              </strong>
+            </div>
 
-          <div className="flex flex-1 items-center justify-between">
-            <span className="text-sm font-semibold text-white/70">
-              {ledHex ? ledHex.toUpperCase() : "Not set"}
-            </span>
-            <div
-              className="h-5 w-5 rounded-full border border-white/15"
-              style={{
-                background: ledHex ?? "rgba(255,255,255,0.08)",
-                boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
-              }}
-            />
-          </div>
+            <div className="relative mx-auto flex min-h-0 flex-1 w-full max-w-56 flex-col items-center justify-center">
+              <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+                Front
+              </p>
 
-          <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
-        </button>
-      </div>
+              <ObstacleIndicator
+                label="FL"
+                position="front-left"
+                detected={obstacle?.frontLeft ?? null}
+              />
+              <ObstacleIndicator
+                label="FR"
+                position="front-right"
+                detected={obstacle?.frontRight ?? null}
+              />
+              <ObstacleIndicator
+                label="RL"
+                position="rear-left"
+                detected={obstacle?.rearLeft ?? null}
+              />
+              <ObstacleIndicator
+                label="RR"
+                position="rear-right"
+                detected={obstacle?.rearRight ?? null}
+              />
 
-      <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
-        <div className="flex items-center justify-between text-xs text-white/45">
-          <span className="flex items-center gap-1.5">
-            <Compass size={14} className="text-accent" />
-            Heading
-          </span>
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div
+                  aria-label={
+                    heading === null
+                      ? "Robot heading unavailable"
+                      : `Robot heading ${Math.round(heading)} degrees`
+                  }
+                  className={`flex items-center justify-center rounded-2xl border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500 ${game === "reflex-dash" ? "h-10 w-10" : "h-14 w-14"
+                    }`}
+                  style={{
+                    transform: `rotate(${heading ?? 0}deg)`,
+                  }}
+                >
+                  <div
+                    className={`absolute h-0 w-0 border-x-transparent border-b-accent ${game === "reflex-dash"
+                      ? "top-1 border-x-[4px] border-b-[6px]"
+                      : "top-1.5 border-x-[6px] border-b-[8px]"
+                      }`}
+                  />
+                  <Bot
+                    size={game === "reflex-dash" ? 20 : 28}
+                    strokeWidth={1.65}
+                    className="text-primary"
+                  />
+                </div>
+              </div>
 
-          <strong className="font-mono text-sm text-white">
-            {heading === null ? "--°" : `${Math.round(heading)}°`}
-          </strong>
-        </div>
+              <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
+                Rear
+              </p>
+            </div>
 
-        <div className="relative mx-auto mt-4 h-64 max-w-72">
-          <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
-            Front
-          </p>
-
-          <ObstacleIndicator
-            label="FL"
-            position="front-left"
-            detected={obstacle?.frontLeft ?? null}
-          />
-
-          <ObstacleIndicator
-            label="FR"
-            position="front-right"
-            detected={obstacle?.frontRight ?? null}
-          />
-
-          <ObstacleIndicator
-            label="RL"
-            position="rear-left"
-            detected={obstacle?.rearLeft ?? null}
-          />
-
-          <ObstacleIndicator
-            label="RR"
-            position="rear-right"
-            detected={obstacle?.rearRight ?? null}
-          />
-
-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-            <div
-              aria-label={
-                heading === null
-                  ? "Robot heading unavailable"
-                  : `Robot heading ${Math.round(heading)} degrees`
-              }
-              className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
-              style={{
-                transform: `rotate(${heading ?? 0}deg)`,
-              }}
-            >
-              <div className="absolute top-3 h-0 w-0 border-x-[10px] border-b-[16px] border-x-transparent border-b-accent" />
-
-              <Bot size={64} strokeWidth={1.65} className="text-primary" />
+            <div className="flex shrink-0 items-center justify-center gap-2 text-center">
+              <Gauge size={16} className="text-accent" />
+              <span className="text-sm text-white/55">Front distance</span>
+              <strong className="font-mono text-lg text-white">
+                {telemetry?.distance.front === undefined ||
+                  telemetry.distance.front === null
+                  ? "-- cm"
+                  : `${telemetry.distance.front} cm`}
+              </strong>
             </div>
           </div>
+        )}
 
-          <p className="absolute bottom-0 left-1/2 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
-            Rear
-          </p>
-        </div>
+        <div className="flex w-full shrink-0 justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setColorWheelOpen(true)}
+            aria-label="Set LED Color"
+            className="flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-black/20 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <div
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/20 shadow-inner"
+              style={{
+                background: ledHex ?? "transparent",
+                boxShadow: ledHex ? `0 0 10px ${ledHex}88` : "none",
+              }}
+            >
+              <Palette
+                size={12}
+                className={ledHex ? "mix-blend-difference text-white/90" : ""}
+              />
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider">
+              LED
+            </span>
+          </button>
 
-        <div className="mt-2 flex items-center justify-center gap-2 text-center">
-          <Gauge size={16} className="text-accent" />
+          <button
+            type="button"
+            onClick={sendHonk}
+            aria-label="Honk"
+            className="flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-black/20 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <Volume2 size={16} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">
+              Honk
+            </span>
+          </button>
 
-          <span className="text-sm text-white/55">Front distance</span>
-
-          <strong className="font-mono text-lg text-white">
-            {telemetry?.distance.front === undefined ||
-              telemetry.distance.front === null
-              ? "-- cm"
-              : `${telemetry.distance.front} cm`}
-          </strong>
+          <button
+            type="button"
+            onClick={togglePerfomanceMode}
+            aria-label="Performance mode"
+            aria-pressed={performanceMode}
+            className={`flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border transition ${performanceMode ? "border-primary bg-primary/15 text-primary" : "border-border bg-black/20 text-white/50 hover:bg-white/10 hover:text-white"}`}
+          >
+            <PerformanceModeIcon size={18} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">
+              Performance {performanceMode ? "On" : "Off"}
+            </span>
+          </button>
         </div>
       </div>
 
@@ -440,20 +495,23 @@ export default function ControlPanel({
         </div>
       )}
 
-      <div className="mt-5 space-y-5">
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-              Navigation
-            </p>
+      <div
+        className={`mt-3 flex min-h-0 flex-col ${game === "reflex-dash" ? "flex-[7]" : "flex-1"
+          }`}
+      >
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="flex shrink-0 items-center justify-end">
             {isColorQuestActive && (
               <span className="text-[10px] font-bold uppercase text-accent">
                 Sending task input
               </span>
             )}
           </div>
+          {customControls && (
+            <div className="my-2 z-10 w-full shrink-0">{customControls}</div>
+          )}
 
-          <div className="mx-auto mt-3 max-w-72">
+          <div className="mx-auto mt-1 flex min-h-0 flex-1 w-full flex-col justify-center">
             <JoystickController
               disabled={!isConnected}
               onDirectionChange={handleJoystickDirection}

@@ -16,13 +16,13 @@ state transitions, controller ownership, acknowledgement/error handling,
 telemetry, game communication, result reporting, and content
 synchronization.
 
-------------------------------------------------------------------------
+---
 
 ## 1. Communication architecture
 
 Elxie has two independent communication links:
 
-``` text
+```text
                          ┌─────────────────────┐
                          │   Mobile / Web App  │
                          └──────────┬──────────┘
@@ -51,7 +51,7 @@ The ESP32-S3 is the authority for real-time robot behavior.
 The communication layers are transports. They must not contain motor
 logic, game logic, or controller-selection logic.
 
-``` text
+```text
 BLE / ESP-NOW
       │
       ▼
@@ -70,7 +70,7 @@ RobotController / GameEngine
 Hardware
 ```
 
-------------------------------------------------------------------------
+---
 
 # 2. Transport rules
 
@@ -78,7 +78,7 @@ Hardware
 
 BLE uses Nordic UART Service (NUS).
 
-``` text
+```text
 Service UUID:
 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
 
@@ -95,7 +95,7 @@ Each JSON object is one complete application-level message.
 
 Example:
 
-``` text
+```text
 {"v":1,"type":"ping","id":"42"}\n
 ```
 
@@ -105,7 +105,7 @@ incoming bytes until `\n` is received.
 
 Whitespace outside JSON values should not be relied upon.
 
-------------------------------------------------------------------------
+---
 
 ## 2.2 ESP-NOW transport
 
@@ -121,26 +121,26 @@ semantic structure as BLE.
 However, ESP-NOW has a small payload budget and is latency-sensitive.
 Therefore:
 
--   Do not send telemetry JSON continuously over ESP-NOW.
--   Do not send large level definitions over ESP-NOW.
--   Do not send result-sync payloads over ESP-NOW.
--   Joystick/input packets must remain small.
--   Haptic/feedback packets must remain small.
--   If the firmware later changes ESP-NOW to a compact binary
-    representation, the binary representation must preserve the same
-    logical fields and semantics defined here.
+- Do not send telemetry JSON continuously over ESP-NOW.
+- Do not send large level definitions over ESP-NOW.
+- Do not send result-sync payloads over ESP-NOW.
+- Joystick/input packets must remain small.
+- Haptic/feedback packets must remain small.
+- If the firmware later changes ESP-NOW to a compact binary
+  representation, the binary representation must preserve the same
+  logical fields and semantics defined here.
 
 For the initial implementation, the protocol layer may serialize the
 defined JSON representation directly if the resulting packet size
 remains within the configured ESP-NOW payload limit.
 
-------------------------------------------------------------------------
+---
 
 # 3. Common JSON envelope
 
 All BLE application messages use the following logical envelope.
 
-``` json
+```json
 {
   "v": 1,
   "type": "message_type",
@@ -152,24 +152,28 @@ All BLE application messages use the following logical envelope.
 
 Fields:
 
-  -----------------------------------------------------------------------------
-  Field            Type                          Required Description
-  ---------------- ---------------- --------------------- ---------------------
-  `v`              integer                            yes Protocol version.
-                                                          Current value: `1`
+---
 
-  `type`           string                             yes Message type
+Field Type Required Description
 
-  `id`             string                     conditional Request/correlation
-                                                          ID for
-                                                          request/response
-                                                          messages
+---
 
-  `ts`             integer                    conditional Sender timestamp in
-                                                          milliseconds
+`v` integer yes Protocol version.
+Current value: `1`
 
-  `payload`        object                             yes Message-specific data
-  -----------------------------------------------------------------------------
+`type` string yes Message type
+
+`id` string conditional Request/correlation
+ID for
+request/response
+messages
+
+`ts` integer conditional Sender timestamp in
+milliseconds
+
+`payload` object yes Message-specific data
+
+---
 
 ### `id`
 
@@ -179,7 +183,7 @@ The receiver must copy the request `id` into the response.
 
 Example:
 
-``` json
+```json
 {
   "v": 1,
   "type": "device_info_request",
@@ -190,7 +194,7 @@ Example:
 
 Response:
 
-``` json
+```json
 {
   "v": 1,
   "type": "device_info",
@@ -201,7 +205,7 @@ Response:
 
 Messages that are purely streaming/events may omit `id`.
 
-------------------------------------------------------------------------
+---
 
 # 4. Message direction
 
@@ -209,7 +213,7 @@ Messages that are purely streaming/events may omit `id`.
 
 Supported categories:
 
-``` text
+```text
 handshake
 device information
 control input
@@ -225,7 +229,7 @@ ping
 
 Supported categories:
 
-``` text
+```text
 handshake
 device information
 acknowledgement
@@ -239,13 +243,13 @@ content acknowledgement
 pong
 ```
 
-------------------------------------------------------------------------
+---
 
 # 5. Protocol version handshake
 
 The mobile application should initiate the BLE session with:
 
-``` json
+```json
 {
   "v": 1,
   "type": "hello",
@@ -260,7 +264,7 @@ The mobile application should initiate the BLE session with:
 
 ESP32 response:
 
-``` json
+```json
 {
   "v": 1,
   "type": "hello_ack",
@@ -275,7 +279,7 @@ ESP32 response:
 
 If the protocol version is unsupported:
 
-``` json
+```json
 {
   "v": 1,
   "type": "hello_ack",
@@ -290,13 +294,13 @@ If the protocol version is unsupported:
 
 The ESP32 must not silently interpret an unsupported protocol version.
 
-------------------------------------------------------------------------
+---
 
 # 6. Device information
 
 Mobile request:
 
-``` json
+```json
 {
   "v": 1,
   "type": "device_info_request",
@@ -307,7 +311,7 @@ Mobile request:
 
 ESP32 response:
 
-``` json
+```json
 {
   "v": 1,
   "type": "device_info",
@@ -341,7 +345,7 @@ the firmware explicitly supports the game placeholder. The mobile
 application must not assume that a placeholder means the game is
 playable.
 
-------------------------------------------------------------------------
+---
 
 # 7. Controller ownership
 
@@ -351,7 +355,7 @@ application nor the physical remote may force ownership through a
 
 The priority is:
 
-``` text
+```text
 BLE Mobile
     >
 ESP-NOW Remote
@@ -361,12 +365,14 @@ None
 
 Therefore:
 
-  BLE            ESP-NOW        Active controller
-  -------------- -------------- -------------------
-  disconnected   disconnected   none
-  disconnected   connected      ESP-NOW
-  connected      disconnected   BLE
-  connected      connected      BLE
+BLE ESP-NOW Active controller
+
+---
+
+disconnected disconnected none
+disconnected connected ESP-NOW
+connected disconnected BLE
+connected connected BLE
 
 When BLE is connected and ESP-NOW is also connected, ESP-NOW
 movement/game input must be ignored by the controller layer.
@@ -385,81 +391,32 @@ On ownership transition the firmware must:
 4.  update active-controller state;
 5.  accept input only from the new owner.
 
-------------------------------------------------------------------------
+---
 
-# 8. Normalized input contract
+# 8. Input contract
 
 BLE and ESP-NOW must map their transport-specific messages into the same
 logical input model.
 
-The game engine must not care whether input came from BLE or ESP-NOW.
+The game engine must care whether input came from BLE or ESP-NOW.
 
-Canonical logical input:
+ESP input:
 
-``` json
+```app
+// Legacy ESP-NOW Remote Command Packet (from existing working remote)
+typedef struct __attribute__((packed))
 {
-  "source": "ble",
-  "input": {
-    "type": "joystick",
-    "x": 0,
-    "y": 1,
-    "magnitude": 1.0
-  }
-}
+    int16_t x;
+    int16_t y;
+    uint8_t btn1;
+    uint8_t btn2;
+    uint8_t sw;
+} LegacyRemoteCommandPacket;
 ```
 
-Allowed `source` values:
+BLE input:
 
-``` text
-ble
-esp_now
-```
-
-Allowed input types:
-
-``` text
-joystick
-button
-direction
-action
-back
-select
-menu_up
-menu_down
-menu_left
-menu_right
-```
-
-Joystick range:
-
-``` text
-x: -1.0 ... +1.0
-y: -1.0 ... +1.0
-magnitude: 0.0 ... 1.0
-```
-
-Convention:
-
-``` text
-          y = +1
-             ↑
-             │
-x = -1  ←────┼────→  x = +1
-             │
-             ↓
-          y = -1
-```
-
-The protocol layer is responsible for converting transport-specific
-joystick data into this normalized representation.
-
-------------------------------------------------------------------------
-
-# 9. Mobile → ESP32 control input
-
-## 9.1 Joystick
-
-``` json
+```json
 {
   "v": 1,
   "type": "input",
@@ -467,8 +424,33 @@ joystick data into this normalized representation.
   "ts": 123456789,
   "payload": {
     "inputType": "joystick",
-    "x": 0.72,
-    "y": 0.00,
+    "dir": "up",
+    "magnitude": 0.9
+  }
+}
+```
+
+Joystick range:
+
+```text
+magnitude: 0.0 ... 1.0
+```
+
+---
+
+# 9. Mobile → ESP32 control input
+
+## 9.1 Joystick
+
+```json
+{
+  "v": 1,
+  "type": "input",
+  "id": "input-1001",
+  "ts": 123456789,
+  "payload": {
+    "inputType": "joystick",
+    "dir": "up",
     "magnitude": 0.72
   }
 }
@@ -479,63 +461,7 @@ The ESP32 converts this into an `InputEvent`.
 The mobile application must not send motor-specific instructions such as
 PWM values.
 
-------------------------------------------------------------------------
-
-## 9.2 Directional input
-
-For simple four-direction interactions:
-
-``` json
-{
-  "v": 1,
-  "type": "input",
-  "payload": {
-    "inputType": "direction",
-    "direction": "left"
-  }
-}
-```
-
-Allowed directions:
-
-``` text
-forward
-backward
-left
-right
-none
-```
-
-------------------------------------------------------------------------
-
-## 9.3 Button input
-
-``` json
-{
-  "v": 1,
-  "type": "input",
-  "payload": {
-    "inputType": "button",
-    "button": "select",
-    "pressed": true
-  }
-}
-```
-
-Allowed buttons:
-
-``` text
-up
-down
-left
-right
-select
-back
-start
-stop
-```
-
-------------------------------------------------------------------------
+---
 
 # 10. RC mode
 
@@ -547,7 +473,7 @@ The robot then executes the normalized control input through
 
 The mobile application does not directly call:
 
-``` text
+```text
 moveForward()
 moveBackward()
 turnLeft()
@@ -560,39 +486,45 @@ The protocol only specifies intent.
 
 Example:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
+  "id": "input-1001",
+  "ts": 123456789,
   "payload": {
-    "inputType": "direction",
-    "direction": "forward"
+    "inputType": "joystick",
+    "dir": "up",
+    "magnitude": 0.72
   }
 }
 ```
 
 Stop:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
+  "id": "input-1001",
+  "ts": 123456789,
   "payload": {
-    "inputType": "direction",
-    "direction": "none"
+    "inputType": "joystick",
+    "dir": "none",
+    "magnitude": 0.0
   }
 }
 ```
 
 The ESP32 is responsible for safely stopping motors when:
 
--   stop input is received;
--   the active controller disconnects;
--   controller ownership changes;
--   RC timeout occurs;
--   a safety condition requires stopping.
+- stop input is received;
+- the active controller disconnects;
+- controller ownership changes;
+- RC timeout occurs;
+- a safety condition requires stopping.
 
-------------------------------------------------------------------------
+---
 
 # 11. Game mode
 
@@ -600,19 +532,19 @@ Game mode is controlled by the robot-side `GameEngine`.
 
 The mobile application may request:
 
--   game selection;
--   level selection;
--   game start;
--   game abort;
--   game status;
--   result synchronization.
+- game selection;
+- level selection;
+- game start;
+- game abort;
+- game status;
+- result synchronization.
 
 Once a game is active, the robot must not interpret generic movement
 input as ordinary RC commands.
 
 Instead:
 
-``` text
+```text
 input
   ↓
 ControllerManager
@@ -622,106 +554,39 @@ GameEngine.handleInput()
 
 The game determines what that input means.
 
-------------------------------------------------------------------------
+---
 
 # 12. Game identifiers
 
 Canonical game IDs:
 
-  Game             ID                 Status
-  ---------------- ------------------ ------------------------
-  Color Quest      `color_quest`      implemented
-  Echo Memory      `echo_memory`      placeholder/future
-  Reflex Arc       `reflex_arc`       placeholder/future
-  Driving Pro      `driving_pro`      Level 1 implementation
-  Inverted Drive   `inverted_drive`   placeholder/future
+Game ID Status
+
+---
+
+Color Quest `color_quest` implemented
+Echo Memory `echo_memory` placeholder/future
+Reflex Arc `reflex_arc` placeholder/future
+Driving Pro `driving_pro` Level 1 implementation
+Inverted Drive `inverted_drive` placeholder/future
 
 The protocol must use IDs, not display names, for machine-to-machine
 communication.
 
-------------------------------------------------------------------------
+---
 
-# 13. Game selection
+# 13. Game start
 
 Mobile → ESP32:
 
-``` json
+```json
 {
   "v": 1,
-  "type": "game_select",
+  "type": "command",
+  "command": "game_start",
   "id": "game-001",
   "payload": {
-    "game": "color_quest"
-  }
-}
-```
-
-ESP32:
-
-``` json
-{
-  "v": 1,
-  "type": "game_selected",
-  "id": "game-001",
-  "payload": {
-    "accepted": true,
-    "game": "color_quest"
-  }
-}
-```
-
-If unavailable:
-
-``` json
-{
-  "v": 1,
-  "type": "game_selected",
-  "id": "game-001",
-  "payload": {
-    "accepted": false,
-    "game": "color_quest",
-    "reason": "game_not_implemented"
-  }
-}
-```
-
-------------------------------------------------------------------------
-
-# 14. Level selection
-
-``` json
-{
-  "v": 1,
-  "type": "level_select",
-  "id": "level-001",
-  "payload": {
-    "game": "driving_pro",
-    "level": 1
-  }
-}
-```
-
-Current difficulty mapping:
-
-``` text
-Level 1 = easy
-Level 2 = medium placeholder
-Level 3 = hard placeholder
-```
-
-The protocol must not prevent future levels from being added.
-
-------------------------------------------------------------------------
-
-# 15. Game start
-
-``` json
-{
-  "v": 1,
-  "type": "game_start",
-  "id": "start-001",
-  "payload": {
-    "game": "driving_pro",
+    "gameId": "color_quest",
     "level": 1
   }
 }
@@ -729,27 +594,31 @@ The protocol must not prevent future levels from being added.
 
 ESP32 response:
 
-``` json
+```json
 {
   "v": 1,
-  "type": "game_started",
-  "id": "start-001",
+  "type": "response",
+  "response": "game_started",
+  "id": "game-001",
   "payload": {
-    "game": "driving_pro",
+    "gameId": "color_quest",
     "level": 1,
     "status": "running"
   }
 }
 ```
 
-------------------------------------------------------------------------
+The protocol must not prevent future levels from being added.
+
+---
 
 # 16. Game abort
 
-``` json
+```json
 {
   "v": 1,
-  "type": "game_abort",
+  "type": "command ",
+  "command": "game_abort",
   "id": "abort-001",
   "payload": {}
 }
@@ -758,39 +627,32 @@ ESP32 response:
 ESP32 must safely stop active game movement and return to the
 appropriate non-game state.
 
-------------------------------------------------------------------------
+---
 
 # 17. Color Quest input
 
-Color Quest uses directional input to select one of four robot regions.
-
-Mapping:
-
-  Input   Region
-  ------- --------
-  up      front
-  left    left
-  right   right
-  down    back
+Color Quest uses same joystick to select one of four robot regions.
 
 Example:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
+  "id": "input-1001",
+  "ts": 123456789,
   "payload": {
-    "inputType": "direction",
-    "direction": "up"
+    "inputType": "joystick",
+    "dir": "up"
   }
 }
 ```
 
-The game engine determines whether the selected region is correct.
+The game engine maps it to regions and determines whether the selected region is correct.
 
 The communication layer must not contain Color Quest scoring logic.
 
-------------------------------------------------------------------------
+---
 
 # 18. Driving Pro
 
@@ -798,19 +660,19 @@ Driving Pro Level 1 contains three tasks.
 
 ### Task 1
 
--   9-second driving period;
--   robot automatically drives forward;
--   up/down input has no effect;
--   left/right controls turning;
--   releasing the turn returns the robot to forward movement;
--   collision ends the task;
--   timeout ends the task.
+- 9-second driving period;
+- robot automatically drives forward;
+- up/down input has no effect;
+- left/right controls turning;
+- releasing the turn returns the robot to forward movement;
+- collision ends the task;
+- timeout ends the task.
 
 ### Task 2
 
 Same driving behavior, with:
 
-``` text
+```text
 minimum turns = 5
 ```
 
@@ -818,7 +680,7 @@ minimum turns = 5
 
 Same driving behavior, with:
 
-``` text
+```text
 minimum left turns  = 2
 minimum right turns = 3
 ```
@@ -830,13 +692,13 @@ The mobile application receives the resulting telemetry and final game
 result. It must not independently determine whether the task was
 successful.
 
-------------------------------------------------------------------------
+---
 
 # 19. Game state events
 
 ESP32 → Mobile:
 
-``` json
+```json
 {
   "v": 1,
   "type": "game_state",
@@ -852,8 +714,7 @@ ESP32 → Mobile:
 
 Allowed status values:
 
-``` text
-selected
+```text
 ready
 running
 passed
@@ -862,13 +723,13 @@ completed
 aborted
 ```
 
-------------------------------------------------------------------------
+---
 
 # 20. Game result
 
 When a task or level is completed:
 
-``` json
+```json
 {
   "v": 1,
   "type": "game_result",
@@ -892,7 +753,7 @@ The robot is authoritative for the result of the current play session.
 
 The mobile application is authoritative for persistent progression.
 
-------------------------------------------------------------------------
+---
 
 # 21. Result synchronization
 
@@ -901,7 +762,7 @@ disconnected.
 
 When BLE connects, the robot may send:
 
-``` json
+```json
 {
   "v": 1,
   "type": "results_sync",
@@ -929,7 +790,7 @@ When BLE connects, the robot may send:
 
 Mobile acknowledgement:
 
-``` json
+```json
 {
   "v": 1,
   "type": "results_sync_ack",
@@ -948,7 +809,7 @@ progression records.
 The persistent application layer should merge records using the best
 available result according to the product's progression rules.
 
-------------------------------------------------------------------------
+---
 
 # 22. Level/content synchronization
 
@@ -956,7 +817,7 @@ The application may push level definitions to the robot.
 
 Message:
 
-``` json
+```json
 {
   "v": 1,
   "type": "level_definition",
@@ -996,7 +857,7 @@ Invalid content must not replace a valid built-in level.
 
 Acknowledgement:
 
-``` json
+```json
 {
   "v": 1,
   "type": "level_definition_ack",
@@ -1010,7 +871,7 @@ Acknowledgement:
 }
 ```
 
-------------------------------------------------------------------------
+---
 
 # 23. Telemetry configuration
 
@@ -1019,7 +880,7 @@ application.
 
 Mobile → ESP32:
 
-``` json
+```json
 {
   "v": 1,
   "type": "telemetry_config",
@@ -1033,7 +894,7 @@ Mobile → ESP32:
 
 Disable:
 
-``` json
+```json
 {
   "v": 1,
   "type": "telemetry_config",
@@ -1049,13 +910,13 @@ The firmware may clamp the requested interval to a safe minimum.
 The application must not assume that the exact requested interval is
 guaranteed.
 
-------------------------------------------------------------------------
+---
 
 # 24. Telemetry
 
 ESP32 → Mobile:
 
-``` json
+```json
 {
   "v": 1,
   "type": "telemetry",
@@ -1104,13 +965,13 @@ ESP32 → Mobile:
 6.  Telemetry must represent the robot's current state, not an
     application-side prediction.
 
-------------------------------------------------------------------------
+---
 
 # 25. Obstacle telemetry
 
 The four corner obstacle channels are represented independently.
 
-``` json
+```json
 {
   "obstacle": {
     "frontLeft": true,
@@ -1129,13 +990,13 @@ It must not calculate obstacle status from unrelated sensors.
 Sensor thresholds belong to the hardware/sensor layer, not the JSON
 protocol.
 
-------------------------------------------------------------------------
+---
 
 # 26. Standard response
 
 Successful request:
 
-``` json
+```json
 {
   "v": 1,
   "type": "ack",
@@ -1153,13 +1014,13 @@ already completed.
 For operations with a meaningful resulting state, a separate
 event/result message should be emitted.
 
-------------------------------------------------------------------------
+---
 
 # 27. Error contract
 
 All protocol errors use:
 
-``` json
+```json
 {
   "v": 1,
   "type": "error",
@@ -1173,7 +1034,7 @@ All protocol errors use:
 
 Standard error codes:
 
-``` text
+```text
 INVALID_JSON
 INVALID_SCHEMA
 UNSUPPORTED_VERSION
@@ -1198,7 +1059,7 @@ Errors must be machine-readable through `code`.
 `message` is human-readable diagnostic information and must not be used
 by the application for program logic.
 
-------------------------------------------------------------------------
+---
 
 # 28. State restrictions
 
@@ -1207,7 +1068,7 @@ state.
 
 Example:
 
-``` text
+```text
 IDLE
  ├── input/movement ──────► RC
  ├── game_start ──────────► GAME
@@ -1226,7 +1087,7 @@ GAME
 
 A transport message must never bypass these state rules.
 
-------------------------------------------------------------------------
+---
 
 # 29. ESP-NOW input contract
 
@@ -1234,7 +1095,7 @@ The physical remote sends normalized control information to the ESP32.
 
 Joystick:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
@@ -1242,16 +1103,16 @@ Joystick:
   "ts": 123456789,
   "payload": {
     "inputType": "joystick",
-    "x": 0.00,
-    "y": 1.00,
-    "magnitude": 1.00
+    "x": 0.0,
+    "y": 1.0,
+    "magnitude": 1.0
   }
 }
 ```
 
 Directional game input:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
@@ -1265,7 +1126,7 @@ Directional game input:
 
 Button:
 
-``` json
+```json
 {
   "v": 1,
   "type": "input",
@@ -1284,13 +1145,13 @@ for input packets.
 The robot should reject or ignore stale/out-of-order packets according
 to the ESP-NOW transport implementation.
 
-------------------------------------------------------------------------
+---
 
 # 30. ESP-NOW heartbeat
 
 The remote should periodically send a heartbeat.
 
-``` json
+```json
 {
   "v": 1,
   "type": "heartbeat",
@@ -1302,7 +1163,7 @@ The remote should periodically send a heartbeat.
 
 Robot response:
 
-``` json
+```json
 {
   "v": 1,
   "type": "heartbeat_ack",
@@ -1320,13 +1181,13 @@ value.
 The exact timeout is a firmware configuration value, not a JSON contract
 value.
 
-------------------------------------------------------------------------
+---
 
 # 31. ESP-NOW haptic feedback
 
 Robot → Remote:
 
-``` json
+```json
 {
   "v": 1,
   "type": "haptic",
@@ -1341,7 +1202,7 @@ Robot → Remote:
 
 Allowed initial patterns:
 
-``` text
+```text
 short
 double
 success
@@ -1356,13 +1217,13 @@ The remote is responsible only for executing the haptic command.
 
 It must not contain game logic.
 
-------------------------------------------------------------------------
+---
 
 # 32. ESP-NOW status feedback
 
 Robot → Remote:
 
-``` json
+```json
 {
   "v": 1,
   "type": "robot_status",
@@ -1376,7 +1237,7 @@ Robot → Remote:
 
 During a game:
 
-``` json
+```json
 {
   "v": 1,
   "type": "robot_status",
@@ -1388,7 +1249,7 @@ During a game:
 }
 ```
 
-------------------------------------------------------------------------
+---
 
 # 33. Sequence and duplicate handling
 
@@ -1396,7 +1257,7 @@ ESP-NOW input messages must contain `seq`.
 
 Example:
 
-``` text
+```text
 100
 101
 102
@@ -1405,7 +1266,7 @@ Example:
 
 If the ESP32 receives:
 
-``` text
+```text
 100
 101
 101
@@ -1419,7 +1280,7 @@ BLE request/response messages use `id` for correlation.
 The firmware must not assume BLE messages arrive in application order
 unless the protocol layer explicitly preserves that ordering.
 
-------------------------------------------------------------------------
+---
 
 # 34. Connection and disconnection behavior
 
@@ -1459,13 +1320,13 @@ The ESP32:
 3.  safely stops remote-controlled movement;
 4.  allows BLE to remain active if connected.
 
-------------------------------------------------------------------------
+---
 
 # 35. Controller transition example
 
 ### Remote only
 
-``` text
+```text
 ESP-NOW connected
        ↓
 Remote joystick input
@@ -1479,7 +1340,7 @@ RC
 
 ### BLE connects while remote is active
 
-``` text
+```text
 ESP-NOW owns control
        ↓
 BLE connects
@@ -1493,7 +1354,7 @@ BLE owns control
 
 ### BLE disconnects
 
-``` text
+```text
 BLE owns control
        ↓
 BLE disconnects
@@ -1509,7 +1370,7 @@ ESP-NOW available?
 This behavior is implemented by `ControllerManager`, not by either
 transport.
 
-------------------------------------------------------------------------
+---
 
 # 36. Message naming rules
 
@@ -1517,7 +1378,7 @@ Message types use `snake_case`.
 
 Correct:
 
-``` text
+```text
 device_info
 game_start
 game_result
@@ -1528,7 +1389,7 @@ level_definition
 
 Do not introduce equivalent aliases such as:
 
-``` text
+```text
 deviceInfo
 startGame
 gameStarted
@@ -1537,75 +1398,75 @@ telemetrySettings
 
 The protocol must have one canonical name for each message.
 
-------------------------------------------------------------------------
+---
 
 # 37. Numeric conventions
 
 Distances:
 
-``` text
+```text
 millimeters unless explicitly documented otherwise
 ```
 
 Angles/headings:
 
-``` text
+```text
 degrees
 ```
 
 Joystick:
 
-``` text
+```text
 normalized floating-point range -1.0 to +1.0
 ```
 
 Magnitude:
 
-``` text
+```text
 0.0 to 1.0
 ```
 
 RGB:
 
-``` text
+```text
 0 to 255
 ```
 
 Durations:
 
-``` text
+```text
 milliseconds
 ```
 
 Timestamps:
 
-``` text
+```text
 milliseconds
 ```
 
 Percentages:
 
-``` text
+```text
 0 to 100
 ```
 
 The protocol must not mix centimeters and millimeters in different
 messages.
 
-------------------------------------------------------------------------
+---
 
 # 38. Backward compatibility with the old prototype
 
 The existing prototype may contain older messages such as:
 
-``` json
-{"command":"move","direction":"forward"}
+```json
+{ "command": "move", "direction": "forward" }
 ```
 
 and:
 
-``` json
-{"command":"strip","region":"front","r":255,"g":0,"b":0}
+```json
+{ "command": "strip", "region": "front", "r": 255, "g": 0, "b": 0 }
 ```
 
 These are legacy messages and are **not part of Protocol v1**.
@@ -1616,7 +1477,7 @@ document.
 If backward compatibility is required temporarily, implement it
 explicitly inside `BleProtocol` as a legacy adapter:
 
-``` text
+```text
 legacy message
       ↓
 LegacyBleAdapter
@@ -1627,28 +1488,28 @@ normalized RobotCommand/InputEvent
 Do not allow legacy message parsing to leak into `RobotController`,
 games, or hardware modules.
 
-------------------------------------------------------------------------
+---
 
 # 39. What the transport layer must NOT do
 
 `BleManager` must NOT:
 
--   control motors;
--   select games;
--   calculate scores;
--   read sensors;
--   determine controller ownership;
--   implement Driving Pro;
--   implement Color Quest;
--   decide whether an input is allowed in a game.
+- control motors;
+- select games;
+- calculate scores;
+- read sensors;
+- determine controller ownership;
+- implement Driving Pro;
+- implement Color Quest;
+- decide whether an input is allowed in a game.
 
 `EspNowManager` must NOT:
 
--   control motors;
--   calculate scores;
--   implement games;
--   determine global controller ownership;
--   access hardware directly except where required by the radio driver.
+- control motors;
+- calculate scores;
+- implement games;
+- determine global controller ownership;
+- access hardware directly except where required by the radio driver.
 
 `BleProtocol` and `EspNowProtocol` must only:
 
@@ -1658,11 +1519,11 @@ games, or hardware modules.
 4.  serialize;
 5.  report protocol errors.
 
-------------------------------------------------------------------------
+---
 
 # 40. Reference message flow: BLE RC
 
-``` text
+```text
 Mobile
   │
   │ input(direction=forward)
@@ -1688,11 +1549,11 @@ RobotController
 MotorController
 ```
 
-------------------------------------------------------------------------
+---
 
 # 41. Reference message flow: ESP-NOW RC
 
-``` text
+```text
 Remote
   │
   │ input(joystick)
@@ -1718,11 +1579,11 @@ RobotController
 MotorController
 ```
 
-------------------------------------------------------------------------
+---
 
 # 42. Reference message flow: game
 
-``` text
+```text
 Mobile
   │
   │ game_start
@@ -1759,32 +1620,34 @@ The mobile application displays the result and stores progression.
 
 The remote provides input and receives feedback.
 
-------------------------------------------------------------------------
+---
 
 # 43. Contract ownership
 
 The following components own the following concerns:
 
-  Concern                    Owner
-  -------------------------- ---------------------
-  BLE connection             `BleManager`
-  BLE byte buffering         `BleManager`
-  BLE JSON parsing           `BleProtocol`
-  ESP-NOW radio              `EspNowManager`
-  ESP-NOW packet parsing     `EspNowProtocol`
-  Input normalization        Protocol layer
-  Controller priority        `ControllerManager`
-  Robot state                `RobotController`
-  Game lifecycle             `GameManager`
-  Game rules                 Individual game
-  Sensor interpretation      `SensorManager`
-  Motor behavior             `MotorController`
-  Telemetry generation       Telemetry layer
-  Persistent progression     Mobile/Web
-  Real-time game judgement   ESP32
-  Remote haptic execution    Physical remote
+Concern Owner
 
-------------------------------------------------------------------------
+---
+
+BLE connection `BleManager`
+BLE byte buffering `BleManager`
+BLE JSON parsing `BleProtocol`
+ESP-NOW radio `EspNowManager`
+ESP-NOW packet parsing `EspNowProtocol`
+Input normalization Protocol layer
+Controller priority `ControllerManager`
+Robot state `RobotController`
+Game lifecycle `GameManager`
+Game rules Individual game
+Sensor interpretation `SensorManager`
+Motor behavior `MotorController`
+Telemetry generation Telemetry layer
+Persistent progression Mobile/Web
+Real-time game judgement ESP32
+Remote haptic execution Physical remote
+
+---
 
 # 44. Implementation rules for Phase 5
 
@@ -1815,7 +1678,7 @@ The AI agent implementing Phase 5 must follow these rules:
 The presence of a protocol message does not imply that the corresponding
 feature is currently implemented.
 
-------------------------------------------------------------------------
+---
 
 # 45. Minimal Phase 5 acceptance test
 
@@ -1823,46 +1686,46 @@ Before Phase 5 is considered complete, the following must work.
 
 ### BLE
 
--   BLE advertising;
--   mobile connection;
--   hello handshake;
--   device information;
--   valid JSON reception;
--   malformed JSON rejection;
--   unknown message rejection;
--   acknowledgement;
--   error response;
--   BLE disconnection handling;
--   newline-delimited message buffering.
+- BLE advertising;
+- mobile connection;
+- hello handshake;
+- device information;
+- valid JSON reception;
+- malformed JSON rejection;
+- unknown message rejection;
+- acknowledgement;
+- error response;
+- BLE disconnection handling;
+- newline-delimited message buffering.
 
 ### ESP-NOW
 
--   remote discovery/pairing as currently implemented;
--   heartbeat;
--   joystick packet;
--   button packet;
--   sequence handling;
--   stale packet rejection;
--   disconnect/timeout handling;
--   haptic feedback packet.
+- remote discovery/pairing as currently implemented;
+- heartbeat;
+- joystick packet;
+- button packet;
+- sequence handling;
+- stale packet rejection;
+- disconnect/timeout handling;
+- haptic feedback packet.
 
 ### Integration
 
--   BLE input becomes `InputEvent(source=BLE)`;
--   ESP-NOW input becomes `InputEvent(source=ESP_NOW)`;
--   transport layers do not directly control motors;
--   controller ownership remains centralized;
--   project builds successfully in PlatformIO.
+- BLE input becomes `InputEvent(source=BLE)`;
+- ESP-NOW input becomes `InputEvent(source=ESP_NOW)`;
+- transport layers do not directly control motors;
+- controller ownership remains centralized;
+- project builds successfully in PlatformIO.
 
 Do not proceed to the game migration until these acceptance tests pass.
 
-------------------------------------------------------------------------
+---
 
 # 46. Protocol summary
 
 The contract intentionally separates four layers:
 
-``` text
+```text
 WIRE
   BLE / ESP-NOW
         ↓
@@ -1883,7 +1746,7 @@ must result in the same normalized domain event.
 
 For example:
 
-``` text
+```text
 BLE joystick forward
         │
         ├──────┐
@@ -1900,7 +1763,7 @@ BLE joystick forward
 
 and:
 
-``` text
+```text
 ESP-NOW joystick forward
         │
         ├──────┐
@@ -1917,13 +1780,13 @@ ESP-NOW joystick forward
 
 The transport changes. The robot's domain model does not.
 
-------------------------------------------------------------------------
+---
 
 ## Appendix A --- Canonical enum values
 
 ### Robot states
 
-``` text
+```text
 IDLE
 RC
 GAME
@@ -1931,7 +1794,7 @@ GAME
 
 ### Controller sources
 
-``` text
+```text
 none
 ble
 esp_now
@@ -1939,7 +1802,7 @@ esp_now
 
 ### Games
 
-``` text
+```text
 color_quest
 echo_memory
 reflex_arc
@@ -1949,7 +1812,7 @@ inverted_drive
 
 ### Game levels
 
-``` text
+```text
 1
 2
 3
@@ -1960,7 +1823,7 @@ games.
 
 ### Input types
 
-``` text
+```text
 joystick
 button
 direction
@@ -1975,7 +1838,7 @@ menu_right
 
 ### Directions
 
-``` text
+```text
 forward
 backward
 left
@@ -1985,7 +1848,7 @@ none
 
 ### Game states
 
-``` text
+```text
 selected
 ready
 running
@@ -1995,7 +1858,7 @@ completed
 aborted
 ```
 
-------------------------------------------------------------------------
+---
 
 ## Appendix B --- Design decisions intentionally fixed by this contract
 
@@ -2018,7 +1881,7 @@ aborted
 17. Unimplemented games may have protocol identifiers but must not be
     treated as implemented features.
 
-------------------------------------------------------------------------
+---
 
 ## Appendix C --- Phase boundary
 
@@ -2026,13 +1889,13 @@ This contract defines communication semantics only.
 
 It does **not** authorize Phase 5 to implement:
 
--   new game mechanics;
--   new sensor algorithms;
--   new motor algorithms;
--   persistent mobile progression;
--   cloud synchronization;
--   OLED menu logic;
--   Driving Pro scoring beyond exposing the required message structures.
+- new game mechanics;
+- new sensor algorithms;
+- new motor algorithms;
+- persistent mobile progression;
+- cloud synchronization;
+- OLED menu logic;
+- Driving Pro scoring beyond exposing the required message structures.
 
 Those belong to later architecture phases.
 

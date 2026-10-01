@@ -8,7 +8,7 @@ architecture and device communication\
 **Firmware framework:** Arduino-ESP32 under PlatformIO\
 **Project:** `elxie-firmware`
 
-------------------------------------------------------------------------
+---
 
 ## 1. Purpose
 
@@ -34,25 +34,25 @@ architecture unless a newer version explicitly changes the decision.
 The project is intentionally not being migrated to pure ESP-IDF at this
 stage. The selected engineering stack is:
 
--   VS Code
--   PlatformIO
--   Arduino-ESP32
--   C++
--   Modular source files
--   Existing Arduino-compatible libraries
--   Selective FreeRTOS usage only where it provides a clear benefit
+- VS Code
+- PlatformIO
+- Arduino-ESP32
+- C++
+- Modular source files
+- Existing Arduino-compatible libraries
+- Selective FreeRTOS usage only where it provides a clear benefit
 
 The existing working firmware remains the behavioral reference during
 migration. Refactoring must not silently remove working hardware
 behavior.
 
-------------------------------------------------------------------------
+---
 
 # 2. System Model
 
 Elxie is a three-device system with a strict control-ownership rule: **BLE mobile connectivity has priority over the ESP-NOW remote.** The mobile application is not merely a data/sync client. When connected, it is the complete user-facing controller and game interface.
 
-``` text
+```text
                          Bluetooth LE / NUS
                  +----------------------------+
                  |                            |
@@ -87,17 +87,17 @@ Elxie is a three-device system with a strict control-ownership rule: **BLE mobil
 
 The system has three connection situations:
 
-| BLE Mobile | ESP-NOW Remote | Robot control owner | Robot behaviour |
-|---|---|---|---|
-| Connected | Connected or not | **Mobile App** | App ControlPanel, app-selected modes, and app-started games are authoritative. ESP-NOW input is ignored for control. |
-| Not connected | Connected | **ESP-NOW Remote** | OLED presents the local mode menu. Remote navigates Game Mode / Free Ride Mode and controls the selected experience. |
-| Not connected | Not connected | **Robot itself** | IDLE behaviour only. No external controller is accepted. |
+| BLE Mobile    | ESP-NOW Remote   | Robot control owner | Robot behaviour                                                                                                      |
+| ------------- | ---------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Connected     | Connected or not | **Mobile App**      | App ControlPanel, app-selected modes, and app-started games are authoritative. ESP-NOW input is ignored for control. |
+| Not connected | Connected        | **ESP-NOW Remote**  | OLED presents the local mode menu. Remote navigates Game Mode / Free Ride Mode and controls the selected experience. |
+| Not connected | Not connected    | **Robot itself**    | IDLE behaviour only. No external controller is accepted.                                                             |
 
 The rule is deliberately simple. Human systems have enough ambiguity already without making a toy negotiate who gets to drive it.
 
 ### Priority
 
-``` text
+```text
 BLE Mobile connected
         │
         ▼
@@ -160,7 +160,7 @@ The robot owns the local menu and renders it on the OLED. The robot interprets r
 
 When the remote connects while BLE is not connected:
 
-``` text
+```text
 REMOTE CONNECTED
       │
       ▼
@@ -284,7 +284,7 @@ The robot interprets raw remote input differently depending on whether it is nav
 
 The target runtime model retains three primary operational states, with a separate **local-menu/controller context** used when the robot is remote-only. The distinction matters because the robot must show a selectable OLED menu without turning the menu itself into another top-level gameplay state.
 
-``` text
+```text
                          +------------------+
                          |       IDLE       |
                          | Pet / waiting    |
@@ -376,13 +376,15 @@ Any transition caused by loss of the active controller must stop motion first. N
 
 The current target game registry is:
 
-  ID                 Game
-  ------------------ ----------------
-  `color_quest`      Colour Quest
-  `echo_memory`      Echo Memory
-  `reflex_arc`       Reflex Arc
-  `driving_pro`      Driving Pro
-  `inverted_drive`   Inverted Drive
+ID Game
+
+---
+
+`color_quest` Colour Quest
+`echo_memory` Echo Memory
+`reflex_arc` Reflex Arc
+`driving_pro` Driving Pro
+`inverted_drive` Inverted Drive
 
 `Reflex Dash` appears in an earlier software brief. The latest
 architecture planning uses `Reflex Arc`. The new firmware contract uses
@@ -390,13 +392,13 @@ architecture planning uses `Reflex Arc`. The new firmware contract uses
 
 `Reflex Dash` must not be used as a second protocol ID.
 
-------------------------------------------------------------------------
+---
 
 # 6. Firmware Layer Architecture
 
 The firmware must be divided into clear layers.
 
-``` text
+```text
 main.cpp
    |
    v
@@ -427,7 +429,7 @@ Hardware Managers
 
 Recommended project structure:
 
-``` text
+```text
 elxie-firmware/
 ├── platformio.ini
 ├── src/
@@ -484,7 +486,7 @@ elxie-firmware/
 The exact file split may evolve, but the dependency direction must
 remain stable:
 
-``` text
+```text
 Games -> interfaces/managers -> hardware
 Games -> input events
 Communication -> commands/events
@@ -493,7 +495,7 @@ RobotController -> coordinates everything
 
 Game code must not directly manipulate GPIO pins.
 
-------------------------------------------------------------------------
+---
 
 # 7. Main Loop Contract
 
@@ -501,7 +503,7 @@ The final `main.cpp` should remain small.
 
 Target structure:
 
-``` cpp
+```cpp
 void setup() {
     hardware.begin();
     communication.begin();
@@ -521,17 +523,17 @@ void loop() {
 
 The loop must not contain:
 
--   Game-specific logic
--   Large JSON parsers
--   Long blocking delays
--   Direct GPIO control
--   BLE callback business logic
--   ESP-NOW callback business logic
+- Game-specific logic
+- Large JSON parsers
+- Long blocking delays
+- Direct GPIO control
+- BLE callback business logic
+- ESP-NOW callback business logic
 
 Communication callbacks should receive data, validate it, and enqueue an
 event/packet for normal application processing.
 
-------------------------------------------------------------------------
+---
 
 # 8. Hardware Abstraction
 
@@ -540,7 +542,7 @@ operations.
 
 Example:
 
-``` cpp
+```cpp
 robot.motors.forward(speed);
 robot.motors.stop();
 
@@ -551,7 +553,7 @@ robot.buzzer.play(1200, 200);
 
 Game code must not contain:
 
-``` cpp
+```cpp
 digitalWrite(PIN_AIN1, ...);
 analogWrite(PIN_PWMA, ...);
 ```
@@ -562,7 +564,7 @@ This separation is necessary so game logic can be tested without
 physical hardware and so future hardware changes do not require
 rewriting game logic.
 
-------------------------------------------------------------------------
+---
 
 # 9. Sensor Architecture
 
@@ -572,7 +574,7 @@ It should produce a normalized `SensorSnapshot`.
 
 Example:
 
-``` cpp
+```cpp
 struct SensorSnapshot {
     uint16_t cornerC1;
     uint16_t cornerC2;
@@ -609,7 +611,7 @@ obstacle-detection sensors.
 
 For the current implementation:
 
-``` text
+```text
 obstacle = sensor_value < 4000
 ```
 
@@ -621,7 +623,7 @@ flags unless this contract is deliberately changed.
 Bottom sensors are reserved for edge/drop safety and must remain
 independent from corner obstacle telemetry.
 
-------------------------------------------------------------------------
+---
 
 # 10. Motor Safety
 
@@ -629,7 +631,7 @@ Motor commands must pass through `MotorController`.
 
 At minimum it must provide:
 
-``` text
+```text
 stop()
 forward(speed)
 backward(speed)
@@ -650,7 +652,7 @@ Safety rules:
 5.  Sensor safety conditions must be able to override normal movement.
 6.  A game must never bypass the motor safety layer.
 
-------------------------------------------------------------------------
+---
 
 # 11. BLE Transport
 
@@ -658,19 +660,19 @@ BLE uses Nordic UART Service (NUS).
 
 ### Service
 
-``` text
+```text
 6E400001-B5A3-F393-E0A9-E50E24DCCA9E
 ```
 
 ### RX: App → Robot
 
-``` text
+```text
 6E400002-B5A3-F393-E0A9-E50E24DCCA9E
 ```
 
 ### TX: Robot → App
 
-``` text
+```text
 6E400003-B5A3-F393-E0A9-E50E24DCCA9E
 ```
 
@@ -678,7 +680,7 @@ The existing firmware already uses these standard NUS UUIDs.
 
 The legacy custom UUIDs:
 
-``` text
+```text
 12345678-1234-1234-1234-123456789001
 12345678-1234-1234-1234-123456789002
 ```
@@ -689,7 +691,7 @@ are obsolete for the new architecture.
 
 BLE application messages use:
 
-``` text
+```text
 UTF-8 JSON + newline delimiter
 ```
 
@@ -697,8 +699,8 @@ One complete JSON object per line.
 
 Example:
 
-``` json
-{"type":"client_ready"}
+```json
+{ "type": "client_ready" }
 ```
 
 The BLE callback must not execute robot behavior directly.
@@ -706,7 +708,7 @@ The BLE callback must not execute robot behavior directly.
 The callback places the complete line into the protocol/event queue. The
 main application loop processes it.
 
-------------------------------------------------------------------------
+---
 
 # 12. BLE Connection Lifecycle
 
@@ -721,10 +723,11 @@ On BLE connection the robot must:
 3. stop accepting ESP-NOW control packets for movement, menu navigation, or game input;
 4. safely stop any active remote-only movement;
 5. abort any remote-only game in progress;
-6. send `device_info`;
-7. send current `state`;
-8. wait for `client_ready`;
-9. permit the app to explicitly select RC or start a game.
+6. wait for `hello`;
+7. send `hello_ack`;
+8. wait for `device_info_request`;
+9. send `device_info`;
+10. permit the app to explicitly select RC or start a game.
 
 A BLE connection does **not** automatically start RC mode.
 
@@ -767,198 +770,18 @@ This prevents a late ESP-NOW packet from stealing control from the mobile app.
 
 The BLE transport remains Nordic UART Service with newline-delimited JSON. The mobile application uses the same BLE session for ControlPanel movement, game commands, telemetry, and synchronization.
 
-The detailed message schemas defined below are the target protocol for the new architecture. Legacy commands such as the old single-purpose `move` message are compatibility inputs only during migration and must not remain the long-term contract.
-
-## 13.1 Handshake
-
-Mobile → Robot:
-
-```json
-{"type":"client_ready"}
-```
-
-Robot → Mobile:
-
-```json
-{
-  "type":"device_info",
-  "deviceId":"7C4FAD214341",
-  "name":"Robot-Test",
-  "model":"ESP32-S3 N16R8",
-  "firmware":"0.1.0",
-  "protocolVersion":"1.1"
-}
-```
-
-## 13.2 Message envelope
-
-Commands should use a common envelope where practical:
-
-```json
-{
-  "type":"command",
-  "command":"...",
-  "requestId":"abc123",
-  "payload":{}
-}
-```
-
-`requestId` is optional for high-rate input messages and recommended for state-changing commands that need a response.
-
-## 13.3 Mobile ControlPanel movement
-
-The ControlPanel joystick sends normalized input:
-
-```json
-{
-  "type":"command",
-  "command":"rc_input",
-  "payload":{
-    "x":0,
-    "y":100
-  }
-}
-```
-
-Where:
-
-- `x`: `-100` left to `+100` right
-- `y`: `-100` backward to `+100` forward
-- `0,0`: centered joystick
-
-The robot accepts `rc_input` only while BLE is connected and the mobile control context is in RC mode.
-
-## 13.4 Mobile RC start
-
-```json
-{
-  "type":"command",
-  "command":"rc_start"
-}
-```
-
-Robot response:
-
-```json
-{
-  "type":"response",
-  "command":"rc_start",
-  "status":"ok"
-}
-```
-
-## 13.5 Mobile stop
-
-```json
-{
-  "type":"command",
-  "command":"rc_stop"
-}
-```
-
-The robot must stop motion immediately and invalidate the latest joystick vector.
-
-## 13.6 Mobile game input
-
-While a mobile game is active, the ControlPanel/game UI may send the same normalized joystick representation through `game_input`:
-
-```json
-{
-  "type":"command",
-  "command":"game_input",
-  "payload":{
-    "x":-100,
-    "y":0
-  }
-}
-```
-
-Game-specific buttons may be represented as a bitmask or named action in the payload. The active GameEngine decides what is meaningful.
-
-The robot accepts `game_input` only when:
-
-- BLE is connected;
-- control owner is `MOBILE`;
-- a mobile game is active.
-
-## 13.7 Mobile game commands
-
-Supported lifecycle commands:
-
-- `game_start`
-- `game_abort`
-- `game_pause` if later enabled
-- `game_resume` if later enabled
-
-Example start:
-
-```json
-{
-  "type":"command",
-  "command":"game_start",
-  "payload":{
-    "gameId":"driving_pro",
-    "level":1
-  }
-}
-```
-
-The same game-start contract is used for mobile play and for the robot's internal local-menu path, but local menu selection does not require a BLE message.
+The detailed message schemas defined in separate file [Communication_JSON_Contract.md](./Communication_JSON_Contract.md)
 
 ---
 
 # 14. BLE State Events
-
-The robot reports important state/ownership transitions to the connected mobile application.
-
-Example ownership event:
-
-```json
-{
-  "type":"state",
-  "state":"mobile_control",
-  "controlOwner":"mobile",
-  "bleConnected":true,
-  "remoteConnected":true
-}
-```
-
-Remote-only example:
-
-```json
-{
-  "type":"state",
-  "state":"local_menu",
-  "controlOwner":"remote",
-  "bleConnected":false,
-  "remoteConnected":true
-}
-```
-
-The `state` message is informational. It does not grant control. Control ownership is determined by the robot's connection manager.
-
-Possible state values include:
-
-- `idle`
-- `mobile_control`
-- `mobile_rc`
-- `mobile_game`
-- `local_menu`
-- `local_rc`
-- `local_game`
 
 ## 14.1 Mobile-visible game state
 
 During a mobile game the robot may send:
 
 ```json
-{
-  "type":"game_event",
-  "event":"state_changed",
-  "gameId":"driving_pro",
-  "level":1,
-  "state":"running"
-}
+
 ```
 
 The mobile app should use these events to keep its UI synchronized with the robot rather than assuming that a command was executed merely because it was transmitted.
@@ -969,35 +792,31 @@ The mobile app should use these events to keep its UI synchronized with the robo
 
 The target BLE command set is:
 
-| Command | Direction | Purpose | Required control owner |
-|---|---|---|---|
-| `client_ready` | Mobile → Robot | Complete BLE handshake | None |
-| `rc_start` | Mobile → Robot | Enter mobile RC | Mobile |
-| `rc_input` | Mobile → Robot | ControlPanel joystick | Mobile |
-| `rc_stop` | Mobile → Robot | Stop mobile RC | Mobile |
-| `game_start` | Mobile → Robot | Start selected game/level | Mobile |
-| `game_input` | Mobile → Robot | Game joystick/action input | Mobile |
-| `game_abort` | Mobile → Robot | Abort active mobile game | Mobile |
-| `led_set` | Mobile → Robot | Direct LED control where permitted | Mobile |
-| `buzzer` | Mobile → Robot | Direct buzzer control where permitted | Mobile |
-| `display_text` | Mobile → Robot | Display text where permitted | Mobile |
-| `display_expression` | Mobile → Robot | Display expression where permitted | Mobile |
-| `display_clear` | Mobile → Robot | Clear display | Mobile |
-| `telemetry_start` | Mobile → Robot | Enable telemetry stream | Mobile |
-| `telemetry_stop` | Mobile → Robot | Disable telemetry stream | Mobile |
-| `ping` | Mobile → Robot | Link/application health check | Mobile |
+| Command              | Direction      | Purpose                               | Required control owner |
+| -------------------- | -------------- | ------------------------------------- | ---------------------- |
+| `hello`              | Mobile → Robot | Initiate BLE handshake                | None                   |
+| `game_start`         | Mobile → Robot | Start selected game/level             | Mobile                 |
+| `game_abort`         | Mobile → Robot | Abort active mobile game              | Mobile                 |
+| `led_set`            | Mobile → Robot | Direct LED control where permitted    | Mobile                 |
+| `buzzer`             | Mobile → Robot | Direct buzzer control where permitted | Mobile                 |
+| `display_text`       | Mobile → Robot | Display text where permitted          | Mobile                 |
+| `display_expression` | Mobile → Robot | Display expression where permitted    | Mobile                 |
+| `display_clear`      | Mobile → Robot | Clear display                         | Mobile                 |
+| `telemetry_start`    | Mobile → Robot | Enable telemetry stream               | Mobile                 |
+| `telemetry_stop`     | Mobile → Robot | Disable telemetry stream              | Mobile                 |
+| `ping`               | Mobile → Robot | Link/application health check         | Mobile                 |
 
 Robot → Mobile message types:
 
-| Type | Purpose |
-|---|---|
-| `device_info` | Robot identity/capabilities |
-| `state` | Connection, mode, and ownership state |
-| `response` | Command success/error |
-| `game_event` | Live game lifecycle/task events |
-| `game_result` | Completed game result |
-| `telemetry` | Sensor/robot telemetry |
-| `remote_pair_result` | Pairing result when applicable |
+| Type          | Purpose                               |
+| ------------- | ------------------------------------- |
+| `hello_ack`   | Acknowledge BLE handshake             |
+| `device_info` | Robot identity/capabilities           |
+| `state`       | Connection, mode, and ownership state |
+| `response`    | Command success/error                 |
+| `game_event`  | Live game lifecycle/task events       |
+| `game_result` | Completed game result                 |
+| `telemetry`   | Sensor/robot telemetry                |
 
 The app must not treat an unacknowledged command as successfully applied.
 
@@ -1010,9 +829,10 @@ state.
 
 ## NeoPixel
 
-``` json
+```json
 {
-  "type": "led_set",
+  "type": "command",
+  "command": "led_set",
   "region": "front",
   "r": 255,
   "g": 0,
@@ -1022,7 +842,7 @@ state.
 
 Allowed region:
 
-``` text
+```text
 front
 back
 left
@@ -1032,61 +852,28 @@ all
 
 ## Buzzer
 
-``` json
+```json
 {
-  "type": "buzzer",
+  "type": "command",
+  "command": "buzzer",
   "frequency": 1200,
   "duration": 400
 }
 ```
 
-## OLED text
-
-``` json
-{
-  "type": "display_text",
-  "text": "Hello",
-  "line": 0
-}
-```
-
-## OLED expression
-
-``` json
-{
-  "type": "display_expression",
-  "sequence": [0, 2, 1]
-}
-```
-
 ## OLED clear
 
-``` json
+```json
 {
-  "type": "display_clear"
+  "type": "command",
+  "command": "clear_display"
 }
 ```
-
-Expression IDs currently defined:
-
-    ID Expression
-  ---- ------------
-     0 Happy
-     1 Sad
-     2 Heart
-     3 Star
-     4 Check
-     5 Cross
-     6 Warning
-     7 Robot
-     8 Battery
-     9 Sleep
-    10 WiFi
 
 Game engines may use these capabilities internally through the
 DisplayController rather than issuing BLE commands to themselves.
 
-------------------------------------------------------------------------
+---
 
 # 17. Game Lifecycle Protocol
 
@@ -1095,7 +882,7 @@ The same GameEngine implementation must support both control paths:
 - `MOBILE`: BLE-connected mobile app supplies game input.
 - `REMOTE`: BLE absent, ESP-NOW remote supplies game input after local OLED menu selection.
 
-The game engine must not care which transport produced the input. It receives normalized `InputEvent` objects from the controller layer.
+The game engine must care which transport produced the input.
 
 ## 17.1 Start game from mobile
 
@@ -1103,11 +890,11 @@ Mobile → Robot:
 
 ```json
 {
-  "type":"command",
-  "command":"game_start",
-  "payload":{
-    "gameId":"color_quest",
-    "level":1
+  "type": "command",
+  "command": "game_start",
+  "payload": {
+    "gameId": "color_quest",
+    "level": 1
   }
 }
 ```
@@ -1130,8 +917,8 @@ Mobile:
 
 ```json
 {
-  "type":"command",
-  "command":"game_abort"
+  "type": "command",
+  "command": "game_abort"
 }
 ```
 
@@ -1145,11 +932,11 @@ Robot → Mobile when BLE is connected:
 
 ```json
 {
-  "type":"game_event",
-  "event":"task_started",
-  "gameId":"driving_pro",
-  "level":1,
-  "task":1
+  "type": "game_event",
+  "event": "task_started",
+  "gameId": "driving_pro",
+  "level": 1,
+  "task": 1
 }
 ```
 
@@ -1171,14 +958,14 @@ Robot → Mobile after a mobile game completes, or later during result synchroni
 
 ```json
 {
-  "type":"game_result",
-  "gameId":"driving_pro",
-  "level":1,
-  "score":3,
-  "stars":2,
-  "tasksCompleted":3,
-  "tasksTotal":3,
-  "source":"mobile"
+  "type": "game_result",
+  "gameId": "driving_pro",
+  "level": 1,
+  "score": 3,
+  "stars": 2,
+  "tasksCompleted": 3,
+  "tasksTotal": 3,
+  "source": "mobile"
 }
 ```
 
@@ -1197,13 +984,13 @@ Ride for 9 seconds without collision.
 
 On task start:
 
--   robot automatically moves forward
--   joystick up/down does not control forward/backward
--   joystick left/right controls turning
--   when the user releases the joystick after a turn, the robot resumes
-    forward motion
--   collision ends the task
--   timer completion ends the task
+- robot automatically moves forward
+- joystick up/down does not control forward/backward
+- joystick left/right controls turning
+- when the user releases the joystick after a turn, the robot resumes
+  forward motion
+- collision ends the task
+- timer completion ends the task
 
 ### Task 2
 
@@ -1214,7 +1001,7 @@ Same driving behavior for 9 seconds, but the user must perform at least
 
 Same driving behavior for 9 seconds, but the user must perform:
 
-``` text
+```text
 at least 2 left turns
 at least 3 right turns
 ```
@@ -1229,7 +1016,7 @@ and approximately ten tasks per level. That content model remains a
 future expansion. Driving Pro L1's immediate migration scope is the
 three-task definition above.
 
-------------------------------------------------------------------------
+---
 
 # 19. Game Input Contract
 
@@ -1296,12 +1083,12 @@ The exact wire serialization must use explicit packed/manual serialization befor
 
 Initial button allocation:
 
-| Bit | Meaning | Local-menu role | Game role |
-|---:|---|---|---|
-| 0 | Primary / Action | Select / Confirm | Game action |
-| 1 | Secondary | Context-specific | Game action |
-| 2 | Menu | Open/return menu where allowed | Game-defined |
-| 3 | Back | Back / Cancel | Abort/Back where allowed |
+| Bit | Meaning          | Local-menu role                | Game role                |
+| --: | ---------------- | ------------------------------ | ------------------------ |
+|   0 | Primary / Action | Select / Confirm               | Game action              |
+|   1 | Secondary        | Context-specific               | Game action              |
+|   2 | Menu             | Open/return menu where allowed | Game-defined             |
+|   3 | Back             | Back / Cancel                  | Abort/Back where allowed |
 
 The robot interprets buttons according to the current local UI/game context.
 
@@ -1393,7 +1180,7 @@ The pairing implementation must not change the control-priority rule: a paired r
 
 All external input passes through a single controller/ownership layer before reaching robot behavior.
 
-``` text
+```text
 BLE packets --------+
                     |
                     v
@@ -1507,7 +1294,7 @@ display live driving/sensor information.
 
 Example:
 
-``` json
+```json
 {
   "type": "telemetry",
   "timestamp": 123456,
@@ -1544,7 +1331,7 @@ Example:
 
 The existing corner obstacle telemetry mapping remains:
 
-``` text
+```text
 C1 -> frontLeft
 C2 -> frontRight
 C3 -> rearLeft
@@ -1553,20 +1340,20 @@ C4 -> rearRight
 
 and:
 
-``` text
+```text
 C1/C2/C3/C4 value < 4000 => true
 ```
 
 Telemetry generation must use `SensorManager` rather than independently
 reading hardware.
 
-------------------------------------------------------------------------
+---
 
 # 26. Response and Error Contract
 
 All command responses use:
 
-``` json
+```json
 {
   "type": "response",
   "status": "ok",
@@ -1576,7 +1363,7 @@ All command responses use:
 
 or:
 
-``` json
+```json
 {
   "type": "response",
   "status": "error",
@@ -1588,7 +1375,7 @@ or:
 
 Initial error codes:
 
-``` text
+```text
 INVALID_JSON
 INVALID_MESSAGE
 UNKNOWN_COMMAND
@@ -1608,23 +1395,23 @@ UNSUPPORTED_VERSION
 The application must use `code` for programmatic handling and `message`
 for diagnostics.
 
-------------------------------------------------------------------------
+---
 
 # 27. Command Permission Matrix
 
-| Capability | BLE connected | BLE disconnected + remote connected | Neither connected |
-|---|---|---|---|
-| Mobile RC movement | Allowed | Not applicable | Not applicable |
-| Mobile game start | Allowed | Not applicable | Not applicable |
-| Mobile game input | Allowed during mobile game | Not applicable | Not applicable |
-| Mobile game abort | Allowed | Not applicable | Not applicable |
-| ESP-NOW Free Ride | Ignored | Allowed after local menu selection | Not allowed |
-| ESP-NOW local menu | Ignored | Allowed | Not allowed |
-| ESP-NOW local game input | Ignored | Allowed during local game | Not allowed |
-| OLED idle behavior | Allowed | Replaced by local menu | Active |
-| Local OLED game selection | Not used | Allowed | Not used |
-| Telemetry to mobile | Allowed | Unavailable | Unavailable |
-| Robot safety stop | Always allowed | Always allowed | Always allowed |
+| Capability                | BLE connected              | BLE disconnected + remote connected | Neither connected |
+| ------------------------- | -------------------------- | ----------------------------------- | ----------------- |
+| Mobile RC movement        | Allowed                    | Not applicable                      | Not applicable    |
+| Mobile game start         | Allowed                    | Not applicable                      | Not applicable    |
+| Mobile game input         | Allowed during mobile game | Not applicable                      | Not applicable    |
+| Mobile game abort         | Allowed                    | Not applicable                      | Not applicable    |
+| ESP-NOW Free Ride         | Ignored                    | Allowed after local menu selection  | Not allowed       |
+| ESP-NOW local menu        | Ignored                    | Allowed                             | Not allowed       |
+| ESP-NOW local game input  | Ignored                    | Allowed during local game           | Not allowed       |
+| OLED idle behavior        | Allowed                    | Replaced by local menu              | Active            |
+| Local OLED game selection | Not used                   | Allowed                             | Not used          |
+| Telemetry to mobile       | Allowed                    | Unavailable                         | Unavailable       |
+| Robot safety stop         | Always allowed             | Always allowed                      | Always allowed    |
 
 Safety actions are not subordinate to either controller.
 
@@ -1634,7 +1421,7 @@ Safety actions are not subordinate to either controller.
 
 Every game implements the same conceptual interface.
 
-``` cpp
+```cpp
 class GameEngine {
 public:
     virtual bool start(uint8_t level, const String& sessionId) = 0;
@@ -1652,7 +1439,7 @@ Game engines must be non-blocking.
 
 Do not implement:
 
-``` cpp
+```cpp
 delay(9000);
 ```
 
@@ -1660,7 +1447,7 @@ for a nine-second game task.
 
 Use timestamps/state transitions.
 
-------------------------------------------------------------------------
+---
 
 # 29. Colour Quest Migration
 
@@ -1725,14 +1512,14 @@ firmware and application.
 
 A level definition contains:
 
--   mode/game identity
--   level number
--   difficulty information
--   tasks
--   task parameters
--   success conditions
--   star thresholds
--   feedback configuration
+- mode/game identity
+- level number
+- difficulty information
+- tasks
+- task parameters
+- success conditions
+- star thresholds
+- feedback configuration
 
 The immediate firmware migration should use built-in definitions.
 
@@ -1742,19 +1529,19 @@ The architecture must keep level definitions separate from game
 execution code so that future authored content does not require firmware
 rewrites.
 
-------------------------------------------------------------------------
+---
 
 # 32. Results and Progression
 
 Robot:
 
-``` text
+```text
 temporary result
 ```
 
 App:
 
-``` text
+```text
 persistent result/progression
 ```
 
@@ -1762,14 +1549,14 @@ The robot may retain multiple unsynchronized session results.
 
 The intended future sync behavior is:
 
--   offline banking
--   keep-best merge
--   idempotent synchronization
--   no duplicate progression from repeated sync
+- offline banking
+- keep-best merge
+- idempotent synchronization
+- no duplicate progression from repeated sync
 
 The detailed persistence format is outside the first firmware migration.
 
-------------------------------------------------------------------------
+---
 
 # 33. BLE and ESP-NOW Coexistence
 
@@ -1778,7 +1565,7 @@ BLE and ESP-NOW operate concurrently on the ESP32-S3 radio.
 The architecture therefore treats them as independent communication
 managers:
 
-``` text
+```text
 BleManager
 EspNowManager
 ```
@@ -1804,23 +1591,23 @@ Test at minimum:
 The objective is to verify that neither communication path starves the
 other and that safety behavior remains deterministic.
 
-------------------------------------------------------------------------
+---
 
 # 34. Non-Blocking Design Rule
 
 The migrated firmware must avoid long blocking operations in:
 
--   BLE callbacks
--   ESP-NOW callbacks
--   game update functions
--   telemetry generation
--   sensor loops
+- BLE callbacks
+- ESP-NOW callbacks
+- game update functions
+- telemetry generation
+- sensor loops
 
 Communication callbacks should enqueue events.
 
 Time-based behavior should use:
 
-``` cpp
+```cpp
 millis()
 ```
 
@@ -1828,13 +1615,13 @@ or an appropriate scheduler rather than long `delay()` calls.
 
 Short hardware initialization delays are acceptable during startup.
 
-------------------------------------------------------------------------
+---
 
 # 35. Error Handling and Safety Priority
 
 The priority hierarchy is:
 
-``` text
+```text
 SAFETY
   >
 MOTOR STOP
@@ -1857,7 +1644,7 @@ A display failure must never prevent motor safety.
 
 A BLE failure must never leave motors uncontrolled.
 
-------------------------------------------------------------------------
+---
 
 # 36. Configuration Ownership
 
@@ -1865,7 +1652,7 @@ Hardware constants must live in configuration files.
 
 Examples:
 
-``` cpp
+```cpp
 PIN_BUZZER
 PIN_STRIP
 NUM_STRIP_PIXELS
@@ -1898,7 +1685,7 @@ Game tuning constants must live separately from hardware constants.
 This prevents the classic embedded-systems ritual of changing one
 threshold and accidentally modifying three unrelated behaviors.
 
-------------------------------------------------------------------------
+---
 
 # 37. PlatformIO Build Configuration
 
@@ -1906,7 +1693,7 @@ The existing working configuration is retained as the starting point.
 
 Important current configuration:
 
-``` ini
+```ini
 [env:esp32s3_dev]
 platform = espressif32
 framework = arduino
@@ -1934,7 +1721,7 @@ board_build.partitions = app3M_fat9M_16MB.csv
 
 The currently validated peripheral libraries are:
 
-``` text
+```text
 Adafruit GFX
 Adafruit NeoPixel
 Adafruit SSD1306
@@ -1947,7 +1734,7 @@ The existing project has already successfully flashed the physical
 ESP32-S3 with this PlatformIO configuration. That working baseline must
 be preserved before migration.
 
-------------------------------------------------------------------------
+---
 
 # 38. Versioning Rules
 
@@ -1956,7 +1743,7 @@ separate.
 
 Example:
 
-``` text
+```text
 firmware: 4.0.0
 protocol: 1.0
 ```
@@ -1969,7 +1756,7 @@ Increment firmware version when firmware behavior changes.
 All future BLE contract changes must update this document before
 implementation.
 
-------------------------------------------------------------------------
+---
 
 # 39. Migration Strategy
 
@@ -2125,7 +1912,7 @@ The migration is not complete until the ownership matrix and transition tests pa
 
 Recommended tags:
 
-``` text
+```text
 v0.1.0-baseline-platformio
 v0.2.0-legacy-import
 v0.3.0-hardware-modules
@@ -2142,7 +1929,7 @@ Do not create a giant "refactor everything" commit.
 
 Each phase should be independently buildable whenever practical.
 
-------------------------------------------------------------------------
+---
 
 # 41. Definition of Done for the Migration
 
@@ -2182,11 +1969,11 @@ and the working firmware baseline.
 
 Relevant existing definitions include:
 
--   Elxie Software Design Brief
--   Elxie architecture planning
--   BLE JSON Contract v2
--   Existing merged ESP32-S3 firmware
--   Existing technical documentation
+- Elxie Software Design Brief
+- Elxie architecture planning
+- BLE JSON Contract v2
+- Existing merged ESP32-S3 firmware
+- Existing technical documentation
 
 Important compatibility decisions made by this document:
 
@@ -2208,8 +1995,7 @@ Important compatibility decisions made by this document:
     definition documented above.
 12. Persistent progression remains application-owned.
 
-------------------------------------------------------------------------
-
+---
 
 ## 42.1 Superseded control assumption
 
@@ -2225,16 +2011,16 @@ This rule must be reflected consistently in the firmware, mobile app, and remote
 
 Any future change to:
 
--   BLE UUIDs
--   JSON keys
--   JSON message types
--   allowed enum values
--   ESP-NOW packet structure
--   joystick coordinate convention
--   controller ownership
--   robot state definitions
--   game IDs
--   telemetry schema
+- BLE UUIDs
+- JSON keys
+- JSON message types
+- allowed enum values
+- ESP-NOW packet structure
+- joystick coordinate convention
+- controller ownership
+- robot state definitions
+- game IDs
+- telemetry schema
 
 must first be updated in this document.
 
