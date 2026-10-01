@@ -24,6 +24,7 @@ import {
   type ProtocolErrorPayload,
   type ResultsSyncPayload,
   type TelemetryPayload,
+  type JoyStickDir,
 } from "@/types/protocol";
 
 type RequestResolver = {
@@ -149,19 +150,14 @@ export class ProtocolClient {
    * Convenience helper to send normalized joystick input.
    */
   async sendJoystickInput(
-    x: number,
-    y: number,
+    direction: JoyStickDir,
     magnitude?: number,
   ): Promise<void> {
-    const clampedX = Math.max(-1.0, Math.min(1.0, x));
-    const clampedY = Math.max(-1.0, Math.min(1.0, y));
-    const calculatedMag =
-      magnitude ?? Math.min(1.0, Math.hypot(clampedX, clampedY));
+    const calculatedMag = Math.max(0, Math.min(1, magnitude ?? 1));
 
     const payload: JoystickInputPayload = {
       inputType: "joystick",
-      x: Math.round(clampedX * 1000) / 1000,
-      y: Math.round(clampedY * 1000) / 1000,
+      dir: direction,
       magnitude: Math.round(calculatedMag * 1000) / 1000,
     };
 
@@ -172,7 +168,7 @@ export class ProtocolClient {
    * Convenience helper to send normalized direction input.
    */
   async sendDirectionInput(
-    direction: "forward" | "backward" | "left" | "right" | "up" | "down" | "none",
+    direction: JoyStickDir,
   ): Promise<void> {
     const payload: DirectionInputPayload = {
       inputType: "direction",

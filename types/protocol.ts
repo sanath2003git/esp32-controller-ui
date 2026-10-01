@@ -24,16 +24,17 @@ export type ProtocolEnvelope<TType extends string, TPayload extends object> = {
 
 /* ─── Normalized Input Model ─────────────────────────────────────── */
 
+export type JoyStickDir = "up" | "down" | "left" | "right" | "none";
+
 export type JoystickInputPayload = {
   inputType: "joystick";
-  x: number; // -1.0 ... +1.0
-  y: number; // -1.0 ... +1.0
+  dir: JoyStickDir;
   magnitude: number; // 0.0 ... 1.0
 };
 
 export type DirectionInputPayload = {
   inputType: "direction";
-  direction: "forward" | "backward" | "left" | "right" | "up" | "down" | "none";
+  direction: JoyStickDir;
 };
 
 export type ButtonInputPayload = {

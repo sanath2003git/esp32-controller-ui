@@ -17,6 +17,8 @@ import JoystickController, {
 import ColorWheelModal from "@/components/ColorWheelModal";
 
 import { useBleContext } from "@/context/BleContext";
+import { error } from "console";
+import { JoyStickDir } from "@/types/protocol";
 
 type ControlPanelMode = "free-ride" | "training" | "challenge";
 
@@ -51,8 +53,6 @@ type AlertToast = {
   message: string;
   tone: "warning" | "danger";
 };
-
-type MovementDir = "forward" | "backward" | "left" | "right";
 
 const AXIS_SWITCH_MARGIN = 1.2;
 
@@ -92,17 +92,15 @@ function ObstacleIndicator({
 
   return (
     <div
-      className={`absolute flex items-center gap-1.5 rounded-full transition-all ${
-        hasObstacle
-          ? "border border-danger bg-danger/20 px-2.5 py-2 text-danger shadow-[0_0_24px_rgba(255,76,100,0.75)]"
-          : "px-1 py-0.5"
-      } ${obstaclePositionClass[position]}`}
+      className={`absolute flex items-center gap-1.5 rounded-full transition-all ${hasObstacle
+        ? "border border-danger bg-danger/20 px-2.5 py-2 text-danger shadow-[0_0_24px_rgba(255,76,100,0.75)]"
+        : "px-1 py-0.5"
+        } ${obstaclePositionClass[position]}`}
     >
       <span
         aria-hidden="true"
-        className={`h-3.5 w-3.5 rounded-full border shadow-[0_0_12px_currentColor] ${
-          hasObstacle ? "animate-pulse" : ""
-        } ${stateClass}`}
+        className={`h-3.5 w-3.5 rounded-full border shadow-[0_0_12px_currentColor] ${hasObstacle ? "animate-pulse" : ""
+          } ${stateClass}`}
       />
 
       <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/55">
@@ -128,7 +126,7 @@ export default function ControlPanel({
   activeTask,
   onInputDirection,
 }: ControlPanelProps) {
-  const { status, telemetry, sendJoystickInput, sendDirectionInput } =
+  const { status, telemetry, sendJoystickInput } =
     useBleContext();
 
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
@@ -141,9 +139,17 @@ export default function ControlPanel({
     pit: false,
   });
 
-  const activeMovementDirection = useRef<MovementDir | null>(null);
+  const activeMovementDirection = useRef<JoyStickDir | null>(null);
+  const lastSentMovementDirection = useRef<JoyStickDir | null>(null);
 
   const isConnected = status === "connected";
+
+  useEffect(() => {
+    if (!isConnected) {
+      activeMovementDirection.current = null;
+      lastSentMovementDirection.current = null;
+    }
+  }, [isConnected]);
   const isColorQuestActive =
     (game === "color-quest" || mode === "challenge") && isGameActive;
 
@@ -189,14 +195,7 @@ export default function ControlPanel({
     const mag = Math.min(1.0, Math.hypot(dx, dy));
 
     if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
-      if (activeMovementDirection.current !== null) {
-        activeMovementDirection.current = null;
-        if (!isColorQuestActive) {
-          void sendJoystickInput(0, 0, 0).catch((error: unknown) => {
-            console.error("[CONTROL PANEL] Stop command failed", error);
-          });
-        }
-      }
+      activeMovementDirection.current = null;
       return;
     }
 
@@ -204,7 +203,7 @@ export default function ControlPanel({
     const absDy = Math.abs(dy);
     const current = activeMovementDirection.current;
     const currentAxisIsVertical =
-      current === "forward" || current === "backward";
+      current === "up" || current === "down";
     const currentAxisIsHorizontal =
       current === "right" || current === "left";
 
@@ -217,49 +216,28 @@ export default function ControlPanel({
       useVerticalAxis = absDy >= absDx;
     }
 
-    const nextDirection: MovementDir = useVerticalAxis
+    const nextDirection: JoyStickDir = useVerticalAxis
       ? dy > 0
-        ? "forward"
-        : "backward"
+        ? "up"
+        : "down"
       : dx > 0
         ? "right"
         : "left";
 
-    if (isColorQuestActive) {
-      if (activeMovementDirection.current === nextDirection) return;
-      activeMovementDirection.current = nextDirection;
-
-      const inputDirection =
-        nextDirection === "forward"
-          ? "up"
-          : nextDirection === "backward"
-            ? "down"
-            : nextDirection;
-
-      void sendDirectionInput(inputDirection).catch((error: unknown) => {
-        console.error("[CONTROL PANEL] Direction input failed", error);
-      });
-      onInputDirection?.(inputDirection);
-      return;
-    }
-
-    // Free Ride Mode: send continuous Protocol v1 normalized joystick input
     activeMovementDirection.current = nextDirection;
-    void sendJoystickInput(dx, dy, mag).catch((error: unknown) => {
+    if (lastSentMovementDirection.current === nextDirection) return;
+    lastSentMovementDirection.current = nextDirection;
+    void sendJoystickInput(nextDirection, mag).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Joystick input failed", error);
     });
+    onInputDirection?.(nextDirection);
   };
 
   const handleJoystickRelease = () => {
-    if (activeMovementDirection.current !== null) {
-      activeMovementDirection.current = null;
-
-      if (!isColorQuestActive && isConnected) {
-        void sendJoystickInput(0, 0, 0).catch((error: unknown) => {
-          console.error("[CONTROL PANEL] Joystick release stop failed", error);
-        });
-      }
-    }
+    activeMovementDirection.current = "none";
+    void sendJoystickInput("none", 0).catch((error: unknown) => {
+      console.error("[CONTROL PANEL] Joystick release stop failed", error);
+    });
   };
 
   const sendRgb = (r: number, g: number, b: number) => {
@@ -283,11 +261,10 @@ export default function ControlPanel({
         </div>
 
         <div
-          className={`rounded-full border px-3 py-1.5 text-xs font-bold ${
-            isConnected
-              ? "border-success/30 bg-success/10 text-success"
-              : "border-white/10 bg-white/5 text-white/45"
-          }`}
+          className={`rounded-full border px-3 py-1.5 text-xs font-bold ${isConnected
+            ? "border-success/30 bg-success/10 text-success"
+            : "border-white/10 bg-white/5 text-white/45"
+            }`}
         >
           {isConnected
             ? "Live"
@@ -309,11 +286,10 @@ export default function ControlPanel({
           disabled={!isConnected}
           aria-label="Open robot LED color picker"
           onClick={() => setColorWheelOpen(true)}
-          className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
-            isConnected
-              ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
-              : "cursor-not-allowed border-border bg-black/10 opacity-40"
-          }`}
+          className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${isConnected
+            ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
+            : "cursor-not-allowed border-border bg-black/10 opacity-40"
+            }`}
         >
           <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
             <defs>
@@ -424,7 +400,7 @@ export default function ControlPanel({
 
           <strong className="font-mono text-lg text-white">
             {telemetry?.distance.front === undefined ||
-            telemetry.distance.front === null
+              telemetry.distance.front === null
               ? "-- cm"
               : `${telemetry.distance.front} cm`}
           </strong>
@@ -437,11 +413,10 @@ export default function ControlPanel({
           role="alert"
         >
           <p
-            className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${
-              alertToast.tone === "warning"
-                ? "border-warning/35 bg-warning/90 text-black"
-                : "border-danger/35 bg-danger/90 text-white"
-            }`}
+            className={`flex items-center gap-2 rounded-2xl border px-4 py-3 text-sm font-semibold shadow-xl backdrop-blur ${alertToast.tone === "warning"
+              ? "border-warning/35 bg-warning/90 text-black"
+              : "border-danger/35 bg-danger/90 text-white"
+              }`}
           >
             <TriangleAlert size={18} />
             {alertToast.message}

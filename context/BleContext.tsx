@@ -21,6 +21,7 @@ import type {
   GameStartedPayload,
   GameStatePayload,
   InputPayload,
+  JoyStickDir,
   ProtocolErrorPayload,
   TelemetryPayload,
 } from "@/types/protocol";
@@ -48,9 +49,9 @@ export type BleContextValue = {
   // Protocol v1 Semantic Actions
   requestDeviceInfo: () => Promise<DeviceInfoPayload | null>;
   sendInput: (payload: InputPayload) => Promise<void>;
-  sendJoystickInput: (x: number, y: number, magnitude?: number) => Promise<void>;
+  sendJoystickInput: (direction: "up" | "down" | "left" | "right" | "none", magnitude?: number) => Promise<void>;
   sendDirectionInput: (
-    direction: "forward" | "backward" | "left" | "right" | "up" | "down" | "none",
+    direction: JoyStickDir,
   ) => Promise<void>;
   sendButtonInput: (
     button: "up" | "down" | "left" | "right" | "select" | "back" | "start" | "stop",
@@ -229,18 +230,18 @@ export function BleProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sendJoystickInput = useCallback(
-    async (x: number, y: number, magnitude?: number): Promise<void> => {
+    async (direction: JoyStickDir, magnitude?: number): Promise<void> => {
       if (!clientRef.current || !clientRef.current.isConnected()) {
         throw new Error("BLE device is not connected.");
       }
-      await clientRef.current.sendJoystickInput(x, y, magnitude);
+      await clientRef.current.sendJoystickInput(direction, magnitude);
     },
     [],
   );
 
   const sendDirectionInput = useCallback(
     async (
-      direction: "forward" | "backward" | "left" | "right" | "up" | "down" | "none",
+      direction: JoyStickDir,
     ): Promise<void> => {
       if (!clientRef.current || !clientRef.current.isConnected()) {
         throw new Error("BLE device is not connected.");
