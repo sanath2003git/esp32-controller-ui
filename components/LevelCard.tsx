@@ -1,16 +1,16 @@
 import Link from "next/link";
 import { ChevronRight, Lock, Star } from "lucide-react";
-import type { LevelMeta } from "@/lib/colourQuest";
+import type { GameLevel } from "@/data/gameCatalog";
 import type { LevelProgress } from "@/types/colourQuest";
 
-const difficultyStyles: Record<LevelMeta["difficulty"], string> = {
+const difficultyStyles: Record<GameLevel["difficulty"], string> = {
   Easy: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400",
   Medium: "border-amber-500/30 bg-amber-500/10 text-amber-400",
   Hard: "border-rose-500/30 bg-rose-500/10 text-rose-400",
 };
 
 type LevelCardProps = {
-  level: LevelMeta;
+  level: GameLevel;
   mode: string;
   progress?: LevelProgress;
 };

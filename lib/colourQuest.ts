@@ -1,64 +1,7 @@
-import type { LevelDifficulty } from "@/data/levels";
+import { gameCatalog, type GameLevel } from "@/data/gameCatalog";
 
-export type LevelMeta = {
-  id: number;
-  title: string;
-  description: string;
-  concept?: string;
-  difficulty: LevelDifficulty;
-  timing?: string;
-};
-
-export const COLOUR_QUEST_LEVELS: LevelMeta[] = [
-  {
-    id: 1,
-    title: "Level 1",
-    description: "🍎 Find the basic colours among the mixed ones! Nice and easy.",
-    concept: "1 primary target + 3 secondary distractors",
-    difficulty: "Easy",
-    timing: "5 seconds",
-  },
-  {
-    id: 2,
-    title: "Level 2",
-    description: "⚡ Same as before, but you gotta be quick! Gotta go fast!",
-    concept: "1 primary target + 3 secondary distractors",
-    difficulty: "Easy",
-    timing: "2.5 seconds",
-  },
-  {
-    id: 3,
-    title: "Level 3",
-    description: "🍊 Now find the mixed colours hidden among the basics!",
-    concept: "1 secondary target + 3 primary distractors",
-    difficulty: "Medium",
-    timing: "5 seconds",
-  },
-  {
-    id: 4,
-    title: "Level 4",
-    description: "🚀 Find the mixed colours, but at super speed! Don't blink!",
-    concept: "1 secondary target + 3 primary distractors",
-    difficulty: "Medium",
-    timing: "2.5 seconds",
-  },
-  {
-    id: 5,
-    title: "Level 5",
-    description: "🕵️‍♂️ Tricky! Spot the rare Orange or Purple colour hidden in the mix!",
-    concept: "Tertiary target vs primary/secondary noise",
-    difficulty: "Hard",
-    timing: "5 seconds",
-  },
-  {
-    id: 6,
-    title: "Level 6",
-    description: "👑 The Ultimate Boss Level! Spot the rare colour at max speed. Good luck!",
-    concept: "Tertiary target vs primary/secondary noise",
-    difficulty: "Hard",
-    timing: "2.5 seconds",
-  },
-];
+export type LevelMeta = GameLevel;
+export const COLOUR_QUEST_LEVELS = gameCatalog.find((game) => game.id === "color_quest")!.levels;
 
 export function getColourQuestLevel(id: number): LevelMeta | undefined {
   return COLOUR_QUEST_LEVELS.find((l) => l.id === id);
@@ -108,7 +51,7 @@ export function isLevelUnlocked(
   progressMap: Record<number, { stars: number }>
 ): boolean {
   if (levelId === 1) return true;
-  if (levelId < 1 || levelId > 6) return false;
+  if (levelId < 1 || levelId > COLOUR_QUEST_LEVELS.length) return false;
   const previousLevelProgress = progressMap[levelId - 1];
   return Boolean(previousLevelProgress && previousLevelProgress.stars >= 3);
 }

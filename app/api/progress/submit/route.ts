@@ -27,16 +27,17 @@ export async function POST(request: Request) {
     const body = await request.json();
     const rawGame = body.game;
     const game = normalizeGameSlug(rawGame);
-    const { level, score } = body;
+    const { level, score, stars } = body;
 
     if (
       game !== "color-quest" ||
       typeof level !== "number" ||
       level < 1 ||
-      level > 6 ||
+      level > COLOUR_QUEST_LEVELS.length ||
       typeof score !== "number" ||
       !Number.isFinite(score) ||
-      score < 0
+      score < 0 ||
+      (stars !== undefined && (!Number.isInteger(stars) || stars < 0 || stars > 3))
     ) {
       console.error("[PROGRESS SUBMIT] Validation failed for payload:", { game, level, score });
       return NextResponse.json(
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const awardedStars = calculateStars(score);
+    const awardedStars = stars ?? calculateStars(score);
     const currentLevelRec = existingMap[level];
 
     const newBestScore = mergeBestScore(currentLevelRec?.bestScore, score);

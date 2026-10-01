@@ -829,28 +829,21 @@ state.
 
 ## NeoPixel
 
+To illuminate led strip from mobile:
+
 ```json
 {
   "type": "command",
   "command": "led_set",
-  "region": "front",
   "r": 255,
   "g": 0,
   "b": 0
 }
 ```
 
-Allowed region:
-
-```text
-front
-back
-left
-right
-all
-```
-
 ## Buzzer
+
+To make honk from mobile:
 
 ```json
 {
@@ -862,6 +855,8 @@ all
 ```
 
 ## OLED clear
+
+To clear the OLED display:
 
 ```json
 {
@@ -890,8 +885,10 @@ Mobile → Robot:
 
 ```json
 {
+  "v": 1,
   "type": "command",
   "command": "game_start",
+  "id": "game-001",
   "payload": {
     "gameId": "color_quest",
     "level": 1
@@ -926,46 +923,21 @@ Remote/local menu: the configured Back/Cancel button aborts the local game.
 
 An external controller loss also aborts the active game safely.
 
-## 17.4 Game events
-
-Robot → Mobile when BLE is connected:
-
-```json
-{
-  "type": "game_event",
-  "event": "task_started",
-  "gameId": "driving_pro",
-  "level": 1,
-  "task": 1
-}
-```
-
-Other events may include:
-
-- `game_started`
-- `task_started`
-- `task_completed`
-- `task_failed`
-- `level_completed`
-- `game_aborted`
-- `game_completed`
-
-For remote-only play, the same state is presented on the OLED and feedback can be sent to the remote. If BLE is absent, there is naturally no mobile event stream.
-
 ## 17.5 Game result
 
 Robot → Mobile after a mobile game completes, or later during result synchronization for a remote-only game:
 
 ```json
 {
-  "type": "game_result",
-  "gameId": "driving_pro",
+  "v": 1,
+  "type": "response",
+  "response": "game_result",
+  "gameId": "color_quest",
   "level": 1,
   "score": 3,
-  "stars": 2,
+  "stars": 3,
   "tasksCompleted": 3,
-  "tasksTotal": 3,
-  "source": "mobile"
+  "tasksTotal": 3
 }
 ```
 
@@ -1053,19 +1025,17 @@ ESP-NOW is the physical remote transport. It remains active as a radio link even
 
 ## 20.1 Remote → Robot packet
 
-The proposed binary input packet remains:
+The binary input packet remains:
 
 ```cpp
-struct RemoteInputPacket {
-    uint8_t version;
-    uint8_t type;
-    uint16_t sequence;
-    int8_t joystickX;
-    int8_t joystickY;
-    uint16_t buttons;
-    uint8_t battery;
-    uint8_t flags;
-};
+typedef struct __attribute__((packed))
+{
+    int16_t x;
+    int16_t y;
+    uint8_t btn1;
+    uint8_t btn2;
+    uint8_t sw;
+} LegacyRemoteCommandPacket;
 ```
 
 Joystick convention:
@@ -1095,15 +1065,14 @@ The robot interprets buttons according to the current local UI/game context.
 ## 20.3 Robot → Remote feedback
 
 ```cpp
-struct RemoteFeedbackPacket {
-    uint8_t version;
-    uint8_t type;
-    uint16_t sequence;
-    uint8_t pattern;
-    uint8_t intensity;
-    uint16_t durationMs;
-    uint8_t flags;
-};
+typedef struct __attribute__((packed))
+{
+    int16_t x;
+    int16_t y;
+    uint8_t btn1;
+    uint8_t btn2;
+    uint8_t sw;
+} LegacyRemoteCommandPacket;
 ```
 
 Feedback may represent:
@@ -1315,8 +1284,7 @@ Example:
     "detected": false
   },
   "battery": {
-    "robot": 87,
-    "remote": 62
+    "robot": 87
   },
   "touch": {
     "event": "none"

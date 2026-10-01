@@ -35,7 +35,7 @@ export async function GET(request: Request) {
 
       for (const rec of records) {
         const lvl = Number(rec.level);
-        if (lvl >= 1 && lvl <= 6) {
+        if (lvl >= 1 && lvl <= COLOUR_QUEST_LEVELS.length) {
           dbMap[lvl] = {
             level: lvl,
             bestScore: typeof rec.bestScore === "number" ? rec.bestScore : 0,

@@ -22,6 +22,22 @@ export type ProtocolEnvelope<TType extends string, TPayload extends object> = {
   payload: TPayload;
 };
 
+export type CommandEnvelope<TCommand extends string, TPayload extends object> = {
+  v: typeof PROTOCOL_VERSION;
+  type: "command";
+  command: TCommand;
+  id: string;
+  payload: TPayload;
+};
+
+export type ResponseEnvelope<TResponse extends string, TPayload extends object> = {
+  v: typeof PROTOCOL_VERSION;
+  type: "response";
+  response: TResponse;
+  id?: string;
+  payload: TPayload;
+};
+
 /* ─── Normalized Input Model ─────────────────────────────────────── */
 
 export type JoyStickDir = "up" | "down" | "left" | "right" | "none";
@@ -29,7 +45,7 @@ export type JoyStickDir = "up" | "down" | "left" | "right" | "none";
 export type JoystickInputPayload = {
   inputType: "joystick";
   dir: JoyStickDir;
-  magnitude: number; // 0.0 ... 1.0
+  magnitude?: number; // 0.0 ... 1.0; omitted for game region input
 };
 
 export type DirectionInputPayload = {
@@ -65,25 +81,14 @@ export type DeviceInfoRequestMessage = ProtocolEnvelope<
 
 export type InputMessage = ProtocolEnvelope<"input", InputPayload>;
 
-export type GameSelectPayload = {
-  game: CanonicalGameId;
-};
-export type GameSelectMessage = ProtocolEnvelope<"game_select", GameSelectPayload>;
-
-export type LevelSelectPayload = {
-  game: CanonicalGameId;
-  level: number;
-};
-export type LevelSelectMessage = ProtocolEnvelope<"level_select", LevelSelectPayload>;
-
 export type GameStartPayload = {
-  game: CanonicalGameId;
+  gameId: CanonicalGameId;
   level?: number;
 };
-export type GameStartMessage = ProtocolEnvelope<"game_start", GameStartPayload>;
+export type GameStartMessage = CommandEnvelope<"game_start", GameStartPayload>;
 
 export type GameAbortPayload = Record<string, never>;
-export type GameAbortMessage = ProtocolEnvelope<"game_abort", GameAbortPayload>;
+export type GameAbortMessage = CommandEnvelope<"game_abort", GameAbortPayload>;
 
 export type TelemetryConfigPayload = {
   enabled: boolean;
@@ -131,8 +136,6 @@ export type OutboundProtocolMessage =
   | HelloMessage
   | DeviceInfoRequestMessage
   | InputMessage
-  | GameSelectMessage
-  | LevelSelectMessage
   | GameStartMessage
   | GameAbortMessage
   | TelemetryConfigMessage
@@ -198,19 +201,12 @@ export type ProtocolErrorPayload = {
 };
 export type ErrorMessage = ProtocolEnvelope<"error", ProtocolErrorPayload>;
 
-export type GameSelectedPayload = {
-  accepted: boolean;
-  game: CanonicalGameId;
-  reason?: string;
-};
-export type GameSelectedMessage = ProtocolEnvelope<"game_selected", GameSelectedPayload>;
-
 export type GameStartedPayload = {
-  game: CanonicalGameId;
+  gameId: CanonicalGameId;
   level?: number;
   status: "running" | string;
 };
-export type GameStartedMessage = ProtocolEnvelope<"game_started", GameStartedPayload>;
+export type GameStartedMessage = ResponseEnvelope<"game_started", GameStartedPayload>;
 
 export type GameStatus =
   | "selected"
@@ -236,14 +232,30 @@ export type TaskSummary = {
 };
 
 export type GameResultPayload = {
+  gameId: CanonicalGameId;
+  level: number;
+  score: number;
+  stars: 0 | 1 | 2 | 3;
+  tasksCompleted: number;
+  tasksTotal: number;
+  status?: "completed" | "aborted" | "failed" | string;
+};
+export type GameResultMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "response";
+  response: "game_result";
+  id?: string;
+} & GameResultPayload;
+
+/** Compatibility type for older firmware that wraps game results in a payload. */
+export type LegacyGameResultMessage = ProtocolEnvelope<"game_result", {
   game: CanonicalGameId;
   level?: number;
-  score: number; // 0..100 or 0.0..1.0
+  score: number;
   stars: 0 | 1 | 2 | 3;
-  status: "completed" | "aborted" | "failed" | string;
+  status?: "completed" | "aborted" | "failed" | string;
   tasks?: TaskSummary;
-};
-export type GameResultMessage = ProtocolEnvelope<"game_result", GameResultPayload>;
+}>;
 
 export type SingleResultItem = {
   game: CanonicalGameId;
@@ -308,10 +320,10 @@ export type InboundProtocolMessage =
   | DeviceInfoMessage
   | AckMessage
   | ErrorMessage
-  | GameSelectedMessage
   | GameStartedMessage
   | GameStateMessage
   | GameResultMessage
+  | LegacyGameResultMessage
   | ResultsSyncMessage
   | TelemetryMessage
   | LevelDefinitionAckMessage

@@ -4,7 +4,7 @@
 **Status:** Implementation contract for Phase 5\
 **Scope:** ESP32-S3 ↔ Mobile/Web over BLE and ESP32-S3 ↔ Physical Remote
 over ESP-NOW\
-**Source of truth:** `docs/New_Architecture_and_System_Design.md`
+**Source of truth:** [New_Architecture_and_System_Design.md](./New%20Architecture%20and%20System%20Design.md)
 
 This document defines the communication contract that must be
 implemented by the firmware and consumed by the mobile/web application
@@ -402,7 +402,7 @@ The game engine must care whether input came from BLE or ESP-NOW.
 
 ESP input:
 
-```app
+```cpp
 // Legacy ESP-NOW Remote Command Packet (from existing working remote)
 typedef struct __attribute__((packed))
 {
@@ -532,11 +532,8 @@ Game mode is controlled by the robot-side `GameEngine`.
 
 The mobile application may request:
 
-- game selection;
-- level selection;
 - game start;
 - game abort;
-- game status;
 - result synchronization.
 
 Once a game is active, the robot must not interpret generic movement
@@ -612,6 +609,26 @@ The protocol must not prevent future levels from being added.
 
 ---
 
+# 14. Game result
+
+Robot → Mobile after a mobile game completes, or later during result synchronization for a remote-only game:
+
+```json
+{
+  "v": 1,
+  "type": "response",
+  "response": "game_result",
+  "gameId": "color_quest",
+  "level": 1,
+  "score": 3,
+  "stars": 3,
+  "tasksCompleted": 3,
+  "tasksTotal": 3
+}
+```
+
+---
+
 # 16. Game abort
 
 ```json
@@ -631,7 +648,7 @@ appropriate non-game state.
 
 # 17. Color Quest input
 
-Color Quest uses same joystick to select one of four robot regions.
+Color Quest uses same joystick input to select one of four robot regions.
 
 Example:
 

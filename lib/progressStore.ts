@@ -165,7 +165,8 @@ export async function fetchAndSyncProgress(
 export async function submitAndPersistLevelResult(
   game: string,
   level: number,
-  score: number
+  score: number,
+  awardedStarsOverride?: 0 | 1 | 2 | 3,
 ): Promise<{
   awardedStars: 0 | 1 | 2 | 3;
   bestScore: number;
@@ -175,7 +176,7 @@ export async function submitAndPersistLevelResult(
   progressPercentage: number;
 }> {
   const normGame = normalizeGameSlug(game);
-  const awardedStars = calculateStars(score);
+  const awardedStars = awardedStarsOverride ?? calculateStars(score);
 
   // 1. Update local storage immediately for fast UI feedback
   const localMap = readLocalProgress();
@@ -230,6 +231,7 @@ export async function submitAndPersistLevelResult(
         game: normGame,
         level,
         score,
+        stars: awardedStars,
       }),
     });
   } catch (err) {

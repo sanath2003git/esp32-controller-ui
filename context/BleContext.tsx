@@ -17,7 +17,6 @@ import type {
   CanonicalGameId,
   DeviceInfoPayload,
   GameResultPayload,
-  GameSelectedPayload,
   GameStartedPayload,
   GameStatePayload,
   InputPayload,
@@ -57,13 +56,11 @@ export type BleContextValue = {
     button: "up" | "down" | "left" | "right" | "select" | "back" | "start" | "stop",
     pressed: boolean,
   ) => Promise<void>;
-  selectGame: (game: CanonicalGameId) => Promise<GameSelectedPayload | null>;
-  selectLevel: (game: CanonicalGameId, level: number) => Promise<AckPayload | null>;
   startGame: (
     game: CanonicalGameId,
     level?: number,
   ) => Promise<GameStartedPayload | null>;
-  abortGame: () => Promise<AckPayload | null>;
+  abortGame: () => Promise<void>;
   configureTelemetry: (
     enabled: boolean,
     intervalMs?: number,
@@ -268,22 +265,6 @@ export function BleProvider({ children }: { children: ReactNode }) {
     await sendDirectionInput("none");
   }, [sendDirectionInput]);
 
-  const selectGame = useCallback(
-    async (game: CanonicalGameId): Promise<GameSelectedPayload | null> => {
-      if (!clientRef.current || !clientRef.current.isConnected()) return null;
-      return clientRef.current.selectGame(game);
-    },
-    [],
-  );
-
-  const selectLevel = useCallback(
-    async (game: CanonicalGameId, level: number): Promise<AckPayload | null> => {
-      if (!clientRef.current || !clientRef.current.isConnected()) return null;
-      return clientRef.current.selectLevel(game, level);
-    },
-    [],
-  );
-
   const startGame = useCallback(
     async (
       game: CanonicalGameId,
@@ -295,9 +276,9 @@ export function BleProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const abortGame = useCallback(async (): Promise<AckPayload | null> => {
-    if (!clientRef.current || !clientRef.current.isConnected()) return null;
-    return clientRef.current.abortGame();
+  const abortGame = useCallback(async (): Promise<void> => {
+    if (!clientRef.current || !clientRef.current.isConnected()) return;
+    await clientRef.current.abortGame();
   }, []);
 
   const configureTelemetry = useCallback(
@@ -340,8 +321,6 @@ export function BleProvider({ children }: { children: ReactNode }) {
         sendJoystickInput,
         sendDirectionInput,
         sendButtonInput,
-        selectGame,
-        selectLevel,
         startGame,
         abortGame,
         configureTelemetry,

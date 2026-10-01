@@ -10,7 +10,6 @@ import {
   type DeviceInfoPayload,
   type DirectionInputPayload,
   type GameResultPayload,
-  type GameSelectedPayload,
   type GameStartedPayload,
   type GameStatePayload,
   type HelloAckPayload,
@@ -21,6 +20,8 @@ import {
   type LevelDefinitionPayload,
   type PongPayload,
   type ProtocolEnvelope,
+  type GameResultMessage,
+  type LegacyGameResultMessage,
   type ProtocolErrorPayload,
   type ResultsSyncPayload,
   type TelemetryPayload,
@@ -153,12 +154,12 @@ export class ProtocolClient {
     direction: JoyStickDir,
     magnitude?: number,
   ): Promise<void> {
-    const calculatedMag = Math.max(0, Math.min(1, magnitude ?? 1));
-
     const payload: JoystickInputPayload = {
       inputType: "joystick",
       dir: direction,
-      magnitude: Math.round(calculatedMag * 1000) / 1000,
+      ...(magnitude !== undefined
+        ? { magnitude: Math.round(Math.max(0, Math.min(1, magnitude)) * 1000) / 1000 }
+        : {}),
     };
 
     await this.sendInput(payload);
@@ -193,34 +194,22 @@ export class ProtocolClient {
   }
 
   /**
-   * Request game selection on the robot.
-   */
-  async selectGame(game: CanonicalGameId): Promise<GameSelectedPayload> {
-    return this.sendRequest<GameSelectedPayload>("game_select", { game });
-  }
-
-  /**
-   * Request level selection on the robot.
-   */
-  async selectLevel(game: CanonicalGameId, level: number): Promise<AckPayload> {
-    return this.sendRequest<AckPayload>("level_select", { game, level });
-  }
-
-  /**
    * Request game start on the robot.
    */
   async startGame(
     game: CanonicalGameId,
     level?: number,
   ): Promise<GameStartedPayload> {
-    return this.sendRequest<GameStartedPayload>("game_start", { game, level });
+    return this.sendCommandRequest<GameStartedPayload>("game_start", { gameId: game, level });
   }
 
   /**
    * Request active game abort on the robot.
    */
-  async abortGame(): Promise<AckPayload> {
-    return this.sendRequest<AckPayload>("game_abort", {});
+  async abortGame(): Promise<void> {
+    const id = this.generateMessageId();
+    const envelope = { v: PROTOCOL_VERSION, type: "command", command: "game_abort", id, payload: {} };
+    await this.transport.write(JSON.stringify(envelope));
   }
 
   /**
@@ -338,18 +327,30 @@ export class ProtocolClient {
   ): Promise<TResponsePayload> {
     const id = this.generateMessageId();
     const envelope = this.constructEnvelope(type, payload, id);
-    const json = JSON.stringify(envelope);
-    console.info("[ProtocolClient] Sending correlated request", { type, id, timeoutMs, json });
+    return this.sendCorrelatedRequest<TResponsePayload>(JSON.stringify(envelope), id, type, timeoutMs);
+  }
 
+  private async sendCommandRequest<TResponsePayload>(
+    command: string,
+    payload: object,
+    timeoutMs = 8000,
+  ): Promise<TResponsePayload> {
+    const id = this.generateMessageId();
+    const envelope = { v: PROTOCOL_VERSION, type: "command", command, id, payload };
+    return this.sendCorrelatedRequest<TResponsePayload>(JSON.stringify(envelope), id, command, timeoutMs);
+  }
+
+  private async sendCorrelatedRequest<TResponsePayload>(
+    json: string,
+    id: string,
+    operation: string,
+    timeoutMs: number,
+  ): Promise<TResponsePayload> {
+    console.info("[ProtocolClient] Sending correlated request", { operation, id, timeoutMs, json });
     return new Promise<TResponsePayload>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
         this.pendingRequests.delete(id);
-        console.error("[ProtocolClient] Request timed out", { type, id, timeoutMs });
-        reject(
-          new Error(
-            `Protocol v1 request timed out after ${timeoutMs}ms (type: ${type}, id: ${id})`,
-          ),
-        );
+        reject(new Error(`Protocol v1 request timed out after ${timeoutMs}ms (operation: ${operation}, id: ${id})`));
       }, timeoutMs);
 
       this.pendingRequests.set(id, {
@@ -358,10 +359,7 @@ export class ProtocolClient {
         timeoutId,
       });
 
-      this.transport.write(json).then(() => {
-        console.debug("[ProtocolClient] Request write completed", { type, id });
-      }).catch((err) => {
-        console.error("[ProtocolClient] Request write failed", { type, id, error: err });
+      this.transport.write(json).catch((err) => {
         const req = this.pendingRequests.get(id);
         if (req) {
           clearTimeout(req.timeoutId);
@@ -408,7 +406,7 @@ export class ProtocolClient {
     }
 
     const message = parsed as InboundProtocolMessage;
-    console.info("[ProtocolClient] Parsed protocol message", { type: message.type, id: message.id, payload: message.payload });
+    console.info("[ProtocolClient] Parsed protocol message", { type: message.type, id: message.id, payload: "payload" in message ? message.payload : undefined });
 
     // Dispatch to raw generic message subscribers
     for (const sub of this.genericMessageSubscribers) {
@@ -435,7 +433,7 @@ export class ProtocolClient {
             ),
           );
         } else {
-          pending.resolve(message.payload);
+          pending.resolve("payload" in message ? message.payload : message);
         }
       }
     } else if (message.id) {
@@ -478,15 +476,37 @@ export class ProtocolClient {
         }
         break;
 
-      case "game_result":
+      case "response":
+        if (message.response === "game_result") {
+          const result = message as GameResultMessage;
+          for (const sub of this.gameResultSubscribers) {
+            try { sub(result); } catch (err) {
+              console.error("[ProtocolClient] Error in gameResult subscriber:", err);
+            }
+          }
+        }
+        break;
+
+      case "game_result": {
+        const legacy = message as LegacyGameResultMessage;
+        const result: GameResultPayload = {
+          gameId: legacy.payload.game,
+          level: legacy.payload.level ?? 1,
+          score: legacy.payload.score,
+          stars: legacy.payload.stars,
+          tasksCompleted: legacy.payload.tasks?.completed ?? 0,
+          tasksTotal: legacy.payload.tasks
+            ? legacy.payload.tasks.completed + legacy.payload.tasks.passed + legacy.payload.tasks.failed
+            : 0,
+          status: legacy.payload.status,
+        };
         for (const sub of this.gameResultSubscribers) {
-          try {
-            sub(message.payload as GameResultPayload);
-          } catch (err) {
+          try { sub(result); } catch (err) {
             console.error("[ProtocolClient] Error in gameResult subscriber:", err);
           }
         }
         break;
+      }
 
       case "results_sync":
         for (const sub of this.resultsSyncSubscribers) {
@@ -510,15 +530,18 @@ export class ProtocolClient {
     }
   }
 
-  private isValidEnvelope(val: unknown): val is ProtocolEnvelope<string, object> {
+  private isValidEnvelope(val: unknown): val is InboundProtocolMessage {
     if (typeof val !== "object" || val === null) return false;
     const obj = val as Record<string, unknown>;
-    return (
-      obj.v === PROTOCOL_VERSION &&
-      typeof obj.type === "string" &&
-      typeof obj.payload === "object" &&
-      obj.payload !== null
-    );
+    if (obj.v !== PROTOCOL_VERSION || typeof obj.type !== "string") return false;
+    if (obj.type === "response" && obj.response === "game_result") {
+      return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
+        typeof obj.score === "number" && Number.isFinite(obj.score) && obj.score >= 0 &&
+        Number.isInteger(obj.stars) && Number(obj.stars) >= 0 && Number(obj.stars) <= 3 &&
+        Number.isInteger(obj.tasksCompleted) && Number(obj.tasksCompleted) >= 0 &&
+        Number.isInteger(obj.tasksTotal) && Number(obj.tasksTotal) >= Number(obj.tasksCompleted);
+    }
+    return typeof obj.payload === "object" && obj.payload !== null;
   }
 
   private emitError(code: string, message: string): void {

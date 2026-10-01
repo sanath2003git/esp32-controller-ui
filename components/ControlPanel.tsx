@@ -155,7 +155,7 @@ export default function ControlPanel({
   customTelemetry,
   customControls,
 }: ControlPanelProps) {
-  const { status, telemetry, sendJoystickInput } = useBleContext();
+  const { status, telemetry, robotState, sendJoystickInput } = useBleContext();
 
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
@@ -167,7 +167,7 @@ export default function ControlPanel({
     pit: false,
   });
 
-  const gameStartRef = useRef<number>(Date.now());
+  const gameStartRef = useRef<number>(0);
   useEffect(() => {
     gameStartRef.current = Date.now();
   }, [game]);
@@ -175,6 +175,7 @@ export default function ControlPanel({
   const activeMovementDirection = useRef<JoyStickDir | null>(null);
 
   const isConnected = status === "connected";
+  const isRobotInGame = robotState === "GAME" || telemetry?.state === "GAME";
   const isColorQuestActive = game === "color-quest" && isGameActive;
 
   const heading = telemetry?.direction ?? null;
@@ -224,7 +225,7 @@ export default function ControlPanel({
     if (Math.abs(dx) < 0.08 && Math.abs(dy) < 0.08) {
       if (activeMovementDirection.current !== null) {
         activeMovementDirection.current = null;
-        void sendJoystickInput("none", 0).catch((error: unknown) => {
+        void sendJoystickInput("none", isRobotInGame ? undefined : 0).catch((error: unknown) => {
           console.error("[CONTROL PANEL] Joystick stop command failed", error);
         });
       }
@@ -261,7 +262,7 @@ export default function ControlPanel({
     activeMovementDirection.current = nextDirection;
     const inputDirection = nextDirection;
 
-    void sendJoystickInput(nextDirection, magnitude).catch((error: unknown) => {
+    void sendJoystickInput(nextDirection, isRobotInGame ? undefined : magnitude).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Joystick input command failed", error);
     });
     onInputDirection?.(inputDirection);
@@ -271,7 +272,7 @@ export default function ControlPanel({
     if (activeMovementDirection.current === null || !isConnected) return;
 
     activeMovementDirection.current = null;
-    void sendJoystickInput("none", 0).catch((error: unknown) => {
+    void sendJoystickInput("none", isRobotInGame ? undefined : 0).catch((error: unknown) => {
       console.error("[CONTROL PANEL] Joystick release stop failed", error);
     });
   };
