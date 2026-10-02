@@ -197,6 +197,31 @@ export class ProtocolClient {
     await this.sendInput(payload);
   }
 
+  /** Set the robot's RGB LED strip using the Protocol v1 hardware command. */
+  async setLedColor(r: number, g: number, b: number): Promise<void> {
+    const envelope = {
+      v: PROTOCOL_VERSION,
+      type: "command",
+      command: "led_set",
+      r: Math.round(Math.max(0, Math.min(255, r))),
+      g: Math.round(Math.max(0, Math.min(255, g))),
+      b: Math.round(Math.max(0, Math.min(255, b))),
+    };
+    await this.transport.write(JSON.stringify(envelope));
+  }
+
+  /** Play a short horn tone on the robot's buzzer. */
+  async honk(frequency = 1200, duration = 400): Promise<void> {
+    const envelope = {
+      v: PROTOCOL_VERSION,
+      type: "command",
+      command: "honk",
+      frequency: Math.max(1, Math.round(frequency)),
+      duration: Math.max(1, Math.round(duration)),
+    };
+    await this.transport.write(JSON.stringify(envelope));
+  }
+
   /**
    * Request game start on the robot.
    */
@@ -478,7 +503,7 @@ export class ProtocolClient {
       case "telemetry":
         for (const sub of this.telemetrySubscribers) {
           try {
-            sub(message.payload as TelemetryPayload);
+            sub(message as TelemetryPayload);
           } catch (err) {
             console.error("[ProtocolClient] Error in telemetry subscriber:", err);
           }
@@ -563,6 +588,12 @@ export class ProtocolClient {
     const obj = val as Record<string, unknown>;
     
     if (obj.v !== PROTOCOL_VERSION || typeof obj.type !== "string") return false;
+
+    if (obj.type === "telemetry") {
+      return typeof obj.timestamp === "number" && Number.isFinite(obj.timestamp) &&
+        typeof obj.direction === "number" &&
+        typeof obj.controller === "object" && obj.controller !== null;
+    }
     
     if (obj.type === "response" && obj.response === "game_result") {
       return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&

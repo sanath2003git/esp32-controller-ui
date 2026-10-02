@@ -12,7 +12,6 @@ import {
 import { incrementTrustLevel } from "@/lib/progressStore";
 import { ProtocolClient } from "@/lib/ble/protocolClient";
 import type {
-  AckPayload,
   AnyProtocolMessage,
   CanonicalGameId,
   DeviceInfoPayload,
@@ -61,15 +60,13 @@ export type BleContextValue = {
     button: "up" | "down" | "left" | "right" | "select" | "back" | "start" | "stop",
     pressed: boolean,
   ) => Promise<void>;
+  setLedColor: (r: number, g: number, b: number) => Promise<void>;
+  honk: (frequency?: number, duration?: number) => Promise<void>;
   startGame: (
     game: CanonicalGameId,
     level?: number,
   ) => Promise<GameStartedPayload | null>;
   abortGame: () => Promise<void>;
-  configureTelemetry: (
-    enabled: boolean,
-    intervalMs?: number,
-  ) => Promise<AckPayload | null>;
   acknowledgeResultsSync: (accepted: boolean) => Promise<void>;
   stop: () => Promise<void>;
 };
@@ -130,7 +127,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (telemetry?.touch?.event) {
       const evt = telemetry.touch.event;
-      if (evt === "hold" || evt === "single_tap" || evt === "double_tap") {
+      if (evt === "touched") {
         const now = Date.now();
         if (now - lastHoldTimeRef.current > 1000) {
           lastHoldTimeRef.current = now;
@@ -177,8 +174,12 @@ export function BleProvider({ children }: { children: ReactNode }) {
     client.onTelemetry((t) => {
       setTelemetry(t);
       if (t.state) setRobotState(t.state);
-      if (t.controller === "ble" || t.controller === "esp_now" || t.controller === "none") {
-        setControlOwner(t.controller as "mobile" | "remote" | "none");
+      if (
+        t.controller.active === "mobile" ||
+        t.controller.active === "remote" ||
+        t.controller.active === "none"
+      ) {
+        setControlOwner(t.controller.active);
       }
     });
     client.onGameState((s) => setGameState(s));
@@ -210,14 +211,6 @@ export function BleProvider({ children }: { children: ReactNode }) {
       setIsHandshakeComplete(true);
       setControlOwner("mobile"); // BLE connected -> Mobile App owns control
       setIsModalOpen(false);
-
-      // Automatically request telemetry streaming from robot
-      console.info("[BleContext] Requesting telemetry stream", { enabled: true, intervalMs: 100 });
-      void client.configureTelemetry(true, 100).then((ack) => {
-        console.info("[BleContext] Telemetry configuration acknowledged", ack);
-      }).catch((err) => {
-        console.warn("[BleContext] Telemetry config request failed:", err);
-      });
     } catch (error) {
       console.error("[BleContext] BLE connect/handshake flow failed", error);
       client.disconnect();
@@ -286,6 +279,20 @@ export function BleProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const setLedColor = useCallback(async (r: number, g: number, b: number): Promise<void> => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      throw new Error("BLE device is not connected.");
+    }
+    await clientRef.current.setLedColor(r, g, b);
+  }, []);
+
+  const honk = useCallback(async (frequency?: number, duration?: number): Promise<void> => {
+    if (!clientRef.current || !clientRef.current.isConnected()) {
+      throw new Error("BLE device is not connected.");
+    }
+    await clientRef.current.honk(frequency, duration);
+  }, []);
+
   const stop = useCallback(async (): Promise<void> => {
     await sendDirectionInput("none");
   }, [sendDirectionInput]);
@@ -305,14 +312,6 @@ export function BleProvider({ children }: { children: ReactNode }) {
     if (!clientRef.current || !clientRef.current.isConnected()) return;
     await clientRef.current.abortGame();
   }, []);
-
-  const configureTelemetry = useCallback(
-    async (enabled: boolean, intervalMs?: number): Promise<AckPayload | null> => {
-      if (!clientRef.current || !clientRef.current.isConnected()) return null;
-      return clientRef.current.configureTelemetry(enabled, intervalMs);
-    },
-    [],
-  );
 
   const acknowledgeResultsSync = useCallback(
     async (accepted: boolean): Promise<void> => {
@@ -348,9 +347,10 @@ export function BleProvider({ children }: { children: ReactNode }) {
         sendJoystickInput,
         sendDirectionInput,
         sendButtonInput,
+        setLedColor,
+        honk,
         startGame,
         abortGame,
-        configureTelemetry,
         acknowledgeResultsSync,
         stop,
       }}

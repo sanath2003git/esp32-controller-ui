@@ -155,7 +155,7 @@ export default function ControlPanel({
   customTelemetry,
   customControls,
 }: ControlPanelProps) {
-  const { status, telemetry, robotState, sendJoystickInput } = useBleContext();
+  const { status, telemetry, robotState, sendJoystickInput, setLedColor: sendLedColor, honk } = useBleContext();
 
   const [colorWheelOpen, setColorWheelOpen] = useState(false);
   const [ledColor, setLedColor] = useState<{ r: number; g: number; b: number } | null>(null);
@@ -279,7 +279,9 @@ export default function ControlPanel({
 
   const sendRgb = (r: number, g: number, b: number) => {
     setLedColor({ r, g, b });
-    console.log("[Control Panel]: sendColor", { r, g, b });
+    void sendLedColor(r, g, b).catch((error: unknown) => {
+      console.error("[CONTROL PANEL] LED command failed", error);
+    });
   };
 
   const togglePerfomanceMode = () => {
@@ -287,7 +289,9 @@ export default function ControlPanel({
   };
 
   const sendHonk = () => {
-    console.log("[Control Panel]: sending honk");
+    void honk().catch((error: unknown) => {
+      console.error("[CONTROL PANEL] Honk command failed", error);
+    });
   };
 
   const ledHex = ledColor

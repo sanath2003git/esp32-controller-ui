@@ -285,8 +285,9 @@ export type ResultsSyncPayload = {
 export type ResultsSyncMessage = ProtocolEnvelope<"results_sync", ResultsSyncPayload>;
 
 export type TelemetryPayload = {
-  state: "GAME" | "RC" | "IDLE" | string;
-  controller: "ble" | "esp_now" | "none" | string;
+  timestamp: number;
+  /** Optional compatibility fields used by older firmware. */
+  state?: "GAME" | "RC" | "IDLE" | string;
   game?: CanonicalGameId | null;
   level?: number;
   task?: number;
@@ -310,10 +311,18 @@ export type TelemetryPayload = {
     robot: number;
   };
   touch?: {
-    event: "none" | "single_tap" | "double_tap" | "hold";
+    event: "none" | "touched";
+  };
+  controller: {
+    active: "mobile" | "remote" | "none" | string;
+    bleConnected: boolean;
+    remoteConnected: boolean;
   };
 };
-export type TelemetryMessage = ProtocolEnvelope<"telemetry", TelemetryPayload>;
+export type TelemetryMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "telemetry";
+} & TelemetryPayload;
 
 export type LevelDefinitionAckPayload = {
   accepted: boolean;

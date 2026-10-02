@@ -831,6 +831,7 @@ To illuminate led strip from mobile:
 
 ```json
 {
+  "v": 1,
   "type": "command",
   "command": "led_set",
   "r": 255,
@@ -845,21 +846,11 @@ To make honk from mobile:
 
 ```json
 {
+  "v": 1,
   "type": "command",
-  "command": "buzzer",
+  "command": "honk",
   "frequency": 1200,
   "duration": 400
-}
-```
-
-## OLED clear
-
-To clear the OLED display:
-
-```json
-{
-  "type": "command",
-  "command": "clear_display"
 }
 ```
 
@@ -1263,6 +1254,7 @@ Example:
 
 ```json
 {
+  "v": 1,
   "type": "telemetry",
   "timestamp": 123456,
   "direction": 127,
