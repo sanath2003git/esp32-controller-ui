@@ -42,6 +42,7 @@ declare global {
   }
 
   interface BluetoothDevice {
+    name?: string;
     gatt?: BluetoothRemoteGATTServer | null;
     addEventListener(
       type: string,

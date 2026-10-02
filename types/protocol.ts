@@ -322,6 +322,7 @@ export type TelemetryPayload = {
 export type TelemetryMessage = {
   v: typeof PROTOCOL_VERSION;
   type: "telemetry";
+  id?: string;
 } & TelemetryPayload;
 
 export type LevelDefinitionAckPayload = {

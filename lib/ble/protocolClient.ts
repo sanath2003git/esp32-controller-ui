@@ -233,6 +233,18 @@ export class ProtocolClient {
   }
 
   /**
+   * Request sequence execution after studying mapping (Echo Memory).
+   */
+  async runSeq(
+    game: CanonicalGameId,
+    level: number,
+  ): Promise<void> {
+    const id = this.generateMessageId();
+    const envelope = { v: PROTOCOL_VERSION, type: "command", command: "run_seq", id, payload: { gameId: game, level } };
+    await this.transport.write(JSON.stringify(envelope));
+  }
+
+  /**
    * Request active game abort on the robot.
    */
   async abortGame(): Promise<void> {
