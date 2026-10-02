@@ -54,7 +54,7 @@ export default function EchoMemoryChallengePage() {
   const router = useRouter();
   const {
     status,
-    sendDirectionInput,
+    sendJoystickInput,
     honk,
     runSeq,
     lastMessage,
@@ -293,10 +293,13 @@ export default function EchoMemoryChallengePage() {
     }
   };
 
-  // Handle GO button on mapping phase -> triggers run_seq
+  // Handle GO button on mapping phase -> triggers run_seq and immediately transitions to input phase
   const handleRunSeq = async () => {
     try {
-      setGameState("flashing");
+      setGameState("input");
+      setInputStep(0);
+      setIsSubmittingInput(false);
+      setStepFeedback(null);
       await runSeq("echo_memory", levelId);
     } catch (err) {
       console.warn("[ECHO MEMORY] runSeq error:", err);
@@ -322,9 +325,9 @@ export default function EchoMemoryChallengePage() {
       if (action === "honk") {
         await honk();
       } else if (action === "pet") {
-        await sendDirectionInput("up");
+        // Pet action is performed physically on robotoy (touch sensor), no BLE command sent from mobile
       } else {
-        await sendDirectionInput(action as JoyStickDir);
+        await sendJoystickInput(action as JoyStickDir, 1.0);
       }
 
       // Record prediction step
@@ -840,14 +843,14 @@ export default function EchoMemoryChallengePage() {
                   </div>
 
                   {levelId >= 4 && (
-                    <button
-                      type="button"
-                      onClick={() => handleActionInput("pet")}
-                      disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
-                      className="flex w-full items-center justify-center gap-2 rounded-2xl border border-purple-500/60 bg-purple-500/20 py-3.5 px-4 text-sm font-bold text-purple-300 hover:bg-purple-500/30 active:scale-[0.98] transition-all shadow-[0_0_15px_rgba(168,85,247,0.3)] disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                      <Sparkles size={18} /> Pet Action ({isDynamic ? (getEchoColorVisual(dynamicMapping?.pet).color) : "Purple"})
-                    </button>
+                    <div className="flex w-full items-center justify-between rounded-2xl border border-purple-500/40 bg-purple-500/10 py-3.5 px-4 text-xs font-bold text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.2)]">
+                      <span className="flex items-center gap-2">
+                        <Sparkles size={18} /> Pet Action ({isDynamic ? getEchoColorVisual(dynamicMapping?.pet).color : "Purple"})
+                      </span>
+                      <span className="text-[10px] uppercase font-bold tracking-wider rounded-lg bg-purple-500/20 px-2 py-1 text-purple-200 border border-purple-500/30">
+                        Touch Physical Robot
+                      </span>
+                    </div>
                   )}
                 </div>
               );
@@ -855,7 +858,7 @@ export default function EchoMemoryChallengePage() {
 
             <p className="text-[11px] text-white/40">
               {levelId >= 4
-                ? "Tap matching D-pad arrow, HONK center button, or PET button. Each input will be evaluated."
+                ? "Tap D-pad arrow or HONK center button. For PET action, touch the physical robot."
                 : "Tap the arrow matching each sequence step. Each input will be evaluated."}
             </p>
           </section>
