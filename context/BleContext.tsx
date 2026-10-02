@@ -32,6 +32,7 @@ export type GameFeedbackEvent = { sequence: number; payload: GameFeedbackPayload
 
 export type BleContextValue = {
   status: BleStatus;
+  connectionLost: boolean;
   isHandshakeComplete: boolean;
   deviceName: string | null;
   deviceInfo: DeviceInfoPayload | null;
@@ -85,6 +86,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const gameFeedbackSequenceRef = useRef(0);
 
   const [status, setStatus] = useState<BleStatus>("disconnected");
+  const [connectionLost, setConnectionLost] = useState(false);
   const [isHandshakeComplete, setIsHandshakeComplete] = useState<boolean>(false);
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<DeviceInfoPayload | null>(null);
@@ -164,6 +166,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
 
     console.info("[BleContext] Connection state: connecting");
     setStatus("connecting");
+    setConnectionLost(false);
     setProtocolError(null);
 
     const client = new ProtocolClient();
@@ -184,6 +187,14 @@ export function BleProvider({ children }: { children: ReactNode }) {
       const sequence = ++gameFeedbackSequenceRef.current;
       setGameFeedbackEvents((current) => [...current, { sequence, payload: feedback }].slice(-64));
     });
+    client.onConnectionChange((connected) => {
+      if (connected || clientRef.current !== client) return;
+      console.warn("[BleContext] Bluetooth connection lost");
+      clientRef.current = null;
+      clearState();
+      setConnectionLost(true);
+      setIsModalOpen(true);
+    });
     client.onError((err) => setProtocolError(err));
     client.onMessage((msg) => setLastMessage(msg));
 
@@ -195,6 +206,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
       setDeviceName(info?.name ?? "Elxie Robot");
       console.info("[BleContext] Connection state: connected");
       setStatus("connected");
+      setConnectionLost(false);
       setIsHandshakeComplete(true);
       setControlOwner("mobile"); // BLE connected -> Mobile App owns control
       setIsModalOpen(false);
@@ -217,6 +229,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
 
   const disconnect = useCallback(() => {
     console.info("[BleContext] Disconnect requested by application");
+    setConnectionLost(false);
     if (clientRef.current) {
       clientRef.current.disconnect();
       clientRef.current = null;
@@ -313,6 +326,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
     <BleContext.Provider
       value={{
         status,
+        connectionLost,
         isHandshakeComplete,
         deviceName,
         deviceInfo,

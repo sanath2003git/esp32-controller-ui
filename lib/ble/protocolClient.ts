@@ -47,6 +47,7 @@ export class ProtocolClient {
   private gameStateSubscribers = new Set<(state: GameStatePayload) => void>();
   private gameResultSubscribers = new Set<(result: GameResultPayload) => void>();
   private gameFeedbackSubscribers = new Set<(feedback: GameFeedbackPayload) => void>();
+  private connectionSubscribers = new Set<(connected: boolean) => void>();
   private resultsSyncSubscribers = new Set<(sync: ResultsSyncPayload) => void>();
   private errorSubscribers = new Set<(error: ProtocolErrorPayload) => void>();
   private genericMessageSubscribers = new Set<(msg: AnyProtocolMessage) => void>();
@@ -281,6 +282,11 @@ export class ProtocolClient {
     return () => this.gameFeedbackSubscribers.delete(callback);
   }
 
+  onConnectionChange(callback: (connected: boolean) => void): () => void {
+    this.connectionSubscribers.add(callback);
+    return () => this.connectionSubscribers.delete(callback);
+  }
+
   onResultsSync(callback: (sync: ResultsSyncPayload) => void): () => void {
     this.resultsSyncSubscribers.add(callback);
     return () => this.resultsSyncSubscribers.delete(callback);
@@ -389,6 +395,11 @@ export class ProtocolClient {
         if (!connected) {
           this.isHandshakeDone = false;
           this.rejectAllPendingRequests("Transport connection lost.");
+        }
+        for (const subscriber of this.connectionSubscribers) {
+          try { subscriber(connected); } catch (err) {
+            console.error("[ProtocolClient] Error in connection subscriber:", err);
+          }
         }
       });
   }

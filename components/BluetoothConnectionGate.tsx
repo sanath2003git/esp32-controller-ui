@@ -5,7 +5,7 @@ import { Bluetooth, LoaderCircle, X } from "lucide-react";
 import { useBleContext } from "@/context/BleContext";
 
 export default function BluetoothConnectionGate() {
-  const { status, connect, isModalOpen, closeModal } = useBleContext();
+  const { status, connectionLost, connect, isModalOpen, closeModal } = useBleContext();
   const isConnected = status === "connected";
   const isConnecting = status === "connecting";
 
@@ -45,8 +45,13 @@ export default function BluetoothConnectionGate() {
           </div>
         </div>
 
-        <p className="mt-4 text-sm leading-6 text-white/65">
-          Connect to your ESP32 robot to send commands and receive telemetry, or explore the portal offline.
+        <p
+          className={`mt-4 text-sm leading-6 ${connectionLost ? "text-warning" : "text-white/65"}`}
+          role={connectionLost ? "alert" : undefined}
+        >
+          {connectionLost
+            ? "Bluetooth connection lost. Reconnect to your ESP32 robot to continue sending commands and receiving telemetry."
+            : "Connect to your ESP32 robot to send commands and receive telemetry, or explore the portal offline."}
         </p>
 
         <button

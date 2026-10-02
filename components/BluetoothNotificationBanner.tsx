@@ -5,16 +5,16 @@ import { Bluetooth, ChevronRight } from "lucide-react";
 import { useBleContext } from "@/context/BleContext";
 
 export default function BluetoothNotificationBanner() {
-  const { status, isModalOpen, openModal } = useBleContext();
+  const { status, openModal } = useBleContext();
 
   const isConnected = status === "connected";
 
-  if (isConnected || isModalOpen) {
+  if (isConnected) {
     return null;
   }
 
   return (
-    <div className="fixed inset-x-0 top-16 z-40 px-4 pt-2">
+    <div className="fixed inset-x-0 top-16 z-[40] px-4 pt-2">
       <div className="mx-auto max-w-md">
         <button
           type="button"
