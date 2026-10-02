@@ -11,6 +11,10 @@ import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
 import { ECHO_MEMORY_LEVELS, isEchoMemoryLevelUnlocked } from "@/lib/echoMemory";
+import {
+  DIRECTION_INVERT_LEVELS,
+  isDirectionInvertLevelUnlocked,
+} from "@/lib/directionInvert";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -22,21 +26,30 @@ export default function ChallengesPage() {
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
   const isEchoMemory = params.mode === "echo-memory";
+  const isDirectionInvert = params.mode === "direction-invert";
   const displayLevels = isColourQuest
     ? COLOUR_QUEST_LEVELS
     : isReflexDash
       ? REFLEX_DASH_LEVELS
       : isEchoMemory
         ? ECHO_MEMORY_LEVELS
-        : defaultLevels;
+        : isDirectionInvert
+          ? DIRECTION_INVERT_LEVELS
+          : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
 
   useEffect(() => {
-    if (!isColourQuest && !isReflexDash && !isEchoMemory) return;
+    if (!isColourQuest && !isReflexDash && !isEchoMemory && !isDirectionInvert) return;
 
     let isMounted = true;
-    const gameId = isColourQuest ? "color-quest" : isReflexDash ? "reflex-dash" : "echo-memory";
+    const gameId = isColourQuest
+      ? "color-quest"
+      : isReflexDash
+        ? "reflex-dash"
+        : isEchoMemory
+          ? "echo-memory"
+          : "direction-invert";
     fetchAndSyncProgress(gameId)
       .then((data) => {
         if (isMounted && data.levels) {
@@ -50,9 +63,9 @@ export default function ChallengesPage() {
     return () => {
       isMounted = false;
     };
-  }, [isColourQuest, isReflexDash, isEchoMemory]);
+  }, [isColourQuest, isReflexDash, isEchoMemory, isDirectionInvert]);
 
-  if (!isColourQuest && !isReflexDash && !isEchoMemory) {
+  if (!isColourQuest && !isReflexDash && !isEchoMemory && !isDirectionInvert) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -122,7 +135,15 @@ export default function ChallengesPage() {
                   attempts: 0,
                   unlocked: isEchoMemoryLevelUnlocked(level.id, userProgress),
                 }
-              : userProgress[level.id];
+              : isDirectionInvert
+                ? userProgress[level.id] || {
+                    level: level.id,
+                    bestScore: 0,
+                    stars: 0 as const,
+                    attempts: 0,
+                    unlocked: isDirectionInvertLevelUnlocked(level.id, userProgress),
+                  }
+                : userProgress[level.id];
 
             return (
               <LevelCard

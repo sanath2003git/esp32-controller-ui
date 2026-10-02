@@ -94,6 +94,14 @@ export default function Playground() {
             accent="warning"
             href="/playground/reflex-dash"
           />
+
+          <ModeCard
+            title="Direction Invert"
+            description="Drive with inverted controls (Levels 1 & 2 available)."
+            icon="drive"
+            accent="warning"
+            href="/playground/direction-invert"
+          />
         </div>
       </section>
     </div>

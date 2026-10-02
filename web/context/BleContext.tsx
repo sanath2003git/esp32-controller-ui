@@ -40,7 +40,7 @@ type BleContextValue = {
   send: (message: RobotCommand) => Promise<void>;
   move: (direction: MovementDirection) => Promise<void>;
   stop: () => Promise<void>;
-  setColor: (color: RgbColor) => Promise<void>;
+  setColor: (color: RgbColor | { r: number; g: number; b: number }) => Promise<void>;
   beep: (freq?: number, duration?: number) => Promise<void>;
   setOledText: (text: string) => Promise<void>;
   disconnect: () => void;
@@ -192,7 +192,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   }, [send]);
 
   const setColor = useCallback(
-    async (color: RgbColor) => {
+    async (color: RgbColor | { r: number; g: number; b: number }) => {
       await send(createColorCommand(color));
     },
     [send],

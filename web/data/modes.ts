@@ -2,7 +2,8 @@ export type ModeSlug =
   | "colour-quest"
   | "echo-memory"
   | "driving-pro"
-  | "reflex-dash";
+  | "reflex-dash"
+  | "direction-invert";
 
 export type ModeAccent = "primary" | "accent" | "warning";
 
@@ -36,6 +37,12 @@ export const modes: Record<ModeSlug, ModeMeta> = {
     slug: "reflex-dash",
     title: "Reflex Dash",
     description: "Single-colour alert / safe point reflex testing.",
+    accent: "warning",
+  },
+  "direction-invert": {
+    slug: "direction-invert",
+    title: "Direction Invert",
+    description: "Drive with inverted controls (Levels 1 & 2 available).",
     accent: "warning",
   },
 };

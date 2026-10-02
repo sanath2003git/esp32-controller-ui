@@ -37,7 +37,8 @@ export default function ModeHubPage() {
     params.mode === "colour-quest" ||
     params.mode === "color-quest" ||
     params.mode === "reflex-dash" ||
-    params.mode === "echo-memory";
+    params.mode === "echo-memory" ||
+    params.mode === "direction-invert";
 
   return (
     <main className="min-h-screen">

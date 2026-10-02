@@ -14,6 +14,14 @@ import type {
   EchoMemoryPhaseMessage,
   EchoMemoryResultMessage,
 } from "@/types/echoMemory";
+import type {
+  DirectionInvertAbortedMessage,
+  DirectionInvertCommand,
+  DirectionInvertMessage,
+  DirectionInvertResultMessage,
+  DirectionInvertTaskMessage,
+  DirectionInvertTaskResultMessage,
+} from "@/types/directionInvert";
 
 export type RobotDeviceInfo = {
   deviceId: string;
@@ -94,7 +102,8 @@ export type RobotCommand =
   | OledTextCommand
   | OledEmojiCommand
   | ColorQuestCommand
-  | EchoMemoryCommand;
+  | EchoMemoryCommand
+  | DirectionInvertCommand;
 
 export type DeviceInfoMessage = {
   type: "device_info";
@@ -125,7 +134,8 @@ export type BleMessage =
   | ColorQuestTaskResultMessage
   | ColorQuestReadyMessage
   | ColorQuestErrorMessage
-  | EchoMemoryMessage;
+  | EchoMemoryMessage
+  | DirectionInvertMessage;
 
 const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   red: { r: 255, g: 0, b: 0 },
@@ -134,10 +144,20 @@ const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   off: { r: 0, g: 0, b: 0 },
 };
 
-export function createColorCommand(color: RgbColor): ColorCommand {
+export function createColorCommand(
+  color: RgbColor | { r: number; g: number; b: number }
+): ColorCommand {
+  if (typeof color === "string") {
+    return {
+      command: "color",
+      ...RGB_VALUES[color],
+    };
+  }
   return {
     command: "color",
-    ...RGB_VALUES[color],
+    r: color.r,
+    g: color.g,
+    b: color.b,
   };
 }
 
@@ -251,6 +271,13 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     }
 
     if (
+      (value.mode === "direction_invert" || value.mode === "direction-invert" || value.game === "direction-invert") &&
+      typeof value.score === "number"
+    ) {
+      return value as DirectionInvertResultMessage;
+    }
+
+    if (
       typeof value.status === "string" &&
       typeof value.command === "string"
     ) {
@@ -258,6 +285,18 @@ export function parseBleMessage(value: unknown): BleMessage | null {
     }
 
     return null;
+  }
+
+  if (value.type === "task" && value.game === "direction-invert") {
+    return value as DirectionInvertTaskMessage;
+  }
+
+  if (value.type === "task_result" && value.game === "direction-invert") {
+    return value as DirectionInvertTaskResultMessage;
+  }
+
+  if (value.type === "aborted" && value.game === "direction-invert") {
+    return value as DirectionInvertAbortedMessage;
   }
 
   if (value.type === "task" && (value.game === "color-quest" || value.game === "colour-quest")) {

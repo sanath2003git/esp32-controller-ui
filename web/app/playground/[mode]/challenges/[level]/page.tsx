@@ -9,9 +9,11 @@ import { useBleContext } from "@/context/BleContext";
 import { getModeMeta } from "@/data/modes";
 import ReflexDashGame from "@/components/ReflexDashGame";
 import EchoMemoryGame from "@/components/EchoMemoryGame";
+import DirectionInvertGame from "@/components/DirectionInvertGame";
 import DPad, { type DPadDirection } from "@/components/DPad";
 import { getReflexDashLevel } from "@/lib/reflexDash";
 import { getEchoMemoryLevel } from "@/lib/echoMemory";
+import { getDirectionInvertLevel } from "@/lib/directionInvert";
 import {
   calculateStars,
   createColorQuestRegionCommand,
@@ -52,10 +54,12 @@ export default function ChallengeLevelPage() {
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
   const isEchoMemory = params.mode === "echo-memory";
+  const isDirectionInvert = params.mode === "direction-invert";
   const modeMeta = getModeMeta(params.mode);
   const levelId = Number(params.level);
   const reflexDashLevel = isReflexDash ? getReflexDashLevel(levelId) : undefined;
   const echoMemoryLevel = isEchoMemory ? getEchoMemoryLevel(levelId) : undefined;
+  const directionInvertLevel = isDirectionInvert ? getDirectionInvertLevel(levelId) : undefined;
 
   if (isReflexDash && reflexDashLevel) {
     return <ReflexDashGame levelId={levelId} levelMeta={reflexDashLevel} />;
@@ -63,6 +67,10 @@ export default function ChallengeLevelPage() {
 
   if (isEchoMemory && echoMemoryLevel) {
     return <EchoMemoryGame levelId={levelId} levelMeta={echoMemoryLevel} />;
+  }
+
+  if (isDirectionInvert && directionInvertLevel) {
+    return <DirectionInvertGame levelId={levelId} levelMeta={directionInvertLevel} />;
   }
 
   const levelMeta = getColourQuestLevel(levelId);
