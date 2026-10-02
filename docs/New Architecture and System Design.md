@@ -792,19 +792,17 @@ The mobile app should use these events to keep its UI synchronized with the robo
 
 The target BLE command set is:
 
-| Command              | Direction      | Purpose                               | Required control owner |
-| -------------------- | -------------- | ------------------------------------- | ---------------------- |
-| `hello`              | Mobile → Robot | Initiate BLE handshake                | None                   |
-| `game_start`         | Mobile → Robot | Start selected game/level             | Mobile                 |
-| `game_abort`         | Mobile → Robot | Abort active mobile game              | Mobile                 |
-| `led_set`            | Mobile → Robot | Direct LED control where permitted    | Mobile                 |
-| `buzzer`             | Mobile → Robot | Direct buzzer control where permitted | Mobile                 |
-| `display_text`       | Mobile → Robot | Display text where permitted          | Mobile                 |
-| `display_expression` | Mobile → Robot | Display expression where permitted    | Mobile                 |
-| `display_clear`      | Mobile → Robot | Clear display                         | Mobile                 |
-| `telemetry_start`    | Mobile → Robot | Enable telemetry stream               | Mobile                 |
-| `telemetry_stop`     | Mobile → Robot | Disable telemetry stream              | Mobile                 |
-| `ping`               | Mobile → Robot | Link/application health check         | Mobile                 |
+| Command           | Direction      | Purpose                               | Required control owner |
+| ----------------- | -------------- | ------------------------------------- | ---------------------- |
+| `hello`           | Mobile → Robot | Initiate BLE handshake                | None                   |
+| `game_start`      | Mobile → Robot | Start selected game/level             | Mobile                 |
+| `game_abort`      | Mobile → Robot | Abort active mobile game              | Mobile                 |
+| `led_set`         | Mobile → Robot | Direct LED control where permitted    | Mobile                 |
+| `buzzer`          | Mobile → Robot | Direct buzzer control where permitted | Mobile                 |
+| `display_clear`   | Mobile → Robot | Clear display                         | Mobile                 |
+| `telemetry_start` | Mobile → Robot | Enable telemetry stream               | Mobile                 |
+| `telemetry_stop`  | Mobile → Robot | Disable telemetry stream              | Mobile                 |
+| `ping`            | Mobile → Robot | Link/application health check         | Mobile                 |
 
 Robot → Mobile message types:
 

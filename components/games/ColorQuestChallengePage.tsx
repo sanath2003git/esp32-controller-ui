@@ -15,7 +15,7 @@ import {
   submitAndPersistLevelResult,
 } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
-import type { GameResultPayload } from "@/types/protocol";
+import type { GameFeedbackPayload, GameResultPayload, JoyStickDir } from "@/types/protocol";
 import { useGameSession } from "@/games/useGameSession";
 import {
   AlertCircle,
@@ -23,8 +23,6 @@ import {
   RefreshCw,
   Bluetooth,
   CheckCircle2,
-  Eye,
-  HelpCircle,
   ArrowUp,
   ArrowDown,
   ArrowLeft,
@@ -61,6 +59,11 @@ export default function ColorQuestChallengePage() {
     options?: string[];
   } | null>(null);
 
+  const [taskFeedback, setTaskFeedback] = useState<{
+    taskId: number;
+    correct: boolean;
+    correctCount: number;
+  } | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [userProgressMap, setUserProgressMap] = useState<Record<number, LevelProgress>>({});
   const [isLoadingProgress, setIsLoadingProgress] = useState(true);
@@ -125,10 +128,28 @@ export default function ColorQuestChallengePage() {
     [levelId],
   );
 
-  const session = useGameSession({ game: "color_quest", level: levelId, onResult: handleGameResult });
+  const handleGameFeedback = useCallback((feedback: GameFeedbackPayload) => {
+    setTaskFeedback({
+      taskId: feedback.taskId,
+      correct: feedback.correct,
+      correctCount: feedback.correctCount,
+    });
+    setActiveTask({
+      index: feedback.taskId - 1,
+      phase: "answer",
+      input: "",
+    });
+  }, []);
+
+  const session = useGameSession({
+    game: "color_quest",
+    level: levelId,
+    onResult: handleGameResult,
+    onFeedback: handleGameFeedback,
+  });
 
   useEffect(() => {
-    if (session.status === "playing" && true) {
+    if (session.status === "playing") {
       regionSelectionRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, [session.status, activeTask]);
@@ -141,16 +162,17 @@ export default function ColorQuestChallengePage() {
     }
     setErrorMessage(null);
     setActiveTask(null);
-    // setTaskFeedback(null);
+    setTaskFeedback(null);
     session.reset();
     await session.start();
   };
 
-  // const [taskFeedback, setTaskFeedback] = useState<{
-  //   correct: boolean;
-  //   timeout?: boolean;
-  //   correctCount: number;
-  // } | null>(null);
+  const handleGameInput = (direction: JoyStickDir) => {
+    setTaskFeedback(null);
+    void sendGameInput(direction).catch((error: unknown) => {
+      console.warn("[GAME INPUT ERROR]", error);
+    });
+  };
 
   const handleExit = () => {
     void session.abort().catch((e) => console.error("[ABORT ERROR]", e));
@@ -300,102 +322,82 @@ export default function ColorQuestChallengePage() {
           ) : null}
         </section>
 
-        {/* Active Task & Anti-Cheating Phase Flow Overlay */}
-        {session.status === "playing" && true &&
-          (
-            <section
-              ref={regionSelectionRef}
-              className="mt-6 scroll-mt-24 rounded-2xl border border-accent/30 bg-surface-light p-5 text-center shadow-xl"
-            >
-              {/* <div className="flex items-center justify-between text-xs text-white/60 mb-3">
-              <span className="flex items-center gap-1.5 font-bold text-accent">
-                Task {activeTask.index + 1} / 10
+        {/* Common game task feedback and region input */}
+        {session.status === "playing" && (
+          <section
+            ref={regionSelectionRef}
+            className="mt-6 scroll-mt-24 rounded-2xl border border-accent/30 bg-surface-light p-5 text-center shadow-xl"
+            aria-live="polite"
+          >
+            <div className="mb-3 flex items-center justify-between text-xs text-white/60">
+              <span className="font-bold text-accent">
+                Task {activeTask ? activeTask.index + 1 : 1} / 10
               </span>
-              <span className="uppercase tracking-wider font-semibold text-white/80">
-                {activeTask.phase === "memorize" ? "Phase 1: Memorize (0-5s)" : "Phase 2: Answer (5-10s)"}
-              </span>
-            </div> */}
+              <span className="font-semibold text-white/80">Select a region</span>
+            </div>
 
-              {/* {taskFeedback ? (
-              <div
-                className={`mb-4 rounded-xl border p-4 font-bold text-sm ${taskFeedback.correct
+            {/* Fixed-dimension feedback box that never collapses or jumps */}
+            <div
+              className={`mb-4 flex h-12 items-center justify-center rounded-xl border px-3 text-sm font-bold transition-colors duration-300 ${taskFeedback
+                ? taskFeedback.correct
                   ? "border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
-                  : taskFeedback.timeout
-                    ? "border-amber-500/40 bg-amber-500/15 text-amber-300"
-                    : "border-rose-500/40 bg-rose-500/15 text-rose-300"
-                  }`}
+                  : "border-rose-500/40 bg-rose-500/15 text-rose-300"
+                : "border-white/10 bg-white/5 text-white/40"
+                }`}
+            >
+              <span className="transition-opacity duration-200">
+                {taskFeedback ? (
+                  <>
+                    {taskFeedback.correct ? "CORRECT" : "INCORRECT"} · Correct answers: {taskFeedback.correctCount}/10
+                  </>
+                ) : (
+                  "Make your move using the buttons below"
+                )}
+              </span>
+            </div>
+
+            {/* Directional Input Grid (Completely stationary now) */}
+            <div className="mx-auto mt-4 grid max-w-[200px] grid-cols-3 gap-2">
+              <div />
+              <button
+                type="button"
+                onClick={() => handleGameInput("up")}
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Front (Top)"
               >
-                {taskFeedback.correct
-                  ? `CORRECT! Score: ${taskFeedback.correctCount}/10`
-                  : taskFeedback.timeout
-                    ? `TIMEOUT! Score: ${taskFeedback.correctCount}/10`
-                    : `WRONG! Score: ${taskFeedback.correctCount}/10`}
-              </div>
-            ) : activeTask.phase === "memorize" ? (
-              <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-amber-300">
-                <div className="flex items-center justify-center gap-2 font-bold text-sm mb-1">
-                  <Eye size={18} className="animate-pulse" /> Memorize Phase!
-                </div>
-                <p className="text-xs text-amber-200/80">
-                  Observe the 4 LED colours illuminated simultaneously on your robot!
-                </p>
-              </div>
-            ) : (
-              <div className="mb-4 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300">
-                <div className="flex items-center justify-center gap-2 font-bold text-sm mb-1">
-                  <HelpCircle size={18} /> Answer Phase!
-                </div>
-                <p className="text-xs text-emerald-200/80">
-                  LEDs are off. Input accepted for 5 more seconds!
-                </p>
-              </div>
-            )} */}
-
-              {/* Region Selection Buttons (D-Pad Layout) */}
-              <div className="mx-auto mt-6 grid max-w-[200px] grid-cols-3 gap-2">
-                <div />
-                <button
-                  type="button"
-                  onClick={() => sendGameInput("up")}
-                  className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                  aria-label="Front (Top)"
-                >
-                  <ArrowUp size={32} />
-                </button>
-                <div />
-
-                <button
-                  type="button"
-                  onClick={() => sendGameInput("left")}
-                  className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                  aria-label="Left"
-                >
-                  <ArrowLeft size={32} />
-                </button>
-                <div />
-                <button
-                  type="button"
-                  onClick={() => sendGameInput("right")}
-                  className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                  aria-label="Right"
-                >
-                  <ArrowRight size={32} />
-                </button>
-
-                <div />
-                <button
-                  type="button"
-                  onClick={() => sendGameInput("down")}
-                  className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
-                  aria-label="Back (Bottom)"
-                >
-                  <ArrowDown size={32} />
-                </button>
-                <div />
-              </div>
-            </section>
-          )}
-
+                <ArrowUp size={32} />
+              </button>
+              <div />
+              <button
+                type="button"
+                onClick={() => handleGameInput("left")}
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Left"
+              >
+                <ArrowLeft size={32} />
+              </button>
+              <div />
+              <button
+                type="button"
+                onClick={() => handleGameInput("right")}
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Right"
+              >
+                <ArrowRight size={32} />
+              </button>
+              <div />
+              <button
+                type="button"
+                onClick={() => handleGameInput("down")}
+                className="flex aspect-square items-center justify-center rounded-2xl border border-primary/40 bg-primary/20 text-primary hover:bg-primary/30 active:scale-95 transition-all"
+                aria-label="Back (Bottom)"
+              >
+                <ArrowDown size={32} />
+              </button>
+              <div />
+            </div>
+          </section>
+        )}
 
         {/* Exit Button */}
         <button

@@ -21,6 +21,8 @@ import {
   type PongPayload,
   type ProtocolEnvelope,
   type GameResultMessage,
+  type GameFeedbackMessage,
+  type GameFeedbackPayload,
   type LegacyGameResultMessage,
   type ProtocolErrorPayload,
   type ResultsSyncPayload,
@@ -44,6 +46,7 @@ export class ProtocolClient {
   private telemetrySubscribers = new Set<(telemetry: TelemetryPayload) => void>();
   private gameStateSubscribers = new Set<(state: GameStatePayload) => void>();
   private gameResultSubscribers = new Set<(result: GameResultPayload) => void>();
+  private gameFeedbackSubscribers = new Set<(feedback: GameFeedbackPayload) => void>();
   private resultsSyncSubscribers = new Set<(sync: ResultsSyncPayload) => void>();
   private errorSubscribers = new Set<(error: ProtocolErrorPayload) => void>();
   private genericMessageSubscribers = new Set<(msg: AnyProtocolMessage) => void>();
@@ -144,7 +147,7 @@ export class ProtocolClient {
    * Send normalized input message (joystick, direction, or button).
    */
   async sendInput(payload: InputPayload): Promise<void> {
-    await this.sendUncorrelatedMessage("input", payload);
+    await this.sendUncorrelatedMessage("input", payload, true);
   }
 
   /**
@@ -273,6 +276,11 @@ export class ProtocolClient {
     return () => this.gameResultSubscribers.delete(callback);
   }
 
+  onGameFeedback(callback: (feedback: GameFeedbackPayload) => void): () => void {
+    this.gameFeedbackSubscribers.add(callback);
+    return () => this.gameFeedbackSubscribers.delete(callback);
+  }
+
   onResultsSync(callback: (sync: ResultsSyncPayload) => void): () => void {
     this.resultsSyncSubscribers.add(callback);
     return () => this.resultsSyncSubscribers.delete(callback);
@@ -312,8 +320,8 @@ export class ProtocolClient {
   private async sendUncorrelatedMessage<
     TType extends string,
     TPayload extends object,
-  >(type: TType, payload: TPayload): Promise<void> {
-    const envelope = this.constructEnvelope(type, payload);
+  >(type: TType, payload: TPayload, includeId = false): Promise<void> {
+    const envelope = this.constructEnvelope(type, payload, includeId ? this.generateMessageId() : undefined);
     const json = JSON.stringify(envelope);
     console.debug("[ProtocolClient] Sending message", { type, json });
     await this.transport.write(json);
@@ -484,6 +492,13 @@ export class ProtocolClient {
               console.error("[ProtocolClient] Error in gameResult subscriber:", err);
             }
           }
+        } else if (message.response === "game_feedback") {
+          const feedback = message as GameFeedbackMessage;
+          for (const sub of this.gameFeedbackSubscribers) {
+            try { sub(feedback); } catch (err) {
+              console.error("[ProtocolClient] Error in gameFeedback subscriber:", err);
+            }
+          }
         }
         break;
 
@@ -531,9 +546,13 @@ export class ProtocolClient {
   }
 
   private isValidEnvelope(val: unknown): val is InboundProtocolMessage {
+    
     if (typeof val !== "object" || val === null) return false;
+    
     const obj = val as Record<string, unknown>;
+    
     if (obj.v !== PROTOCOL_VERSION || typeof obj.type !== "string") return false;
+    
     if (obj.type === "response" && obj.response === "game_result") {
       return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
         typeof obj.score === "number" && Number.isFinite(obj.score) && obj.score >= 0 &&
@@ -541,6 +560,13 @@ export class ProtocolClient {
         Number.isInteger(obj.tasksCompleted) && Number(obj.tasksCompleted) >= 0 &&
         Number.isInteger(obj.tasksTotal) && Number(obj.tasksTotal) >= Number(obj.tasksCompleted);
     }
+    
+    if (obj.type === "response" && obj.response === "game_feedback") {
+      return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
+        Number.isInteger(obj.taskId) && Number(obj.taskId) >= 1 && typeof obj.correct === "boolean" &&
+        Number.isInteger(obj.correctCount) && Number(obj.correctCount) >= 0;
+    }
+    
     return typeof obj.payload === "object" && obj.payload !== null;
   }
 

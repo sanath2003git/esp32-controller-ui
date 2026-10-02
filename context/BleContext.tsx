@@ -17,6 +17,7 @@ import type {
   CanonicalGameId,
   DeviceInfoPayload,
   GameResultPayload,
+  GameFeedbackPayload,
   GameStartedPayload,
   GameStatePayload,
   InputPayload,
@@ -27,6 +28,8 @@ import type {
 
 export type BleStatus = "disconnected" | "connecting" | "connected";
 
+export type GameFeedbackEvent = { sequence: number; payload: GameFeedbackPayload };
+
 export type BleContextValue = {
   status: BleStatus;
   isHandshakeComplete: boolean;
@@ -35,6 +38,7 @@ export type BleContextValue = {
   telemetry: TelemetryPayload | null;
   gameState: GameStatePayload | null;
   gameResult: GameResultPayload | null;
+  gameFeedbackEvents: GameFeedbackEvent[];
   protocolError: ProtocolErrorPayload | null;
   lastMessage: AnyProtocolMessage | null;
   controlOwner: "mobile" | "remote" | "none";
@@ -78,6 +82,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<ProtocolClient | null>(null);
   const lastHoldTimeRef = useRef<number>(0);
   const lastDecayTimeRef = useRef<number>(0);
+  const gameFeedbackSequenceRef = useRef(0);
 
   const [status, setStatus] = useState<BleStatus>("disconnected");
   const [isHandshakeComplete, setIsHandshakeComplete] = useState<boolean>(false);
@@ -86,6 +91,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const [telemetry, setTelemetry] = useState<TelemetryPayload | null>(null);
   const [gameState, setGameState] = useState<GameStatePayload | null>(null);
   const [gameResult, setGameResult] = useState<GameResultPayload | null>(null);
+  const [gameFeedbackEvents, setGameFeedbackEvents] = useState<GameFeedbackEvent[]>([]);
   const [protocolError, setProtocolError] = useState<ProtocolErrorPayload | null>(null);
   const [lastMessage, setLastMessage] = useState<AnyProtocolMessage | null>(null);
   const [controlOwner, setControlOwner] = useState<"mobile" | "remote" | "none">("none");
@@ -144,6 +150,8 @@ export function BleProvider({ children }: { children: ReactNode }) {
     setTelemetry(null);
     setGameState(null);
     setGameResult(null);
+    setGameFeedbackEvents([]);
+    gameFeedbackSequenceRef.current = 0;
     setProtocolError(null);
     setLastMessage(null);
     setControlOwner("none");
@@ -172,6 +180,10 @@ export function BleProvider({ children }: { children: ReactNode }) {
     });
     client.onGameState((s) => setGameState(s));
     client.onGameResult((r) => setGameResult(r));
+    client.onGameFeedback((feedback) => {
+      const sequence = ++gameFeedbackSequenceRef.current;
+      setGameFeedbackEvents((current) => [...current, { sequence, payload: feedback }].slice(-64));
+    });
     client.onError((err) => setProtocolError(err));
     client.onMessage((msg) => setLastMessage(msg));
 
@@ -307,6 +319,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
         telemetry,
         gameState,
         gameResult,
+        gameFeedbackEvents,
         protocolError,
         lastMessage,
         controlOwner,

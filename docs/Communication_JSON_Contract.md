@@ -609,7 +609,41 @@ The protocol must not prevent future levels from being added.
 
 ---
 
-# 14. Game result
+# 14. Game events
+
+Mobile -> Robot answering for each task uses same joystick input to answer:
+
+```json
+{
+  "v": 1,
+  "type": "input",
+  "id": "input-1001",
+  "ts": 123456789,
+  "payload": {
+    "inputType": "joystick",
+    "dir": "up"
+  }
+}
+```
+
+Robot -> Mobile after each task is answered by the user:
+
+```json
+{
+  "v": 1,
+  "type": "response",
+  "response": "game_feedback",
+  "gameId": "color_quest",
+  "level": 1,
+  "taskId": 1,
+  "correct": true,
+  "correctCount": 1
+}
+```
+
+---
+
+# 15. Game result
 
 Robot → Mobile after a mobile game completes, or later during result synchronization for a remote-only game:
 

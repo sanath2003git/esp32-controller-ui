@@ -247,6 +247,20 @@ export type GameResultMessage = {
   id?: string;
 } & GameResultPayload;
 
+export type GameFeedbackPayload = {
+  gameId: CanonicalGameId;
+  level: number;
+  taskId: number;
+  correct: boolean;
+  correctCount: number;
+};
+export type GameFeedbackMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "response";
+  response: "game_feedback";
+  id?: string;
+} & GameFeedbackPayload;
+
 /** Compatibility type for older firmware that wraps game results in a payload. */
 export type LegacyGameResultMessage = ProtocolEnvelope<"game_result", {
   game: CanonicalGameId;
@@ -323,6 +337,7 @@ export type InboundProtocolMessage =
   | GameStartedMessage
   | GameStateMessage
   | GameResultMessage
+  | GameFeedbackMessage
   | LegacyGameResultMessage
   | ResultsSyncMessage
   | TelemetryMessage

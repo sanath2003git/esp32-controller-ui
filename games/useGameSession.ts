@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useBleContext } from "@/context/BleContext";
-import type { CanonicalGameId, GameResultPayload } from "@/types/protocol";
+import type { CanonicalGameId, GameFeedbackPayload, GameResultPayload } from "@/types/protocol";
 
 export type GameSessionStatus = "idle" | "starting" | "playing" | "completed" | "error";
 
@@ -11,17 +11,20 @@ type UseGameSessionOptions = {
   level?: number;
   timeoutMs?: number;
   onResult: (result: GameResultPayload) => void | Promise<void>;
+  onFeedback?: (feedback: GameFeedbackPayload) => void;
 };
 
-export function useGameSession({ game, level, timeoutMs = 120_000, onResult }: UseGameSessionOptions) {
+export function useGameSession({ game, level, timeoutMs = 120_000, onResult, onFeedback }: UseGameSessionOptions) {
   const {
     status: bleStatus, startGame, abortGame,
-    lastMessage, gameResult, openModal,
+    lastMessage, gameResult, gameFeedbackEvents, openModal,
   } = useBleContext();
   const [status, setStatus] = useState<GameSessionStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const statusRef = useRef<GameSessionStatus>("idle");
   const resultHandlerRef = useRef(onResult);
+  const feedbackHandlerRef = useRef(onFeedback);
+  const lastFeedbackSequenceRef = useRef(0);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const processedResultRef = useRef<string | null>(null);
   const baselineResultRef = useRef(gameResult);
@@ -30,6 +33,10 @@ export function useGameSession({ game, level, timeoutMs = 120_000, onResult }: U
   useEffect(() => {
     resultHandlerRef.current = onResult;
   }, [onResult]);
+
+  useEffect(() => {
+    feedbackHandlerRef.current = onFeedback;
+  }, [onFeedback]);
 
   const clearTimer = useCallback(() => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -61,6 +68,10 @@ export function useGameSession({ game, level, timeoutMs = 120_000, onResult }: U
     processedResultRef.current = null;
     baselineResultRef.current = gameResult;
     baselineMessageRef.current = lastMessage;
+    lastFeedbackSequenceRef.current = gameFeedbackEvents.reduce(
+      (latest, event) => Math.max(latest, event.sequence),
+      0,
+    );
     setSessionStatus("starting");
     try {
       const started = await startGame(game, level);
@@ -80,13 +91,25 @@ export function useGameSession({ game, level, timeoutMs = 120_000, onResult }: U
       setError(cause instanceof Error ? cause.message : "Failed to start the game.");
       setSessionStatus("error");
     }
-  }, [bleStatus, clearTimer, game, gameResult, lastMessage, level, openModal, setSessionStatus, startGame, timeoutMs]);
+  }, [bleStatus, clearTimer, game, gameFeedbackEvents, gameResult, lastMessage, level, openModal, setSessionStatus, startGame, timeoutMs]);
 
   const abort = useCallback(async () => {
     clearTimer();
     if (bleStatus === "connected") await abortGame();
     setSessionStatus("idle");
   }, [abortGame, bleStatus, clearTimer, setSessionStatus]);
+
+
+  useEffect(() => {
+    if (status !== "playing") return;
+    for (const event of gameFeedbackEvents) {
+      if (event.sequence <= lastFeedbackSequenceRef.current) continue;
+      lastFeedbackSequenceRef.current = event.sequence;
+      if (event.payload.gameId === game && event.payload.level === level) {
+        feedbackHandlerRef.current?.(event.payload);
+      }
+    }
+  }, [game, gameFeedbackEvents, level, status]);
 
   useEffect(() => {
     const freshResult = gameResult !== baselineResultRef.current ? gameResult : null;
