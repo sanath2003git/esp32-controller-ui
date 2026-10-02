@@ -1,3 +1,4 @@
+/* eslint-disable */
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
@@ -7,8 +8,8 @@ import ResultModal from "@/components/ResultModal";
 import { useBleContext } from "@/context/BleContext";
 import { submitAndPersistLevelResult } from "@/lib/progressStore";
 import { calculateStars } from "@/lib/colourQuest";
-import { Play, AlertCircle, Gamepad2 } from "lucide-react";
 import ControlPanel from "@/components/ControlPanel";
+import { Play, AlertCircle, X, Clock, Target, Gamepad2 } from "lucide-react";
 
 type Color = { name: string; hex: string; action: "GO" | "STOP" };
 
@@ -19,15 +20,26 @@ const COLORS = {
   yellow: { name: "Yellow", hex: "#EAB308" },
   purple: { name: "Purple", hex: "#A855F7" },
   cyan: { name: "Cyan", hex: "#06B6D4" },
+  magenta: { name: "Magenta", hex: "#EC4899" },
 };
 
 export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number, levelMeta: any }) {
   const router = useRouter();
-  const { status, send, openModal, setColor } = useBleContext();
+  const { status, send, openModal, setColor, move, stop, lastEventMessage } = useBleContext();
   
   const [gameState, setGameState] = useState<"idle" | "playing" | "completed">("idle");
+  const isGameActiveRef = useRef(false);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [score, setScore] = useState(0);
+  const [score, setScoreState] = useState(0);
+  const scoreRef = useRef(0);
+  const maxPossibleScoreRef = useRef(0);
+  const setScore = useCallback((action: React.SetStateAction<number>) => {
+    setScoreState((prev) => {
+      const next = typeof action === "function" ? action(prev) : action;
+      scoreRef.current = next;
+      return next;
+    });
+  }, []);
   const [isDriving, setIsDriving] = useState(false);
   const [currentColor, setCurrentColor] = useState<Color | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -52,7 +64,7 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         { ...COLORS.green, action: "GO" },
         { ...COLORS.blue, action: "GO" },
         { ...COLORS.red, action: "STOP" },
-        { ...COLORS.yellow, action: "STOP" }
+        { ...COLORS.magenta, action: "STOP" }
       ] as Color[];
     } else {
       return [
@@ -60,8 +72,8 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         { ...COLORS.blue, action: "GO" },
         { ...COLORS.cyan, action: "GO" },
         { ...COLORS.red, action: "STOP" },
-        { ...COLORS.yellow, action: "STOP" },
-        { ...COLORS.purple, action: "STOP" }
+        { ...COLORS.magenta, action: "STOP" },
+        { ...COLORS.yellow, action: "STOP" }
       ] as Color[];
     }
   };
@@ -75,85 +87,133 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
       const r = parseInt(cleanHex.substring(0, 2), 16);
       const g = parseInt(cleanHex.substring(2, 4), 16);
       const b = parseInt(cleanHex.substring(4, 6), 16);
-      console.log(`[REFLEX DASH] Sending color: ${hex} (R:${r}, G:${g}, B:${b})`);
-      await setColor({ r, g, b });
+      await send({ command: "color", r, g, b });
     } catch (err) {
       console.warn("Failed to send color to robot", err);
     }
   };
 
+  const handleDrive = (dir: "forward" | "backward" | "left" | "right" | null) => {
+    setIsDriving(dir !== null);
+    // Note: ControlPanel handles BLE move() and stop() internally for us.
+  };
+
   const nextPhase = useCallback(() => {
-    if (gameState !== "playing") return;
+    if (gameState !== "playing" || status === "connected") return;
     const randomColor = colors.current[Math.floor(Math.random() * colors.current.length)];
     setCurrentColor(randomColor);
     sendColorToRobot(randomColor.hex);
     reactionStartRef.current = Date.now();
     setMessage(null);
 
-    // Random duration for each phase (1s to 2.5s)
     const phaseDuration = 1000 + Math.random() * 1500;
     phaseTimerRef.current = setTimeout(nextPhase, phaseDuration);
-  }, [gameState, status, send]);
+  }, [gameState, status]);
 
-  const startGame = () => {
-    if (status !== "connected") {
-      openModal();
-      return;
-    }
-    setGameState("playing");
-    setScore(0);
-    setTimeLeft(totalDuration / 1000);
-    
-    // Start game timer
-    gameTimerRef.current = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          endGame();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    nextPhase();
-  };
-
-  const endGame = useCallback(async () => {
+  const handleLevelComplete = useCallback(async (finalScore: number) => {
+    isGameActiveRef.current = false;
     setGameState("completed");
     if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
     if (gameTimerRef.current) clearInterval(gameTimerRef.current);
     if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     setCurrentColor(null);
     sendColorToRobot("#000000"); // turn off LED
+    stop();
     
-    // In Reflex Dash, the game lasts totalDuration (e.g., 15s).
-    // The player earns 1 point for every 500ms driving on GO, and loses 3 points for driving on STOP.
-    // If we assume a perfect player, they would drive exactly during GO phases.
-    // On average, half the time is GO (e.g., 7.5s), which is 15 ticks of 500ms = 15 points.
-    // So let's normalize the score based on an expected perfect score: (totalDuration / 1000)
-    const expectedPerfectScore = (totalDuration / 1000);
-    const normalizedScore = Math.min(Math.max(score / expectedPerfectScore, 0), 1);
+    if (status === "connected") {
+      // Send abort ONLY if the user manually aborted, or if we need to ensure the robot stops.
+      // But if handleLevelComplete was triggered by the robot's 'response', it's already stopped.
+      // We can safely send abort just in case.
+      send({ command: "abort" } as any).catch(console.error);
+    }
     
     try {
-      const result = await submitAndPersistLevelResult("reflex-dash", levelId, normalizedScore);
+      const result = await submitAndPersistLevelResult("reflex-dash", levelId, finalScore);
       setCurrentResult({
-        score: normalizedScore,
+        score: finalScore,
         stars: result.awardedStars,
         bestScore: result.bestScore,
         isNextUnlocked: result.isNextUnlocked,
       });
     } catch (err) {
-      const localStars = calculateStars(normalizedScore);
+      const localStars = calculateStars(finalScore);
       setCurrentResult({
-        score: normalizedScore,
+        score: finalScore,
         stars: localStars,
-        bestScore: normalizedScore,
+        bestScore: finalScore,
         isNextUnlocked: localStars === 3,
       });
     } finally {
       setIsModalOpen(true);
     }
-  }, [score, levelId, totalDuration]);
+  }, [levelId]);
+
+  const startGame = () => {
+    isGameActiveRef.current = true;
+    setGameState("playing");
+    setScore(0);
+    maxPossibleScoreRef.current = 0;
+    setTimeLeft(totalDuration / 1000);
+    
+    // Start game timer just for visual countdown
+    gameTimerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          // Frontend is now the absolute source of truth for time and score!
+          // We know exactly how many points a perfect player would have earned.
+          const maxPoints = Math.max(1, maxPossibleScoreRef.current);
+          const normalizedScore = Math.min(Math.max(scoreRef.current / maxPoints, 0), 1);
+          handleLevelComplete(normalizedScore);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+
+    if (status === "connected") {
+      send({ command: "challenge", game: "reflex-dash", level: levelId });
+    } else {
+      nextPhase(); // Start offline mock loop
+    }
+  };
+
+  const abortGame = useCallback(() => {
+    isGameActiveRef.current = false;
+    setGameState("idle");
+    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
+    if (gameTimerRef.current) clearInterval(gameTimerRef.current);
+    if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
+    setCurrentColor(null);
+    sendColorToRobot("#000000"); // turn off LED
+    stop();
+    if (status === "connected") {
+      // Abort command tells ESP32 to immediately stop the game loop
+      send({ command: "abort" } as any).catch(console.error);
+    }
+    router.push(`/playground/reflex-dash/challenges`);
+  }, [router, send, status]);
+
+  useEffect(() => {
+    if (!lastEventMessage) return;
+    
+    const msg = lastEventMessage as any;
+    if (msg.game === "reflex-dash") {
+      if (msg.type === "event" && msg.event === "phase_start") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (gameState !== "playing") setGameState("playing");
+        setCurrentColor({
+          name: msg.colorName,
+          hex: msg.hex,
+          action: msg.isGo ? "GO" : "STOP",
+        });
+        // We no longer sync score from ESP32, frontend tracks it perfectly.
+      } else if (msg.type === "aborted") {
+        if (isGameActiveRef.current) {
+          abortGame();
+        }
+      }
+    }
+  }, [lastEventMessage, gameState, handleLevelComplete, abortGame]);
 
   useEffect(() => {
     return () => {
@@ -168,13 +228,17 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
 
     if (drivingScoreTimerRef.current) {
       clearInterval(drivingScoreTimerRef.current);
-      drivingScoreTimerRef.current = null;
     }
 
-    if (isDriving) {
-      drivingScoreTimerRef.current = setInterval(() => {
-        if (!currentColor) return;
-        
+    drivingScoreTimerRef.current = setInterval(() => {
+      if (!currentColor) return;
+      
+      // The perfect score ceiling rises every 500ms a GO color is active
+      if (currentColor.action === "GO") {
+        maxPossibleScoreRef.current += 1;
+      }
+
+      if (isDriving) {
         if (currentColor.action === "GO") {
           setScore(s => s + 1);
           setMessage("Great driving!");
@@ -182,47 +246,25 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
           setScore(s => Math.max(0, s - 3));
           setMessage("STOP! You are losing points!");
         }
-      }, 500); // add/subtract points every 500ms while driving
-    } else {
-      if (currentColor && currentColor.action === "GO") {
-        setMessage("You should be moving!");
+      } else {
+        if (currentColor.action === "GO") {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setMessage("You should be moving!");
+        } else {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setMessage(null);
+        }
       }
-    }
+    }, 500);
 
     return () => {
       if (drivingScoreTimerRef.current) clearInterval(drivingScoreTimerRef.current);
     };
   }, [isDriving, currentColor, gameState]);
 
-  const handleAction = () => {
-    if (gameState !== "playing" || !currentColor) return;
-
-    const reactionTime = Date.now() - reactionStartRef.current;
-
-    if (currentColor.action === "GO") {
-      // Reward based on reaction time (faster = more points)
-      if (reactionTime < 500) {
-        setScore(s => s + 2);
-        setMessage("Perfect!");
-      } else if (reactionTime < 1000) {
-        setScore(s => s + 1);
-        setMessage("Good!");
-      } else {
-        setMessage("Too slow!");
-      }
-    } else {
-      // Penalty for GO on STOP
-      setScore(s => Math.max(0, s - 2));
-      setMessage("Oops! That was a STOP color.");
-    }
-    
-    // Immediately start next phase
-    if (phaseTimerRef.current) clearTimeout(phaseTimerRef.current);
-    nextPhase();
-  };
 
   return (
-    <main className="min-h-screen pb-16">
+    <main className="min-h-screen pb-16 bg-background">
       <SubPageHeader
         title={`Reflex Dash \u00b7 Level ${levelMeta.id}`}
         subtitle={`${levelMeta.difficulty} \u00b7 ${levelMeta.timing}`}
@@ -243,6 +285,24 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
                 <p className="text-sm text-white/80 mb-2">{levelMeta.description}</p>
               </div>
             </section>
+
+            {/* Color Legend Card */}
+            <div className="mt-4 w-full rounded-2xl border border-white/10 bg-surface-light p-4 shadow-lg">
+              <h3 className="text-[11px] font-bold uppercase tracking-wider text-white/50 mb-3 text-left">Command Legend</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {colors.current.map(c => (
+                  <div key={c.hex} className="flex items-center gap-2 rounded-xl bg-black/20 p-2 border border-white/5">
+                    <div className="h-4 w-4 rounded-full flex-shrink-0" style={{ backgroundColor: c.hex, boxShadow: `0 0 8px ${c.hex}80` }} />
+                    <span className="text-xs font-semibold text-white/80 truncate">{c.name}</span>
+                    <span className={`ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-md flex-shrink-0 ${
+                      c.action === "GO" ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"
+                    }`}>
+                      {c.action}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
             
             <button
               onClick={startGame}
@@ -254,48 +314,71 @@ export default function ReflexDashGame({ levelId, levelMeta }: { levelId: number
         )}
 
         {gameState === "playing" && (
-          <div className="flex flex-col items-center mt-4">
-            <div className="w-full">
-              <ControlPanel 
-                mode="challenge" 
-                game="reflex-dash" 
-                isGameActive={gameState === "playing"} 
-                onDrive={(dir) => setIsDriving(dir !== null)}
-                customTelemetry={
-                  <div className="mt-5">
+          <div className="fixed inset-0 z-50 bg-background overflow-hidden p-3 sm:p-4 pb-8 touch-none">
+            <ControlPanel
+              mode="challenge"
+              game="reflex-dash"
+              isGameActive={true}
+              onDrive={handleDrive}
+              customControls={
+                <div className="flex flex-col gap-3 w-full">
+                  {/* Top Bar with Score and Abort */}
+                  <div className="flex justify-between items-center w-full z-10 shrink-0 bg-black/40 p-2.5 rounded-2xl border border-white/5">
+                     <span className="font-black uppercase tracking-[0.2em] text-accent text-sm flex items-center gap-2">
+                       <Target size={16} /> Score: {score}
+                     </span>
+                     <button onClick={abortGame} className="px-3 py-1.5 border border-rose-500/30 bg-rose-500/10 text-rose-500 hover:bg-rose-500/20 rounded-full font-bold text-[10px] uppercase tracking-wider transition-colors flex items-center gap-1">
+                       <X size={12} /> Abort
+                     </button>
+                  </div>
+
+                  {/* Info Cards (Timer, Color) */}
+                  <div className="flex w-full shrink-0 justify-between gap-3 z-10">
+                    {/* Timer Card */}
+                    <div className="flex h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-2xl border border-white/10 bg-black/40 text-white/50 shadow-inner relative overflow-hidden">
+                      <span className="text-[10px] font-bold uppercase tracking-wider flex items-center gap-1">
+                        <Clock size={10} /> Timer
+                      </span>
+                      <span className="text-xl font-black text-white">
+                        {timeLeft === 0 && status === "connected" && gameState === "playing" ? "Calc..." : `${timeLeft}s`}
+                      </span>
+                    </div>
+                    
+                    {/* Color Card */}
                     <div 
-                      className="relative w-full aspect-square rounded-3xl flex items-center justify-center border-4 transition-colors shadow-2xl"
-                      style={{ 
-                        backgroundColor: currentColor ? `${currentColor.hex}33` : 'rgba(255,255,255,0.05)',
-                        borderColor: currentColor ? currentColor.hex : '#333'
+                      className="flex h-12 flex-1 flex-col items-center justify-center gap-0 rounded-2xl border bg-black/40 text-white transition-colors shadow-inner relative overflow-hidden"
+                      style={{
+                        borderColor: currentColor ? currentColor.hex : 'rgba(255,255,255,0.1)',
+                        boxShadow: currentColor ? `0 0 15px ${currentColor.hex}33 inset` : 'none'
                       }}
                     >
-                      <div className="absolute top-4 left-5 right-5 flex justify-between text-white/90 font-black tracking-widest uppercase text-sm">
-                        <span>Time: {timeLeft}s</span>
-                        <span>Score: {score}</span>
-                      </div>
+                      {/* Subtle background glow for the color card */}
+                      {currentColor && (
+                        <div className="absolute inset-0 opacity-10 pointer-events-none" style={{ backgroundColor: currentColor.hex }} />
+                      )}
+                      
+                      <span className="text-[9px] font-bold uppercase tracking-wider text-white/60">Target Color</span>
                       {currentColor ? (
-                        <div className="flex flex-col items-center">
-                           <span className="text-5xl font-black tracking-widest uppercase" style={{ color: currentColor.hex }}>
-                             {currentColor.name}
-                           </span>
-                           {message && (
-                             <span className="mt-3 text-base font-bold opacity-80 animate-pulse" style={{ color: currentColor.hex }}>
-                               {message}
-                             </span>
-                           )}
-                        </div>
+                        <span className="text-lg font-black tracking-widest uppercase drop-shadow-md" style={{ color: currentColor.hex, textShadow: `0 0 10px ${currentColor.hex}88` }}>
+                          {currentColor.name}
+                        </span>
                       ) : (
-                        <span className="text-white/30 font-bold tracking-widest uppercase">Ready...</span>
+                        <span className="text-lg font-black text-white/30">--</span>
                       )}
                     </div>
                   </div>
-                }
-              />
-            </div>
-            <p className="mt-4 text-xs text-white/50 text-center">
-              Drive the robot when a GO color appears.<br/>Stop immediately if a STOP color appears.
-            </p>
+
+                  {/* Message popup if any */}
+                  <div className="w-full h-8 flex items-center justify-center z-10 shrink-0">
+                    {message && currentColor && (
+                      <span className="text-[11px] font-black uppercase tracking-widest opacity-90 animate-pulse bg-black/60 px-5 py-2 rounded-full border border-white/10 shadow-lg" style={{ color: currentColor.hex }}>
+                        {message}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              }
+            />
           </div>
         )}
       </div>

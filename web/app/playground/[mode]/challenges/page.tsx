@@ -15,6 +15,7 @@ import {
   DIRECTION_INVERT_LEVELS,
   isDirectionInvertLevelUnlocked,
 } from "@/lib/directionInvert";
+import { DRIVING_PRO_LEVELS } from "@/lib/drivingPro";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -23,33 +24,50 @@ export default function ChallengesPage() {
   const modeMeta = getModeMeta(params.mode);
   const title = modeMeta?.title ?? "Challenge";
 
-  const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
+  const isColourQuest =
+    params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
   const isEchoMemory = params.mode === "echo-memory";
   const isDirectionInvert = params.mode === "direction-invert";
-  const displayLevels = isColourQuest
-    ? COLOUR_QUEST_LEVELS
-    : isReflexDash
-      ? REFLEX_DASH_LEVELS
-      : isEchoMemory
-        ? ECHO_MEMORY_LEVELS
-        : isDirectionInvert
-          ? DIRECTION_INVERT_LEVELS
-          : defaultLevels;
+  const isDrivingPro = params.mode === "driving-pro";
+  const displayLevels =
+    isColourQuest
+      ? COLOUR_QUEST_LEVELS
+      : isReflexDash
+        ? REFLEX_DASH_LEVELS
+        : isEchoMemory
+          ? ECHO_MEMORY_LEVELS
+          : isDirectionInvert
+            ? DIRECTION_INVERT_LEVELS
+            : isDrivingPro
+              ? DRIVING_PRO_LEVELS
+              : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
 
   useEffect(() => {
-    if (!isColourQuest && !isReflexDash && !isEchoMemory && !isDirectionInvert) return;
+    if (
+      !isColourQuest &&
+      !isReflexDash &&
+      !isEchoMemory &&
+      !isDirectionInvert &&
+      !isDrivingPro
+    ) {
+      return;
+    }
 
     let isMounted = true;
+
     const gameId = isColourQuest
       ? "color-quest"
       : isReflexDash
         ? "reflex-dash"
         : isEchoMemory
           ? "echo-memory"
-          : "direction-invert";
+          : isDirectionInvert
+            ? "direction-invert"
+            : "driving-pro";
+
     fetchAndSyncProgress(gameId)
       .then((data) => {
         if (isMounted && data.levels) {
@@ -63,9 +81,21 @@ export default function ChallengesPage() {
     return () => {
       isMounted = false;
     };
-  }, [isColourQuest, isReflexDash, isEchoMemory, isDirectionInvert]);
+  }, [
+    isColourQuest,
+    isReflexDash,
+    isEchoMemory,
+    isDirectionInvert,
+    isDrivingPro,
+  ]);
 
-  if (!isColourQuest && !isReflexDash && !isEchoMemory && !isDirectionInvert) {
+  if (
+    !isColourQuest &&
+    !isReflexDash &&
+    !isEchoMemory &&
+    !isDirectionInvert &&
+    !isDrivingPro
+  ) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -129,20 +159,23 @@ export default function ChallengesPage() {
           {displayLevels.map((level) => {
             const levelProgress: LevelProgress | undefined = isEchoMemory
               ? userProgress[level.id] || {
+                level: level.id,
+                bestScore: 0,
+                stars: 0 as const,
+                attempts: 0,
+                unlocked: isEchoMemoryLevelUnlocked(level.id, userProgress),
+              }
+              : isDirectionInvert
+                ? userProgress[level.id] || {
                   level: level.id,
                   bestScore: 0,
                   stars: 0 as const,
                   attempts: 0,
-                  unlocked: isEchoMemoryLevelUnlocked(level.id, userProgress),
+                  unlocked: isDirectionInvertLevelUnlocked(
+                    level.id,
+                    userProgress,
+                  ),
                 }
-              : isDirectionInvert
-                ? userProgress[level.id] || {
-                    level: level.id,
-                    bestScore: 0,
-                    stars: 0 as const,
-                    attempts: 0,
-                    unlocked: isDirectionInvertLevelUnlocked(level.id, userProgress),
-                  }
                 : userProgress[level.id];
 
             return (

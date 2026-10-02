@@ -35,13 +35,13 @@ export default function ResultModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-surface p-6 text-center shadow-2xl">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/20 text-primary mb-4">
+      <div className="w-full max-w-sm max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-3xl border border-white/10 bg-surface p-6 text-center shadow-2xl">
+        <div className="mx-auto flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary mb-4">
           <Trophy size={32} />
         </div>
 
         <h3 className="text-2xl font-black text-white">Level {level} Complete!</h3>
-        <p className="mt-1 text-xs text-white/50">Great effort with Colour Quest!</p>
+        <p className="mt-1 text-xs text-white/50">Great effort on this challenge!</p>
 
         {/* Stars */}
         <div className="mt-6 flex justify-center items-center gap-2">

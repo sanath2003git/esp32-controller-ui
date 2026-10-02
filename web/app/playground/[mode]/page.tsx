@@ -38,8 +38,8 @@ export default function ModeHubPage() {
     params.mode === "color-quest" ||
     params.mode === "reflex-dash" ||
     params.mode === "echo-memory" ||
-    params.mode === "direction-invert";
-
+    params.mode === "direction-invert" ||
+    params.mode === "driving-pro";
   return (
     <main className="min-h-screen">
       <SubPageHeader

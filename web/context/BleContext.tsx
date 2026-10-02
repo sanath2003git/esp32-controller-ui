@@ -33,6 +33,7 @@ type BleContextValue = {
   deviceInfo: RobotDeviceInfo | null;
   telemetry: RobotTelemetry | null;
   lastMessage: BleMessage | null;
+  lastEventMessage: BleMessage | null;
   isModalOpen: boolean;
   openModal: () => void;
   closeModal: () => void;
@@ -51,14 +52,15 @@ const BleContext = createContext<BleContextValue | null>(null);
 export function BleProvider({ children }: { children: ReactNode }) {
   const clientRef = useRef<BleClient | null>(null);
   const statusRef = useRef<BleStatus>("disconnected");
-  const lastHoldTimeRef = useRef<number>(Date.now());
-  const lastDecayTimeRef = useRef<number>(Date.now());
+  const lastHoldTimeRef = useRef<number>(0);
+  const lastDecayTimeRef = useRef<number>(0);
 
   const [status, setStatus] = useState<BleStatus>("disconnected");
   const [deviceName, setDeviceName] = useState<string | null>(null);
   const [deviceInfo, setDeviceInfo] = useState<RobotDeviceInfo | null>(null);
   const [telemetry, setTelemetry] = useState<RobotTelemetry | null>(null);
   const [lastMessage, setLastMessage] = useState<BleMessage | null>(null);
+  const [lastEventMessage, setLastEventMessage] = useState<BleMessage | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(true);
 
   // Decay trust if there is no touch input for a prolonged period
@@ -110,6 +112,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
     setDeviceInfo(null);
     setTelemetry(null);
     setLastMessage(null);
+    setLastEventMessage(null);
     setConnectionStatus("disconnected");
   }, [setConnectionStatus]);
 
@@ -122,6 +125,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
     setDeviceInfo(null);
     setTelemetry(null);
     setLastMessage(null);
+    setLastEventMessage(null);
 
     const client = new BleClient();
     clientRef.current = client;
@@ -130,6 +134,9 @@ export function BleProvider({ children }: { children: ReactNode }) {
       const device = await client.connect(
         (message) => {
           setLastMessage(message);
+          if (message.type !== "telemetry") {
+            setLastEventMessage(message);
+          }
 
           if (message.type === "device_info") {
             setDeviceInfo(message);
@@ -200,7 +207,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
 
   const beep = useCallback(
     async (freq = 2000, duration = 100) => {
-      await send({ command: "buzzer", freq, duration });
+      await send({ command: "buzz", freq, duration });
     },
     [send],
   );
@@ -226,6 +233,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
         deviceInfo,
         telemetry,
         lastMessage,
+        lastEventMessage,
         isModalOpen,
         openModal,
         closeModal,

@@ -79,7 +79,7 @@ export type ColorCommand = {
 };
 
 export type BuzzerCommand = {
-  command: "buzzer";
+  command: "buzz";
   freq?: number;
   duration?: number;
 };
@@ -92,6 +92,12 @@ export type OledTextCommand = {
 export type OledEmojiCommand = {
   command: "oled_emoji";
   emoji_id: number;
+};
+
+export type ReflexDashStartCommand = {
+  command: "challenge";
+  game: "reflex-dash";
+  level: number;
 };
 
 export type RobotCommand =
@@ -125,6 +131,27 @@ export type ResponseMessage = {
   [key: string]: unknown;
 };
 
+export type ReflexDashEventMessage = {
+  type: "event";
+  game: "reflex-dash";
+  event: "phase_start";
+  colorName: string;
+  hex: string;
+  isGo: boolean;
+  score?: number;
+};
+
+export type ReflexDashResponseMessage = {
+  type: "response";
+  game: "reflex-dash";
+  score: number;
+};
+
+export type ReflexDashAbortedMessage = {
+  type: "aborted";
+  game: "reflex-dash";
+};
+
 export type BleMessage =
   | DeviceInfoMessage
   | TelemetryMessage
@@ -135,7 +162,10 @@ export type BleMessage =
   | ColorQuestReadyMessage
   | ColorQuestErrorMessage
   | EchoMemoryMessage
-  | DirectionInvertMessage;
+  | DirectionInvertMessage
+  | ReflexDashEventMessage
+  | ReflexDashResponseMessage
+  | ReflexDashAbortedMessage;
 
 const RGB_VALUES: Record<RgbColor, Pick<ColorCommand, "r" | "g" | "b">> = {
   red: { r: 255, g: 0, b: 0 },
@@ -262,6 +292,10 @@ export function parseBleMessage(value: unknown): BleMessage | null {
       return { ...value, game: "color-quest" } as ColorQuestResult;
     }
 
+    if (value.game === "reflex-dash" && typeof value.score === "number") {
+      return value as ReflexDashResponseMessage;
+    }
+
     if (
       value.game === "echo-memory" &&
       typeof value.score === "number" &&
@@ -344,6 +378,15 @@ export function parseBleMessage(value: unknown): BleMessage | null {
 
   if (value.type === "error" && typeof value.message === "string") {
     return value as ColorQuestErrorMessage;
+  }
+
+  if (value.game === "reflex-dash") {
+    if (value.type === "event" && value.event === "phase_start") {
+      return value as ReflexDashEventMessage;
+    }
+    if (value.type === "aborted") {
+      return value as ReflexDashAbortedMessage;
+    }
   }
 
   return null;

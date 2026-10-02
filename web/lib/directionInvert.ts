@@ -116,3 +116,5 @@ export function isDirectionInvertLevelUnlocked(
   const prev = progressMap[levelId - 1];
   return Boolean(prev && prev.stars >= 3);
 }
+
+

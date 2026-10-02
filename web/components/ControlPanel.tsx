@@ -6,10 +6,31 @@ import {
   Bot,
   Compass,
   Gauge,
-  Lightbulb,
+  Palette,
   Target,
   TriangleAlert,
+  Volume2,
 } from "lucide-react";
+
+const HeadlightIcon = ({ size = 24, className = "" }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+  >
+    <path d="M14 17V7c2.8 0 5 2.2 5 5s-2.2 5-5 5Z" />
+    <line x1="9" y1="9" x2="3" y2="9" />
+    <line x1="9" y1="12" x2="3" y2="12" />
+    <line x1="9" y1="15" x2="3" y2="15" />
+  </svg>
+);
 
 import JoystickController, {
   type JoystickDirection,
@@ -35,6 +56,7 @@ type ControlPanelProps = {
   onInputDirection?: (dir: "up" | "right" | "down" | "left") => void;
   onDrive?: (dir: MovementDirection | null) => void;
   customTelemetry?: React.ReactNode;
+  customControls?: React.ReactNode;
 };
 
 type ObstaclePosition =
@@ -67,10 +89,10 @@ const modeLabel: Record<ControlPanelMode, string> = {
 };
 
 const obstaclePositionClass: Record<ObstaclePosition, string> = {
-  "front-left": "left-0 top-3",
-  "front-right": "right-0 top-3",
-  "rear-left": "bottom-3 left-0",
-  "rear-right": "bottom-3 right-0",
+  "front-left": "left-0 top-1 sm:top-3",
+  "front-right": "right-0 top-1 sm:top-3",
+  "rear-left": "bottom-1 sm:bottom-3 left-0",
+  "rear-right": "bottom-1 sm:bottom-3 right-0",
 };
 
 function ObstacleIndicator({
@@ -133,6 +155,7 @@ export default function ControlPanel({
   onInputDirection,
   onDrive,
   customTelemetry,
+  customControls,
 }: ControlPanelProps) {
   const { status, telemetry, move, stop, send } =
     useBleContext();
@@ -147,6 +170,11 @@ export default function ControlPanel({
     sudden: false,
     pit: false,
   });
+
+  const gameStartRef = useRef<number>(Date.now());
+  useEffect(() => {
+    gameStartRef.current = Date.now();
+  }, [game]);
 
   const activeMovementDirection =
     useRef<MovementDirection | null>(null);
@@ -171,11 +199,14 @@ export default function ControlPanel({
     const pit = telemetry?.pit.detected ?? false;
 
     if (sudden && !previousAlerts.current.sudden) {
-      setAlertToast({
-        id: Date.now(),
-        message: "Sudden motion detected",
-        tone: "warning",
-      });
+      const isGameJustStarted = Date.now() - gameStartRef.current < 2500;
+      if (!isGameJustStarted) {
+        setAlertToast({
+          id: Date.now(),
+          message: "Sudden motion detected",
+          tone: "warning",
+        });
+      }
     } else if (pit && !previousAlerts.current.pit) {
       setAlertToast({
         id: Date.now(),
@@ -317,6 +348,15 @@ export default function ControlPanel({
     });
   };
 
+  const toggleHeadlight = () => {
+    const isWhite = ledColor?.r === 255 && ledColor?.g === 255 && ledColor?.b === 255;
+    if (isWhite) {
+      sendRgb(0, 0, 0);
+    } else {
+      sendRgb(255, 255, 255);
+    }
+  };
+
   const ledHex = ledColor
     ? `#${[ledColor.r, ledColor.g, ledColor.b].map((v) => v.toString(16).padStart(2, "0")).join("")}`
     : null;
@@ -325,7 +365,7 @@ export default function ControlPanel({
   return (
     <section
       aria-label={`${modeLabel[mode]} robot controls`}
-      className="overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
+      className="flex h-full flex-col overflow-hidden rounded-3xl border border-border bg-surface p-4 shadow-[0_24px_80px_rgba(0,0,0,0.22)] sm:p-5"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
@@ -348,66 +388,14 @@ export default function ControlPanel({
               : "Offline"}
         </div>
       </div>
-{/* LED Color section */}
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-            LED Color
-          </p>
-
-          <button
-            type="button"
-            id="control-panel-color-wheel-btn"
-            disabled={!isConnected}
-            aria-label="Open robot LED color picker"
-            onClick={() => setColorWheelOpen(true)}
-            className={`mt-3 flex w-full items-center gap-3 rounded-2xl border px-4 py-3 transition ${
-              isConnected
-                ? "border-border bg-black/20 hover:border-primary/40 hover:bg-primary/10"
-                : "cursor-not-allowed border-border bg-black/10 opacity-40"
-            }`}
-          >
-            {/* Mini color wheel SVG icon */}
-            <svg width="22" height="22" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" className="shrink-0">
-              <defs>
-                <radialGradient id="cp-rg" cx="50%" cy="50%" r="50%">
-                  <stop offset="0%" stopColor="white" stopOpacity="0.9" />
-                  <stop offset="100%" stopColor="white" stopOpacity="0" />
-                </radialGradient>
-                <linearGradient id="cp-hg" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%"   stopColor="#ff0000" />
-                  <stop offset="16%"  stopColor="#ffff00" />
-                  <stop offset="33%"  stopColor="#00ff00" />
-                  <stop offset="50%"  stopColor="#00ffff" />
-                  <stop offset="66%"  stopColor="#0000ff" />
-                  <stop offset="83%"  stopColor="#ff00ff" />
-                  <stop offset="100%" stopColor="#ff0000" />
-                </linearGradient>
-              </defs>
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-hg)" />
-              <circle cx="8" cy="8" r="7.5" fill="url(#cp-rg)" />
-              <circle cx="8" cy="8" r="3" fill="#080b14" />
-            </svg>
-
-            <div className="flex flex-1 items-center justify-between">
-              <span className="text-sm font-semibold text-white/70">
-                {ledHex ? ledHex.toUpperCase() : "Not set"}
-              </span>
-              <div
-                className="h-5 w-5 rounded-full border border-white/15"
-                style={{
-                  background: ledHex ?? "rgba(255,255,255,0.08)",
-                  boxShadow: ledHex ? `0 0 10px ${ledHex}99` : "none",
-                }}
-              />
-            </div>
-
-            <Lightbulb size={15} className="shrink-0 text-white/30" aria-hidden="true" />
-          </button>
+      <div className={`mt-3 flex min-h-0 flex-col gap-2 ${game === "reflex-dash" ? "flex-[3]" : "flex-1"}`}>
+      {customTelemetry ? (
+        <div className="flex-1 overflow-hidden">
+          {customTelemetry}
         </div>
-
-      {customTelemetry ? customTelemetry : (
-        <div className="mt-5 rounded-3xl border border-border bg-black/20 px-4 py-5">
-        <div className="flex items-center justify-between text-xs text-white/45">
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col justify-between rounded-3xl border border-border bg-black/20 px-4 py-4">
+        <div className="flex items-center justify-between text-xs text-white/45 shrink-0">
           <span className="flex items-center gap-1.5">
             <Compass
               size={14}
@@ -423,7 +411,7 @@ export default function ControlPanel({
           </strong>
         </div>
 
-        <div className="relative mx-auto mt-4 h-64 max-w-72">
+        <div className="relative mx-auto flex min-h-0 flex-1 w-full max-w-56 flex-col items-center justify-center">
           <p className="absolute left-1/2 top-0 -translate-x-1/2 text-[10px] font-bold uppercase tracking-[0.18em] text-white/40">
             Front
           </p>
@@ -461,15 +449,15 @@ export default function ControlPanel({
                       heading,
                     )} degrees`
               }
-              className="flex h-32 w-32 items-center justify-center rounded-[2.25rem] border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500"
+              className={`flex items-center justify-center rounded-2xl border border-primary/50 bg-primary/10 shadow-[0_0_45px_rgba(124,92,255,0.32)] transition-transform duration-500 ${game === "reflex-dash" ? "h-10 w-10" : "h-14 w-14"}`}
               style={{
                 transform: `rotate(${heading ?? 0}deg)`,
               }}
             >
-              <div className="absolute top-3 h-0 w-0 border-x-[10px] border-b-[16px] border-x-transparent border-b-accent" />
+              <div className={`absolute h-0 w-0 border-x-transparent border-b-accent ${game === "reflex-dash" ? "top-1 border-x-[4px] border-b-[6px]" : "top-1.5 border-x-[6px] border-b-[8px]"}`} />
 
               <Bot
-                size={64}
+                size={game === "reflex-dash" ? 20 : 28}
                 strokeWidth={1.65}
                 className="text-primary"
               />
@@ -481,7 +469,7 @@ export default function ControlPanel({
           </p>
         </div>
 
-        <div className="mt-2 flex items-center justify-center gap-2 text-center">
+        <div className="flex items-center justify-center gap-2 text-center shrink-0">
           <Gauge
             size={16}
             className="text-accent"
@@ -501,6 +489,47 @@ export default function ControlPanel({
         </div>
         </div>
       )}
+      
+        <div className="flex w-full shrink-0 justify-between gap-2">
+          <button
+            type="button"
+            onClick={() => setColorWheelOpen(true)}
+            aria-label="Set LED Color"
+            className="flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-black/20 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <div
+              className="flex h-5 w-5 items-center justify-center rounded-full border border-white/20 shadow-inner"
+              style={{
+                background: ledHex ?? "transparent",
+                boxShadow: ledHex ? `0 0 10px ${ledHex}88` : "none",
+              }}
+            >
+              <Palette size={12} className={ledHex ? "mix-blend-difference text-white/90" : ""} />
+            </div>
+            <span className="text-[9px] font-bold uppercase tracking-wider">LED</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={() => send({ command: "buzz", freq: 1000, duration: 1000 }).catch(console.error)}
+            aria-label="Honk"
+            className="flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-black/20 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <Volume2 size={16} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Honk</span>
+          </button>
+          
+          <button
+            type="button"
+            onClick={toggleHeadlight}
+            aria-label="Headlight"
+            className="flex h-14 flex-1 flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-black/20 text-white/50 transition hover:bg-white/10 hover:text-white"
+          >
+            <HeadlightIcon size={18} />
+            <span className="text-[9px] font-bold uppercase tracking-wider">Light</span>
+          </button>
+        </div>
+      </div>
 
       {alertToast && (
         <div
@@ -534,22 +563,24 @@ export default function ControlPanel({
         </div>
       )}
 
-      <div className="mt-5 space-y-5">
-        <div>
-          <div className="flex items-center justify-between">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/40">
-              Navigation
-            </p>
+      <div className={`mt-3 flex min-h-0 flex-col ${game === "reflex-dash" ? "flex-[7]" : "flex-1"}`}>
+        <div className="flex flex-col min-h-0 flex-1">
+          <div className="flex shrink-0 items-center justify-end">
             {isColorQuestActive && (
               <span className="text-[10px] font-bold uppercase text-accent">
                 Sending task input
               </span>
             )}
           </div>
+          {customControls && (
+            <div className="w-full shrink-0 my-2 z-10">
+              {customControls}
+            </div>
+          )}
 
-          <div className="mx-auto mt-3 max-w-72">
+          <div className="mx-auto mt-1 flex min-h-0 flex-1 w-full flex-col justify-center">
             <JoystickController
-              disabled={!isConnected}
+              disabled={false}
               onDirectionChange={
                 handleJoystickDirection
               }

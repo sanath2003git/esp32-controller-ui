@@ -11,21 +11,22 @@ import { ECHO_MEMORY_LEVELS, isEchoMemoryLevelUnlocked } from "./echoMemory";
 import { DIRECTION_INVERT_LEVELS, isDirectionInvertLevelUnlocked } from "./directionInvert";
 import { REFLEX_DASH_LEVELS } from "./reflexDash";
 import type { LevelProgress, UserGameProgressResponse } from "@/types/colourQuest";
+import { DRIVING_PRO_LEVELS } from "./drivingPro";
 
-const LOCAL_STORAGE_KEY = "robotoy_color_quest_progress_v1";
 const LOCAL_STORAGE_TRUST_KEY = "robotoy_trust_v1";
 
-function getLocalStorageKey(game?: string): string {
-  const norm = game ? normalizeGameSlug(game) : "color-quest";
-  if (norm === "color-quest") return LOCAL_STORAGE_KEY;
-  return `robotoy_${norm.replace(/-/g, "_")}_progress_v1`;
+function getLocalStorageKey(game: string) {
+  return `robotoy_${normalizeGameSlug(game)}_progress_v1`;
 }
+
 
 function getGameLevels(game?: string) {
   const norm = game ? normalizeGameSlug(game) : "color-quest";
+  if (norm === "color-quest") return COLOUR_QUEST_LEVELS;
   if (norm === "echo-memory") return ECHO_MEMORY_LEVELS;
   if (norm === "direction-invert") return DIRECTION_INVERT_LEVELS;
   if (norm === "reflex-dash") return REFLEX_DASH_LEVELS;
+  if (norm === "driving-pro") return DRIVING_PRO_LEVELS;
   return COLOUR_QUEST_LEVELS;
 }
 
@@ -58,7 +59,7 @@ export function incrementTrustLevel(amount: number): void {
     const current = getTrustLevel();
     const newLevel = Math.min(100, Math.max(0, current + amount));
     localStorage.setItem(LOCAL_STORAGE_TRUST_KEY, newLevel.toString());
-    
+
     // Dispatch custom event to notify UI components
     window.dispatchEvent(new CustomEvent("trustLevelChanged", { detail: newLevel }));
   } catch (err) {
@@ -82,14 +83,14 @@ export function getInitialProgressMap(game?: string): Record<number, LevelProgre
   return map;
 }
 
-export function readLocalProgress(game?: string): Record<number, LevelProgress> {
+export function readLocalProgress(game: string): Record<number, LevelProgress> {
   if (typeof window === "undefined") {
+    return getInitialProgressMap(game);
     return getInitialProgressMap(game);
   }
 
   try {
-    const storageKey = getLocalStorageKey(game);
-    const raw = localStorage.getItem(storageKey);
+    const raw = localStorage.getItem(getLocalStorageKey(game));
     if (!raw) return getInitialProgressMap(game);
 
     const parsed: Record<number, LevelProgress> = JSON.parse(raw);
@@ -115,7 +116,7 @@ export function readLocalProgress(game?: string): Record<number, LevelProgress> 
   }
 }
 
-export function writeLocalProgress(map: Record<number, LevelProgress>, game?: string): void {
+export function writeLocalProgress(map: Record<number, LevelProgress>, game: string): void {
   if (typeof window === "undefined") return;
 
   try {
@@ -140,6 +141,7 @@ export async function fetchAndSyncProgress(
       if (data.success && data.levels) {
         // Merge DB levels with local progress (take maximum stars/scores)
         const mergedMap: Record<number, LevelProgress> = {};
+        const gameLevels = getGameLevels(normGame);
 
         for (const lvlMeta of levels) {
           const lvl = lvlMeta.id;
@@ -248,9 +250,9 @@ export async function submitAndPersistLevelResult(
   }
 
   writeLocalProgress(localMap, normGame);
-  const isNextUnlocked = isGameLevelUnlocked(normGame, level + 1, localMap);
+  const isNextUnlocked = isLevelUnlocked(level + 1, localMap);
   const progressInfo = calculateGameProgress(localMap);
-  
+
   if (awardedStars >= 2) {
     incrementTrustLevel(5);
   }

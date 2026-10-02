@@ -1,6 +1,8 @@
+/* eslint-disable */
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -115,14 +117,12 @@ const EXPRESSIONS = [
   { id: 0, label: "Happy", image: "/happy.png" },
   { id: 1, label: "Sad", image: "/sad.png" },
   { id: 2, label: "Heart", image: "/heart.png" },
-  { id: 3, label: "Star", image: "/star.png" },
-  { id: 4, label: "Check", image: "/check.png" },
-  { id: 5, label: "Cross", image: "/cross.png" },
+  { id: 3, label: "Bluetooth", image: "/bluetooth.png" },
+  { id: 4, label: "Dizzy", image: "/dizzy.png" },
+  { id: 5, label: "Hurt", image: "/hurt.png" },
   { id: 6, label: "Warning", image: "/warning.png" },
-  { id: 7, label: "Robot", image: "/happy.png" },
   { id: 8, label: "Battery", image: "/battery.png" },
   { id: 9, label: "Sleep", image: "/sleep.png" },
-  { id: 10, label: "WiFi", image: "/wifi.png" },
 ] as const;
 
 type ExpressionId = (typeof EXPRESSIONS)[number]["id"];
@@ -152,32 +152,12 @@ const INITIAL_CHALLENGES: ChallengeData[] = [
     playTime: null,
   },
   {
-    id: "echo-memory",
-    name: "Echo Memory",
-    icon: BrainCircuit,
-    accent: "#00e5ff",
-    done: 0,
-    total: 10,
-    score: 0,
-    playTime: null,
-  },
-  {
-    id: "driving-pro",
-    name: "Driving Pro",
-    icon: Gamepad2,
-    accent: "#ffc857",
-    done: 0,
-    total: 10,
-    score: 0,
-    playTime: null,
-  },
-  {
     id: "reflex-dash",
     name: "Reflex Dash",
     icon: TrafficCone,
     accent: "#ffc857",
     done: 0,
-    total: 10,
+    total: 3,
     score: 0,
     playTime: null,
   },
@@ -188,14 +168,12 @@ const MOOD_LABELS: Record<ExpressionId, string> = {
   0: "Happy",
   1: "Sad",
   2: "Loving",
-  3: "Starry",
-  4: "Accomplished",
-  5: "Frustrated",
+  3: "Bluetooth",
+  4: "Dizzy",
+  5: "Hurt",
   6: "Alert",
-  7: "Robot Mode",
   8: "Low Power",
   9: "Sleepy",
-  10: "Searching…",
 };
 
 /* ─── Today's Progress & Carousel ──────────────────────────── */
@@ -206,23 +184,31 @@ function ChallengeCarousel() {
 
   useEffect(() => {
     let isMounted = true;
-    fetchAndSyncProgress("color-quest").then((data) => {
-      if (isMounted && data.success) {
-        let totalScore = 0;
-        let totalStars = 0;
-        if (data.levels) {
-          for (const lvl of Object.values(data.levels)) {
-            totalScore += lvl.bestScore;
-            totalStars += lvl.stars;
+    Promise.all([
+      fetchAndSyncProgress("color-quest"),
+      fetchAndSyncProgress("reflex-dash")
+    ]).then(([cqData, rdData]) => {
+      if (isMounted) {
+        setChallenges(prev => prev.map(c => {
+          const data = c.id === "colour-quest" ? cqData : rdData;
+          if (data && data.success) {
+            let maxScore = 0;
+            let totalStars = 0;
+            if (data.levels) {
+              for (const lvl of Object.values(data.levels)) {
+                if (lvl.bestScore > maxScore) {
+                  maxScore = lvl.bestScore;
+                }
+                totalStars += lvl.stars;
+              }
+            }
+            const scorePct = Math.round(maxScore * 100);
+            return { ...c, done: data.completedLevels, total: data.totalLevels, score: scorePct, stars: totalStars };
           }
-        }
-        setChallenges(prev => prev.map(c =>
-          c.id === "colour-quest"
-            ? { ...c, done: data.completedLevels, total: data.totalLevels, score: totalScore, stars: totalStars }
-            : c
-        ));
+          return c;
+        }));
       }
-    }).catch(err => console.warn("[HOME] Failed to fetch colour quest progress", err));
+    }).catch(err => console.warn("[HOME] Failed to fetch progress", err));
     return () => { isMounted = false; };
   }, []);
 
@@ -311,7 +297,7 @@ function ChallengeCarousel() {
         <div className="flex flex-col items-center gap-0.5">
           <div className="flex items-center gap-1">
             <Star size={10} className="text-warning" />
-            <span className="text-sm font-bold text-white">{ch.score}</span>
+            <span className="text-sm font-bold text-white">{ch.score}%</span>
           </div>
           <p className="text-[8px] uppercase tracking-[0.05em] text-white/40">best score</p>
         </div>
@@ -444,11 +430,7 @@ export default function HomeDashboard() {
   };
 
   const handleControllerButton = () => {
-    if (!isConnected) {
-      openModal();
-    } else {
-      router.push("/rc-mode");
-    }
+    router.push("/rc-mode");
   };
 
   const currentMood = MOOD_LABELS[selectedExpression];
@@ -500,11 +482,10 @@ export default function HomeDashboard() {
             </button>
 
             {/* Controller button — dark circle, gamepad icon, connection dot */}
-            <button
-              type="button"
+            <Link
+              href="/rc-mode"
               id="pet-status-controller-btn"
-              onClick={handleControllerButton}
-              aria-label={isConnected ? "Open controller" : "Connect to robot"}
+              aria-label="Open controller"
               className="relative flex h-11 w-11 items-center justify-center rounded-full bg-white/8 border border-white/10 transition hover:bg-white/12 active:scale-95"
             >
               <Gamepad2 size={22} className="text-white/70" />
@@ -518,7 +499,7 @@ export default function HomeDashboard() {
                     : "bg-danger shadow-[0_0_6px_rgba(255,77,103,0.9)]"
                   }`}
               />
-            </button>
+            </Link>
           </div>
         </div>
 
