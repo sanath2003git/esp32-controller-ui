@@ -10,6 +10,7 @@ import { getModeMeta } from "@/data/modes";
 import { levels as defaultLevels } from "@/data/levels";
 import { COLOUR_QUEST_LEVELS } from "@/lib/colourQuest";
 import { REFLEX_DASH_LEVELS } from "@/lib/reflexDash";
+import { DRIVING_PRO_LEVELS } from "@/lib/drivingPro";
 import { fetchAndSyncProgress } from "@/lib/progressStore";
 import type { LevelProgress } from "@/types/colourQuest";
 
@@ -20,7 +21,15 @@ export default function ChallengesPage() {
 
   const isColourQuest = params.mode === "colour-quest" || params.mode === "color-quest";
   const isReflexDash = params.mode === "reflex-dash";
-  const displayLevels = isColourQuest ? COLOUR_QUEST_LEVELS : isReflexDash ? REFLEX_DASH_LEVELS : defaultLevels;
+  const isDrivingPro = params.mode === "driving-pro";
+  
+  const displayLevels = isColourQuest 
+    ? COLOUR_QUEST_LEVELS 
+    : isReflexDash 
+      ? REFLEX_DASH_LEVELS 
+      : isDrivingPro
+        ? DRIVING_PRO_LEVELS
+        : defaultLevels;
 
   const [userProgress, setUserProgress] = useState<Record<number, LevelProgress>>({});
 
@@ -44,7 +53,7 @@ export default function ChallengesPage() {
     };
   }, [isColourQuest, isReflexDash]);
 
-  if (!isColourQuest && !isReflexDash) {
+  if (!isColourQuest && !isReflexDash && !isDrivingPro) {
     return (
       <main className="min-h-screen">
         <SubPageHeader
@@ -105,14 +114,22 @@ export default function ChallengesPage() {
         </section>
 
         <section className="mt-8 grid grid-cols-2 gap-3">
-          {displayLevels.map((level) => (
-            <LevelCard
-              key={level.id}
-              level={level}
-              mode={params.mode as string}
-              progress={userProgress[level.id]}
-            />
-          ))}
+          {displayLevels.map((level) => {
+            // For testing purposes, mock progress to unlock all levels
+            const mockedProgress = userProgress[level.id] ?? {
+              unlocked: true,
+              stars: 0,
+              bestScore: 0
+            };
+            return (
+              <LevelCard
+                key={level.id}
+                level={level}
+                mode={params.mode as string}
+                progress={mockedProgress as any}
+              />
+            );
+          })}
         </section>
       </div>
     </main>

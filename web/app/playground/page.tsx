@@ -85,7 +85,6 @@ export default function Playground() {
             icon="drive"
             accent="warning"
             href="/playground/driving-pro"
-            isComingSoon={true}
           />
 
           <ModeCard
