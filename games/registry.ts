@@ -17,6 +17,9 @@ const challengeStrategies: Partial<Record<CanonicalGameId, GameChallengeStrategy
   echo_memory: {
     Component: dynamic(() => import("@/components/games/EchoMemoryChallengePage")),
   },
+  driving_pro: {
+    Component: dynamic(() => import("@/components/games/DrivingProChallengePage")),
+  },
 };
 
 export function getChallengeRuntime(slug: string | undefined): GameChallengeStrategy | undefined {

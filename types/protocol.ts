@@ -366,12 +366,63 @@ export type LevelDefinitionAckMessage = ProtocolEnvelope<
 export type PongPayload = Record<string, never>;
 export type PongMessage = ProtocolEnvelope<"pong", PongPayload>;
 
+export type TaskStartPayload = {
+  gameId: CanonicalGameId;
+  level: number;
+  taskId: number;
+};
+export type TaskStartMessage = CommandEnvelope<"task_start", TaskStartPayload>;
+
+export type TaskStartedPayload = {
+  gameId: CanonicalGameId;
+  level: number;
+  taskId: number;
+  durationMs: number;
+};
+export type TaskStartedMessage = ResponseEnvelope<"task_started", TaskStartedPayload>;
+
+export type TaskResultPayload = {
+  status: "passed" | "failed" | string;
+  score: number;
+  stars: number;
+};
+export type TaskResultMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "response";
+  response: "task_result";
+  id?: string;
+  gameId: CanonicalGameId;
+  level: number;
+  taskId: number;
+  payload: TaskResultPayload;
+};
+
+export type GameOverPayload = {
+  tasksCompleted: number;
+  tasksTotal: number;
+  score: number;
+  stars: number;
+};
+export type GameOverMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "response";
+  response: "game_over";
+  id?: string;
+  gameId: CanonicalGameId;
+  level: number;
+  reason: "collision" | "task_failed" | string;
+  payload: GameOverPayload;
+};
+
 export type InboundProtocolMessage =
   | HelloAckMessage
   | DeviceInfoMessage
   | AckMessage
   | ErrorMessage
   | GameStartedMessage
+  | TaskStartedMessage
+  | TaskResultMessage
+  | GameOverMessage
   | GameStateMessage
   | GameResultMessage
   | GameFeedbackMessage

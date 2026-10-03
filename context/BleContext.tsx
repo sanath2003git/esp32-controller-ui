@@ -23,6 +23,7 @@ import type {
   JoyStickDir,
   ProtocolErrorPayload,
   SignalChangeEventPayload,
+  TaskStartedPayload,
   TelemetryPayload,
 } from "@/types/protocol";
 
@@ -68,6 +69,11 @@ export type BleContextValue = {
     game: CanonicalGameId,
     level?: number,
   ) => Promise<GameStartedPayload | null>;
+  startTask: (
+    game: CanonicalGameId,
+    level: number,
+    taskId: number,
+  ) => Promise<TaskStartedPayload | null>;
   runSeq: (game: CanonicalGameId, level: number) => Promise<void>;
   abortGame: () => Promise<void>;
   acknowledgeResultsSync: (accepted: boolean) => Promise<void>;
@@ -314,6 +320,18 @@ export function BleProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const startTask = useCallback(
+    async (
+      game: CanonicalGameId,
+      level: number,
+      taskId: number,
+    ): Promise<TaskStartedPayload | null> => {
+      if (!clientRef.current || !clientRef.current.isConnected()) return null;
+      return clientRef.current.startTask(game, level, taskId);
+    },
+    [],
+  );
+
   const runSeq = useCallback(
     async (game: CanonicalGameId, level: number): Promise<void> => {
       if (!clientRef.current || !clientRef.current.isConnected()) return;
@@ -365,6 +383,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
         setLedColor,
         honk,
         startGame,
+        startTask,
         runSeq,
         abortGame,
         acknowledgeResultsSync,

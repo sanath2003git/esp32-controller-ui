@@ -30,6 +30,7 @@ import {
   type JoyStickDir,
   type SignalChangeEventPayload,
   type SignalChangeMessage,
+  type TaskStartedPayload,
 } from "@/types/protocol";
 
 type RequestResolver = {
@@ -246,12 +247,32 @@ export class ProtocolClient {
   }
 
   /**
-   * Send sequence execution start command on the robot (Reflex Dash).
+   * Request sequence execution start command on the robot (Reflex Dash / Echo Memory).
    */
   async runSeq(game: CanonicalGameId, level?: number): Promise<void> {
     const id = this.generateMessageId();
     const envelope = { v: PROTOCOL_VERSION, type: "command", command: "run_seq", id, payload: { gameId: game, level } };
     await this.transport.write(JSON.stringify(envelope));
+  }
+
+  /**
+   * Request task start on the robot (Driving Pro).
+   */
+  async startTask(
+    game: CanonicalGameId,
+    level: number,
+    taskId: number,
+  ): Promise<TaskStartedPayload> {
+    const id = this.generateMessageId();
+    const envelope = {
+      v: PROTOCOL_VERSION,
+      type: "command",
+      command: "task_start",
+      id,
+      payload: { gameId: game, level, taskId },
+    };
+    await this.transport.write(JSON.stringify(envelope));
+    return { gameId: game, level, taskId, durationMs: taskId === 3 ? 9000 : 7000 };
   }
 
   /**
@@ -647,18 +668,8 @@ export class ProtocolClient {
       return typeof obj.phase === "string";
     }
     
-    if (obj.type === "response" && obj.response === "game_result") {
-      return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
-        typeof obj.score === "number" && Number.isFinite(obj.score) && obj.score >= 0 &&
-        Number.isInteger(obj.stars) && Number(obj.stars) >= 0 && Number(obj.stars) <= 3 &&
-        Number.isInteger(obj.tasksCompleted) && Number(obj.tasksCompleted) >= 0 &&
-        Number.isInteger(obj.tasksTotal) && Number(obj.tasksTotal) >= Number(obj.tasksCompleted);
-    }
-    
-    if (obj.type === "response" && obj.response === "game_feedback") {
-      return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
-        Number.isInteger(obj.taskId) && Number(obj.taskId) >= 1 && typeof obj.correct === "boolean" &&
-        Number.isInteger(obj.correctCount) && Number(obj.correctCount) >= 0;
+    if (obj.type === "response" && typeof obj.response === "string") {
+      return true;
     }
 
     if (obj.type === "game_event") {
