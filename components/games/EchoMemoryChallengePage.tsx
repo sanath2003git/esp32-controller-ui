@@ -97,6 +97,7 @@ export default function EchoMemoryChallengePage() {
   const clearTimers = useCallback(() => {
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current);
+      clearTimeout(countdownIntervalRef.current as unknown as NodeJS.Timeout);
       countdownIntervalRef.current = null;
     }
     if (inputWatchdogRef.current) {
@@ -133,10 +134,30 @@ export default function EchoMemoryChallengePage() {
 
   const isUnlocked = isLevelUnlocked(levelId, userProgressMap);
 
+  const startWaitCountdown = useCallback(
+    (initialSec?: number) => {
+      clearTimers();
+      setGameState("WAIT");
+      const sec = typeof initialSec === "number" && initialSec > 0 ? initialSec : 3;
+      setWaitTimer(sec);
+      const startTime = Date.now();
+      countdownIntervalRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - startTime) / 1000);
+        const remaining = Math.max(0, sec - elapsed);
+        setWaitTimer(remaining);
+        if (remaining <= 0 && countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+      }, 200);
+    },
+    [clearTimers]
+  );
+
   const handleGameResult = useCallback(
     async (resultPayload: GameResultPayload) => {
       clearTimers();
-      setGameState("completed");
+      setGameState("RESULT");
       const score = resultPayload.tasksTotal > 0
         ? resultPayload.tasksCompleted / resultPayload.tasksTotal
         : resultPayload.score > 1 ? resultPayload.score / 100 : resultPayload.score;
@@ -172,6 +193,11 @@ export default function EchoMemoryChallengePage() {
   );
 
   const handleGameFeedback = useCallback((feedback: GameFeedbackPayload) => {
+    if (inputWatchdogRef.current) {
+      clearTimeout(inputWatchdogRef.current);
+      inputWatchdogRef.current = null;
+    }
+
     const idx = feedback.taskId - 1;
     const isCorrect = feedback.correct;
 
@@ -186,6 +212,7 @@ export default function EchoMemoryChallengePage() {
     setStepFeedback({ correct: isCorrect, stepIndex: idx });
     setInputStep(idx + 1);
     setIsSubmittingInput(false);
+    setGameState("INPUT");
   }, []);
 
   const session = useGameSession({
@@ -195,13 +222,13 @@ export default function EchoMemoryChallengePage() {
     onFeedback: handleGameFeedback,
   });
 
-  // Handle incoming protocol messages for phase transitions (mapping, flash, wait, input)
+  // Handle incoming protocol messages as authoritative state transitions
   useEffect(() => {
     if (!lastMessage || session.status === "idle") return;
 
     const msg = lastMessage as Record<string, unknown>;
 
-    // Handle game_started mapping payload
+    // Handle game_started mapping payload -> MAPPING
     if (
       msg.type === "response" &&
       msg.response === "game_started" &&
@@ -213,53 +240,54 @@ export default function EchoMemoryChallengePage() {
         if (payload.mapping && typeof payload.mapping === "object") {
           setDynamicMapping(payload.mapping as Record<string, string>);
         }
-        if (levelId === 6 || payload.mapping) {
-          setGameState("mapping");
-        } else {
-          setGameState("flashing");
-        }
+        setGameState("MAPPING");
       }, 0);
     }
 
-    // Handle custom phase messages
+    // Handle authoritative firmware phase messages
     if (msg.type === "phase" && (msg.game === "echo-memory" || msg.game === "echo_memory")) {
-      const phase = msg.phase as string;
+      console.log("[EchoMemory PHASE]", msg);
+      const rawPhase = String(msg.phase).trim();
+      const phaseLower = rawPhase.toLowerCase();
       setTimeout(() => {
-        if (phase === "mapping") {
+        if (phaseLower === "mapping") {
           clearTimers();
           if (msg.mapping && typeof msg.mapping === "object") {
             setDynamicMapping(msg.mapping as Record<string, string>);
           }
-          setGameState("mapping");
-        } else if (phase === "flash") {
+          setGameState("MAPPING");
+        } else if (phaseLower === "generate") {
           clearTimers();
-          setGameState("flashing");
+          setGameState("GENERATE");
+        } else if (phaseLower === "flash") {
+          clearTimers();
+          setGameState("FLASH");
           setFlashIndex(typeof msg.index === "number" ? msg.index : 0);
-        } else if (phase === "wait") {
+        } else if (phaseLower === "wait") {
+          console.log("[EchoMemory WAIT]", msg);
+          const sec = typeof msg.remainingSec === "number"
+            ? msg.remainingSec
+            : typeof msg.durationMs === "number"
+              ? Math.ceil(msg.durationMs / 1000)
+              : 3;
+          startWaitCountdown(sec);
+        } else if (phaseLower === "input") {
+          console.log("[EchoMemory INPUT]", msg);
           clearTimers();
-          setGameState("waiting");
-          setWaitTimer(3);
-          const startTime = Date.now();
-          countdownIntervalRef.current = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            const remaining = Math.max(0, 3 - elapsed);
-            setWaitTimer(remaining);
-            if (remaining <= 0 && countdownIntervalRef.current) {
-              clearInterval(countdownIntervalRef.current);
-              countdownIntervalRef.current = null;
-            }
-          }, 200);
-        } else if (phase === "input") {
-          clearTimers();
-          setGameState("input");
+          setGameState("INPUT");
           setInputStep(0);
           setIsSubmittingInput(false);
+        } else if (phaseLower === "check") {
+          setGameState("CHECK");
+        } else if (phaseLower === "result") {
+          clearTimers();
+          setGameState("RESULT");
         }
       }, 0);
     }
-  }, [lastMessage, session.status, clearTimers, levelId]);
+  }, [lastMessage, session.status, clearTimers, levelId, startWaitCountdown]);
 
-  // Handle start level
+  // Handle start level -> triggers game_start on robot
   const handleStartLevel = async () => {
     if (session.status === "starting" || session.status === "playing") return;
     if (status !== "connected") {
@@ -285,32 +313,35 @@ export default function EchoMemoryChallengePage() {
 
     await session.start();
 
-    // If level 1-5, transition automatically to mapping/flashing if firmware fast-tracks
-    if (levelId < 6) {
-      setTimeout(() => {
-        setGameState((current) => (current === "starting" ? "mapping" : current));
-      }, 500);
-    }
+    setTimeout(() => {
+      setGameState((current) => (current === "starting" ? "MAPPING" : current));
+    }, 500);
   };
 
-  // Handle GO button on mapping phase -> triggers run_seq and immediately transitions to input phase
+  // Handle GO button on MAPPING phase -> sends run_seq and moves to GENERATE while awaiting firmware phase messages
   const handleRunSeq = async () => {
     try {
-      setGameState("input");
-      setInputStep(0);
-      setIsSubmittingInput(false);
-      setStepFeedback(null);
+      clearTimers();
+      setGameState("GENERATE");
       await runSeq("echo_memory", levelId);
     } catch (err) {
       console.warn("[ECHO MEMORY] runSeq error:", err);
       setErrorMessage("Failed to send run_seq command to robot.");
+      setGameState("error");
     }
   };
 
+  // D-pad is enabled ONLY during INPUT
+  const isDpadEnabled = gameState === "INPUT";
+
   // Handle direction or action input
   const handleActionInput = async (action: EchoMemoryAction) => {
-    if (gameState !== "input" && session.status !== "playing") return;
-    if (isSubmittingInput || inputStep >= levelMeta.sequenceLength) return;
+    if (!isDpadEnabled || isSubmittingInput || inputStep >= levelMeta.sequenceLength) return;
+
+    if (action === "pet") {
+      // Pet action is performed physically on robotoy (touch sensor), no BLE command sent from mobile
+      return;
+    }
 
     if (status !== "connected") {
       setErrorMessage("Robot disconnected. Please reconnect.");
@@ -319,13 +350,12 @@ export default function EchoMemoryChallengePage() {
     }
 
     try {
+      setGameState("CHECK");
       setIsSubmittingInput(true);
       setStepFeedback(null);
 
       if (action === "honk") {
         await honk();
-      } else if (action === "pet") {
-        // Pet action is performed physically on robotoy (touch sensor), no BLE command sent from mobile
       } else {
         await sendJoystickInput(action as JoyStickDir, 1.0);
       }
@@ -342,10 +372,12 @@ export default function EchoMemoryChallengePage() {
       if (inputWatchdogRef.current) clearTimeout(inputWatchdogRef.current);
       inputWatchdogRef.current = setTimeout(() => {
         setIsSubmittingInput(false);
+        setGameState((curr) => (curr === "CHECK" ? "INPUT" : curr));
       }, 1500);
     } catch (err) {
       console.warn("[ECHO MEMORY] Input send failed:", err);
       setIsSubmittingInput(false);
+      setGameState("INPUT");
     }
   };
 
@@ -605,7 +637,7 @@ export default function EchoMemoryChallengePage() {
           </section>
         )}
 
-        {session.status === "starting" && gameState !== "mapping" && (
+        {session.status === "starting" && gameState !== "MAPPING" && (
           <section className="rounded-3xl border border-accent/30 bg-accent/10 p-6 text-center shadow-xl animate-pulse">
             <div className="flex items-center justify-center gap-3 text-accent font-bold text-sm">
               <RotateCcw size={18} className="animate-spin" />
@@ -614,12 +646,12 @@ export default function EchoMemoryChallengePage() {
           </section>
         )}
 
-        {/* Phase 0: Mapping Phase & GO Button */}
-        {gameState === "mapping" && (
+        {/* MAPPING Phase & GO Button */}
+        {gameState === "MAPPING" && (
           <section className="rounded-3xl border border-accent/40 bg-surface-light p-6 text-center shadow-2xl space-y-4">
             <div className="flex items-center justify-center gap-2 text-xs font-bold text-accent uppercase tracking-widest">
               <BookOpen size={18} className="animate-pulse" />
-              Phase 0: Study Color-Action Mapping
+              Phase MAPPING: Study Color-Action Mapping
             </div>
 
             <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
@@ -638,21 +670,26 @@ export default function EchoMemoryChallengePage() {
           </section>
         )}
 
-        {/* Phase 1: Flashing Phase */}
-        {gameState === "flashing" && (
+        {/* GENERATE Phase */}
+        {gameState === "GENERATE" && (
+          <section className="rounded-3xl border border-accent/40 bg-surface-light p-6 text-center shadow-2xl space-y-4">
+            <div className="flex items-center justify-center gap-2 text-xs font-bold text-accent uppercase tracking-widest">
+              <RotateCcw size={18} className="animate-spin" />
+              Phase GENERATE: Robot Building Sequence
+            </div>
+
+            <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
+              Generating light sequence pattern on robot...
+            </p>
+          </section>
+        )}
+
+        {/* FLASH Phase */}
+        {gameState === "FLASH" && (
           <section className="rounded-3xl border border-accent/40 bg-surface-light p-6 text-center shadow-2xl space-y-4">
             <div className="flex items-center justify-center gap-2 text-xs font-bold text-accent uppercase tracking-widest">
               <Eye size={18} className="animate-pulse" />
-              Phase 1: Watch Robot LEDs
-            </div>
-
-            <div className="my-3 flex flex-col items-center">
-              <div className="h-20 w-20 rounded-full border-2 border-accent bg-accent/10 flex items-center justify-center text-accent text-3xl font-black animate-pulse shadow-[0_0_30px_rgba(0,229,255,0.4)]">
-                {flashIndex + 1}
-              </div>
-              <span className="mt-3 text-xs text-white/50 font-semibold uppercase tracking-wider">
-                Flashing step {flashIndex + 1} of {levelMeta.sequenceLength}
-              </span>
+              Phase FLASH: Watch Robot LEDs
             </div>
 
             <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
@@ -663,12 +700,12 @@ export default function EchoMemoryChallengePage() {
           </section>
         )}
 
-        {/* Phase 2: Wait Phase (3 Seconds) */}
-        {gameState === "waiting" && (
+        {/* WAIT Phase (Countdown Timer) */}
+        {gameState === "WAIT" && (
           <section className="rounded-3xl border border-warning/40 bg-surface-light p-6 text-center shadow-2xl space-y-4">
             <div className="flex items-center justify-center gap-2 text-xs font-bold text-warning uppercase tracking-widest">
               <Clock size={18} className="animate-spin" />
-              Phase 2: Prepare Your Answer
+              Phase WAIT: Prepare Your Answer
             </div>
 
             <div className="my-3 flex flex-col items-center">
@@ -681,17 +718,17 @@ export default function EchoMemoryChallengePage() {
             </div>
 
             <p className="text-xs text-white/70 max-w-xs mx-auto leading-relaxed">
-              Input controls will open in {waitTimer} seconds. Recall the sequence!
+              Input controls will unlock when input phase begins. Recall the sequence!
             </p>
           </section>
         )}
 
-        {/* Phase 3: Input Phase */}
-        {(gameState === "input" || (session.status === "playing" && gameState !== "flashing" && gameState !== "waiting" && gameState !== "mapping")) && (
+        {/* INPUT & CHECK Phase (D-Pad UI Control) */}
+        {(gameState === "INPUT" || gameState === "CHECK") && (
           <section className="rounded-3xl border border-emerald-500/40 bg-surface-light p-5 text-center shadow-2xl space-y-4">
             <div className="flex items-center justify-between text-xs text-white/60">
               <span className="font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Sparkles size={16} /> Phase 3: Echo Sequence
+                <Sparkles size={16} /> Phase {gameState === "CHECK" ? "CHECK: Evaluating" : "INPUT: Echo Sequence"}
               </span>
               <span className="font-semibold text-white/80">
                 Step {Math.min(inputStep + 1, levelMeta.sequenceLength)} / {levelMeta.sequenceLength}
@@ -739,22 +776,7 @@ export default function EchoMemoryChallengePage() {
               })}
             </div>
 
-            {/* Step Feedback Banner */}
-            {stepFeedback && (
-              <div
-                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${
-                  stepFeedback.correct
-                    ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
-                    : "border-rose-500/40 bg-rose-500/10 text-rose-300"
-                }`}
-              >
-                {stepFeedback.correct
-                  ? `Step ${stepFeedback.stepIndex + 1}: Correct! ✨`
-                  : `Step ${stepFeedback.stepIndex + 1}: Incorrect 💡`}
-              </div>
-            )}
-
-            {/* Directional Input Grid & Action Buttons */}
+            {/* Directional Input Grid & Action Buttons (Strictly enabled ONLY during INPUT) */}
             {(() => {
               const isDynamic = levelId === 6 && Boolean(dynamicMapping);
               const upVisual = isDynamic
@@ -773,6 +795,8 @@ export default function EchoMemoryChallengePage() {
                 ? getEchoColorVisual(dynamicMapping?.honk)
                 : getEchoColorVisual("white");
 
+              const disableButtons = !isDpadEnabled || isSubmittingInput || inputStep >= levelMeta.sequenceLength;
+
               return (
                 <div className="flex flex-col items-center gap-3">
                   <div className="mx-auto mt-2 grid max-w-[220px] grid-cols-3 gap-2.5">
@@ -780,7 +804,7 @@ export default function EchoMemoryChallengePage() {
                     <button
                       type="button"
                       onClick={() => handleActionInput("up")}
-                      disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                      disabled={disableButtons}
                       className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-1 ${upVisual.borderClass} ${upVisual.bgClass} ${upVisual.textClass} hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                       aria-label={`UP (${upVisual.color})`}
                     >
@@ -792,7 +816,7 @@ export default function EchoMemoryChallengePage() {
                     <button
                       type="button"
                       onClick={() => handleActionInput("left")}
-                      disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                      disabled={disableButtons}
                       className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-1 ${leftVisual.borderClass} ${leftVisual.bgClass} ${leftVisual.textClass} hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                       aria-label={`LEFT (${leftVisual.color})`}
                     >
@@ -804,7 +828,7 @@ export default function EchoMemoryChallengePage() {
                       <button
                         type="button"
                         onClick={() => handleActionInput("honk")}
-                        disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                        disabled={disableButtons}
                         className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-1 ${honkVisual.borderClass} ${honkVisual.bgClass} ${honkVisual.textClass} hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                         aria-label={`HONK (${honkVisual.color})`}
                       >
@@ -820,7 +844,7 @@ export default function EchoMemoryChallengePage() {
                     <button
                       type="button"
                       onClick={() => handleActionInput("right")}
-                      disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                      disabled={disableButtons}
                       className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-1 ${rightVisual.borderClass} ${rightVisual.bgClass} ${rightVisual.textClass} hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                       aria-label={`RIGHT (${rightVisual.color})`}
                     >
@@ -832,7 +856,7 @@ export default function EchoMemoryChallengePage() {
                     <button
                       type="button"
                       onClick={() => handleActionInput("down")}
-                      disabled={isSubmittingInput || inputStep >= levelMeta.sequenceLength}
+                      disabled={disableButtons}
                       className={`flex aspect-square flex-col items-center justify-center rounded-2xl border p-1 ${downVisual.borderClass} ${downVisual.bgClass} ${downVisual.textClass} hover:opacity-90 active:scale-95 transition-all disabled:opacity-40 disabled:cursor-not-allowed`}
                       aria-label={`DOWN (${downVisual.color})`}
                     >

@@ -7,20 +7,37 @@ export type EchoMemoryMapping = Partial<Record<EchoMemoryAction, EchoMemoryColor
 export type EchoMemoryGameState =
   | "idle"
   | "starting"
-  | "mapping"
-  | "flashing"
-  | "waiting"
-  | "input"
-  | "completed"
+  | "MAPPING"
+  | "GENERATE"
+  | "FLASH"
+  | "WAIT"
+  | "INPUT"
+  | "CHECK"
+  | "RESULT"
   | "error";
 
 export type EchoMemoryPhaseMessage = {
   type: "phase";
   game: "echo-memory" | "echo_memory";
-  phase: "mapping" | "flash" | "wait" | "input";
+  phase:
+    | "mapping"
+    | "MAPPING"
+    | "generate"
+    | "GENERATE"
+    | "flash"
+    | "FLASH"
+    | "wait"
+    | "WAIT"
+    | "input"
+    | "INPUT"
+    | "check"
+    | "CHECK"
+    | "result"
+    | "RESULT";
   index?: number;
   length?: number;
   durationMs?: number;
+  remainingSec?: number;
   mapping?: Record<string, string>;
 };
 
