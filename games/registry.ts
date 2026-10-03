@@ -14,6 +14,9 @@ const challengeStrategies: Partial<Record<CanonicalGameId, GameChallengeStrategy
   reflex_dash: {
     Component: dynamic(() => import("@/components/games/ReflexDashChallengePage")),
   },
+  echo_memory: {
+    Component: dynamic(() => import("@/components/games/EchoMemoryChallengePage")),
+  },
 };
 
 export function getChallengeRuntime(slug: string | undefined): GameChallengeStrategy | undefined {

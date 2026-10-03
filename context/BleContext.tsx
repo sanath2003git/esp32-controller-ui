@@ -68,7 +68,7 @@ export type BleContextValue = {
     game: CanonicalGameId,
     level?: number,
   ) => Promise<GameStartedPayload | null>;
-  runSeq: (game: CanonicalGameId, level?: number) => Promise<void>;
+  runSeq: (game: CanonicalGameId, level: number) => Promise<void>;
   abortGame: () => Promise<void>;
   acknowledgeResultsSync: (accepted: boolean) => Promise<void>;
   stop: () => Promise<void>;
@@ -315,7 +315,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   );
 
   const runSeq = useCallback(
-    async (game: CanonicalGameId, level?: number): Promise<void> => {
+    async (game: CanonicalGameId, level: number): Promise<void> => {
       if (!clientRef.current || !clientRef.current.isConnected()) return;
       await clientRef.current.runSeq(game, level);
     },

@@ -29,7 +29,7 @@ export function incrementTrustLevel(amount: number): void {
     const current = getTrustLevel();
     const newLevel = Math.min(100, Math.max(0, current + amount));
     localStorage.setItem(LOCAL_STORAGE_TRUST_KEY, newLevel.toString());
-    
+
     // Dispatch custom event to notify UI components
     window.dispatchEvent(new CustomEvent("trustLevelChanged", { detail: newLevel }));
   } catch (err) {

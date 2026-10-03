@@ -235,6 +235,7 @@ export class ProtocolClient {
     return this.sendCommandRequest<GameStartedPayload>("game_start", { gameId: game, level });
   }
 
+
   /**
    * Request active game abort on the robot.
    */
@@ -454,6 +455,12 @@ export class ProtocolClient {
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
+      if (typeof parsed === "object" && parsed !== null) {
+        const obj = parsed as Record<string, unknown>;
+        if (obj.type === "phase" || obj.game === "echo_memory" || obj.game === "echo-memory") {
+          console.log("[EchoMemory BLE PARSED]", parsed);
+        }
+      }
     } catch (err) {
       console.warn("[ProtocolClient] Failed to parse JSON message:", raw, err);
       this.emitError("INVALID_JSON", "Failed to parse incoming JSON string.");
@@ -634,6 +641,10 @@ export class ProtocolClient {
       return typeof obj.timestamp === "number" && Number.isFinite(obj.timestamp) &&
         typeof obj.direction === "number" &&
         typeof obj.controller === "object" && obj.controller !== null;
+    }
+    
+    if (obj.type === "phase") {
+      return typeof obj.phase === "string";
     }
     
     if (obj.type === "response" && obj.response === "game_result") {
