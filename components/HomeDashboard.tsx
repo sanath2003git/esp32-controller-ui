@@ -173,8 +173,8 @@ const INITIAL_CHALLENGES: ChallengeData[] = [
     playTime: null,
   },
   {
-    id: "reflex-arc",
-    name: "Reflex Arc",
+    id: "reflex-dash",
+    name: "Reflex Dash",
     icon: TrafficCone,
     accent: "#ffc857",
     done: 0,

@@ -11,6 +11,9 @@ const challengeStrategies: Partial<Record<CanonicalGameId, GameChallengeStrategy
   color_quest: {
     Component: dynamic(() => import("@/components/games/ColorQuestChallengePage")),
   },
+  reflex_dash: {
+    Component: dynamic(() => import("@/components/games/ReflexDashChallengePage")),
+  },
 };
 
 export function getChallengeRuntime(slug: string | undefined): GameChallengeStrategy | undefined {

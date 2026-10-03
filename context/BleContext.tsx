@@ -22,6 +22,7 @@ import type {
   InputPayload,
   JoyStickDir,
   ProtocolErrorPayload,
+  SignalChangeEventPayload,
   TelemetryPayload,
 } from "@/types/protocol";
 
@@ -39,6 +40,7 @@ export type BleContextValue = {
   gameState: GameStatePayload | null;
   gameResult: GameResultPayload | null;
   gameFeedbackEvents: GameFeedbackEvent[];
+  signalChangeEvent: SignalChangeEventPayload | null;
   protocolError: ProtocolErrorPayload | null;
   lastMessage: AnyProtocolMessage | null;
   controlOwner: "mobile" | "remote" | "none";
@@ -66,6 +68,7 @@ export type BleContextValue = {
     game: CanonicalGameId,
     level?: number,
   ) => Promise<GameStartedPayload | null>;
+  runSeq: (game: CanonicalGameId, level?: number) => Promise<void>;
   abortGame: () => Promise<void>;
   acknowledgeResultsSync: (accepted: boolean) => Promise<void>;
   stop: () => Promise<void>;
@@ -91,6 +94,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
   const [gameState, setGameState] = useState<GameStatePayload | null>(null);
   const [gameResult, setGameResult] = useState<GameResultPayload | null>(null);
   const [gameFeedbackEvents, setGameFeedbackEvents] = useState<GameFeedbackEvent[]>([]);
+  const [signalChangeEvent, setSignalChangeEvent] = useState<SignalChangeEventPayload | null>(null);
   const [protocolError, setProtocolError] = useState<ProtocolErrorPayload | null>(null);
   const [lastMessage, setLastMessage] = useState<AnyProtocolMessage | null>(null);
   const [controlOwner, setControlOwner] = useState<"mobile" | "remote" | "none">("none");
@@ -150,6 +154,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
     setGameState(null);
     setGameResult(null);
     setGameFeedbackEvents([]);
+    setSignalChangeEvent(null);
     gameFeedbackSequenceRef.current = 0;
     setProtocolError(null);
     setLastMessage(null);
@@ -188,6 +193,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
       const sequence = ++gameFeedbackSequenceRef.current;
       setGameFeedbackEvents((current) => [...current, { sequence, payload: feedback }].slice(-64));
     });
+    client.onSignalChange((evt) => setSignalChangeEvent(evt));
     client.onConnectionChange((connected) => {
       if (connected || clientRef.current !== client) return;
       console.warn("[BleContext] Bluetooth connection lost");
@@ -308,6 +314,14 @@ export function BleProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  const runSeq = useCallback(
+    async (game: CanonicalGameId, level?: number): Promise<void> => {
+      if (!clientRef.current || !clientRef.current.isConnected()) return;
+      await clientRef.current.runSeq(game, level);
+    },
+    [],
+  );
+
   const abortGame = useCallback(async (): Promise<void> => {
     if (!clientRef.current || !clientRef.current.isConnected()) return;
     await clientRef.current.abortGame();
@@ -333,6 +347,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
         gameState,
         gameResult,
         gameFeedbackEvents,
+        signalChangeEvent,
         protocolError,
         lastMessage,
         controlOwner,
@@ -350,6 +365,7 @@ export function BleProvider({ children }: { children: ReactNode }) {
         setLedColor,
         honk,
         startGame,
+        runSeq,
         abortGame,
         acknowledgeResultsSync,
         stop,

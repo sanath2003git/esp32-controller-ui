@@ -8,7 +8,7 @@ export const PROTOCOL_VERSION = 1;
 export type CanonicalGameId =
   | "color_quest"
   | "echo_memory"
-  | "reflex_arc"
+  | "reflex_dash"
   | "driving_pro"
   | "inverted_drive";
 
@@ -90,6 +90,12 @@ export type GameStartMessage = CommandEnvelope<"game_start", GameStartPayload>;
 export type GameAbortPayload = Record<string, never>;
 export type GameAbortMessage = CommandEnvelope<"game_abort", GameAbortPayload>;
 
+export type RunSeqPayload = {
+  gameId: CanonicalGameId;
+  level?: number;
+};
+export type RunSeqMessage = CommandEnvelope<"run_seq", RunSeqPayload>;
+
 export type TelemetryConfigPayload = {
   enabled: boolean;
   intervalMs?: number;
@@ -138,6 +144,7 @@ export type OutboundProtocolMessage =
   | InputMessage
   | GameStartMessage
   | GameAbortMessage
+  | RunSeqMessage
   | TelemetryConfigMessage
   | LevelDefinitionMessage
   | ResultsSyncAckMessage
@@ -204,9 +211,29 @@ export type ErrorMessage = ProtocolEnvelope<"error", ProtocolErrorPayload>;
 export type GameStartedPayload = {
   gameId: CanonicalGameId;
   level?: number;
-  status: "running" | string;
+  status: "running" | "started" | string;
+  mapping?: {
+    go: string[];
+    stop: string[];
+  };
 };
 export type GameStartedMessage = ResponseEnvelope<"game_started", GameStartedPayload>;
+
+export type SignalChangeEventPayload = {
+  gameId: CanonicalGameId;
+  level: number;
+  phaseIndex: number;
+  signal: "GO" | "STOP" | string;
+  color: string;
+  durationMs: number;
+};
+
+export type SignalChangeMessage = {
+  v: typeof PROTOCOL_VERSION;
+  type: "game_event";
+  event: "signal_change";
+  id?: string;
+} & SignalChangeEventPayload;
 
 export type GameStatus =
   | "selected"
@@ -322,6 +349,7 @@ export type TelemetryPayload = {
 export type TelemetryMessage = {
   v: typeof PROTOCOL_VERSION;
   type: "telemetry";
+  id?: string;
 } & TelemetryPayload;
 
 export type LevelDefinitionAckPayload = {
@@ -348,6 +376,7 @@ export type InboundProtocolMessage =
   | GameResultMessage
   | GameFeedbackMessage
   | LegacyGameResultMessage
+  | SignalChangeMessage
   | ResultsSyncMessage
   | TelemetryMessage
   | LevelDefinitionAckMessage

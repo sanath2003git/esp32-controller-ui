@@ -382,13 +382,13 @@ ID Game
 
 `color_quest` Colour Quest
 `echo_memory` Echo Memory
-`reflex_arc` Reflex Arc
+`reflex_dash` Reflex Dash
 `driving_pro` Driving Pro
 `inverted_drive` Inverted Drive
 
 `Reflex Dash` appears in an earlier software brief. The latest
-architecture planning uses `Reflex Arc`. The new firmware contract uses
-`reflex_arc`.
+architecture planning uses `Reflex Dash`. The new firmware contract uses
+`reflex_dash`.
 
 `Reflex Dash` must not be used as a second protocol ID.
 
@@ -413,7 +413,7 @@ InputManager       GameManager
         |          |                       |
         v          v                       v
  BLE Manager   ColorQuest             DrivingPro
- ESP-NOW       EchoMemory             ReflexArc
+ ESP-NOW       EchoMemory             ReflexDash
                InvertedDrive           ...
         |
         v
@@ -470,7 +470,7 @@ elxie-firmware/
 │   │   ├── GameManager.h/.cpp
 │   │   ├── ColorQuest.h/.cpp
 │   │   ├── EchoMemory.h/.cpp
-│   │   ├── ReflexArc.h/.cpp
+│   │   ├── ReflexDash.h/.cpp
 │   │   ├── DrivingPro.h/.cpp
 │   │   └── InvertedDrive.h/.cpp
 │   │
@@ -1948,7 +1948,7 @@ Important compatibility decisions made by this document:
 8.  Generic movement commands are forbidden from bypassing the GAME
     router.
 9.  ESP-NOW gameplay packets are binary, not JSON.
-10. The latest project planning terminology uses `reflex_arc`.
+10. The latest project planning terminology uses `reflex_dash`.
 11. The current immediate Driving Pro L1 scope is the three-task
     definition documented above.
 12. Persistent progression remains application-owned.

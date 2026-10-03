@@ -28,6 +28,8 @@ import {
   type ResultsSyncPayload,
   type TelemetryPayload,
   type JoyStickDir,
+  type SignalChangeEventPayload,
+  type SignalChangeMessage,
 } from "@/types/protocol";
 
 type RequestResolver = {
@@ -47,6 +49,7 @@ export class ProtocolClient {
   private gameStateSubscribers = new Set<(state: GameStatePayload) => void>();
   private gameResultSubscribers = new Set<(result: GameResultPayload) => void>();
   private gameFeedbackSubscribers = new Set<(feedback: GameFeedbackPayload) => void>();
+  private signalChangeSubscribers = new Set<(event: SignalChangeEventPayload) => void>();
   private connectionSubscribers = new Set<(connected: boolean) => void>();
   private resultsSyncSubscribers = new Set<(sync: ResultsSyncPayload) => void>();
   private errorSubscribers = new Set<(error: ProtocolErrorPayload) => void>();
@@ -242,6 +245,15 @@ export class ProtocolClient {
   }
 
   /**
+   * Send sequence execution start command on the robot (Reflex Dash).
+   */
+  async runSeq(game: CanonicalGameId, level?: number): Promise<void> {
+    const id = this.generateMessageId();
+    const envelope = { v: PROTOCOL_VERSION, type: "command", command: "run_seq", id, payload: { gameId: game, level } };
+    await this.transport.write(JSON.stringify(envelope));
+  }
+
+  /**
    * Configure robot telemetry streaming.
    */
   async configureTelemetry(
@@ -305,6 +317,11 @@ export class ProtocolClient {
   onGameFeedback(callback: (feedback: GameFeedbackPayload) => void): () => void {
     this.gameFeedbackSubscribers.add(callback);
     return () => this.gameFeedbackSubscribers.delete(callback);
+  }
+
+  onSignalChange(callback: (event: SignalChangeEventPayload) => void): () => void {
+    this.signalChangeSubscribers.add(callback);
+    return () => this.signalChangeSubscribers.delete(callback);
   }
 
   onConnectionChange(callback: (connected: boolean) => void): () => void {
@@ -430,7 +447,10 @@ export class ProtocolClient {
   }
 
   private handleRawMessage(raw: string): void {
-    console.info("[ProtocolClient] Incoming raw message", raw);
+    const isTelemetry = raw.includes('"telemetry"');
+    if (!isTelemetry) {
+      console.info("[ProtocolClient] Incoming raw message", raw);
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(raw);
@@ -450,7 +470,9 @@ export class ProtocolClient {
     }
 
     const message = parsed as InboundProtocolMessage;
-    console.info("[ProtocolClient] Parsed protocol message", { type: message.type, id: message.id, payload: "payload" in message ? message.payload : undefined });
+    if (message.type !== "telemetry") {
+      console.info("[ProtocolClient] Parsed protocol message", { type: message.type, id: message.id, payload: "payload" in message ? message.payload : undefined });
+    }
 
     // Dispatch to raw generic message subscribers
     for (const sub of this.genericMessageSubscribers) {
@@ -538,6 +560,25 @@ export class ProtocolClient {
         }
         break;
 
+      case "game_event":
+        if ((message as SignalChangeMessage).event === "signal_change") {
+          const signalEvt = message as SignalChangeMessage;
+          const payload: SignalChangeEventPayload = {
+            gameId: signalEvt.gameId,
+            level: signalEvt.level,
+            phaseIndex: signalEvt.phaseIndex,
+            signal: signalEvt.signal,
+            color: signalEvt.color,
+            durationMs: signalEvt.durationMs,
+          };
+          for (const sub of this.signalChangeSubscribers) {
+            try { sub(payload); } catch (err) {
+              console.error("[ProtocolClient] Error in signalChange subscriber:", err);
+            }
+          }
+        }
+        break;
+
       case "game_result": {
         const legacy = message as LegacyGameResultMessage;
         const result: GameResultPayload = {
@@ -607,6 +648,10 @@ export class ProtocolClient {
       return typeof obj.gameId === "string" && Number.isInteger(obj.level) && Number(obj.level) >= 1 &&
         Number.isInteger(obj.taskId) && Number(obj.taskId) >= 1 && typeof obj.correct === "boolean" &&
         Number.isInteger(obj.correctCount) && Number(obj.correctCount) >= 0;
+    }
+
+    if (obj.type === "game_event") {
+      return typeof obj.event === "string";
     }
     
     return typeof obj.payload === "object" && obj.payload !== null;

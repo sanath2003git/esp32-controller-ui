@@ -42,6 +42,8 @@ declare global {
   }
 
   interface BluetoothDevice {
+    id?: string;
+    name?: string;
     gatt?: BluetoothRemoteGATTServer | null;
     addEventListener(
       type: string,
@@ -301,10 +303,6 @@ export class BleTransport {
     if (!characteristic?.value) return;
 
     const chunk = new TextDecoder().decode(characteristic.value);
-    console.debug("[BLE Transport] Notification received", {
-      bytes: characteristic.value.byteLength,
-      chunk,
-    });
     this.rxBuffer += chunk;
 
     if (this.rxBuffer.includes("\n") || this.rxBuffer.includes("\r")) {
@@ -315,7 +313,9 @@ export class BleTransport {
       for (const line of lines) {
         const trimmed = line.trim();
         if (!trimmed) continue;
-        console.info("[BLE Transport] Complete line received", trimmed);
+        if (!trimmed.includes('"telemetry"')) {
+          console.info("[BLE Transport] Complete line received", trimmed);
+        }
 
         // Emit raw string to subscribers (no JSON parsing in transport)
         for (const subscriber of this.messageSubscribers) {

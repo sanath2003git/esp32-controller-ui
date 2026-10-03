@@ -331,7 +331,7 @@ ESP32 response:
       "games": [
         "color_quest",
         "echo_memory",
-        "reflex_arc",
+        "reflex_dash",
         "driving_pro",
         "inverted_drive"
       ]
@@ -563,7 +563,7 @@ Game ID Status
 
 Color Quest `color_quest` implemented
 Echo Memory `echo_memory` placeholder/future
-Reflex Arc `reflex_arc` placeholder/future
+Reflex Dash `reflex_dash` placeholder/future
 Driving Pro `driving_pro` Level 1 implementation
 Inverted Drive `inverted_drive` placeholder/future
 
@@ -1856,7 +1856,7 @@ esp_now
 ```text
 color_quest
 echo_memory
-reflex_arc
+reflex_dash
 driving_pro
 inverted_drive
 ```
