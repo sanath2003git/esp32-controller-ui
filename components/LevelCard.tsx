@@ -1,3 +1,6 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, Lock, Star } from "lucide-react";
 import type { GameLevel } from "@/data/gameCatalog";
@@ -13,26 +16,39 @@ type LevelCardProps = {
   level: GameLevel;
   mode: string;
   progress?: LevelProgress;
+  index?: number;
 };
 
-export default function LevelCard({ level, mode, progress }: LevelCardProps) {
+export default function LevelCard({ level, mode, progress, index = 0 }: LevelCardProps) {
   const isUnlocked = progress?.unlocked ?? (level.id === 1);
   const stars = progress?.stars ?? 0;
   const bestScore = progress?.bestScore ?? 0;
   const bestPercentage = Math.round(bestScore * 100);
 
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const cardContent = (
     <div
-      className={`group flex flex-col justify-between rounded-2xl border p-4 transition-all duration-200 ${
+      className={`group flex h-full flex-col justify-between rounded-2xl border p-4 transition-all duration-300 ${
         isUnlocked
-          ? "border-border bg-surface hover:border-primary/40 hover:bg-surface-light cursor-pointer active:scale-[0.98]"
+          ? "border-border bg-surface hover:border-primary/40 hover:bg-surface-light cursor-pointer active:scale-[0.98] hover:shadow-lg"
           : "border-white/10 bg-surface/50 opacity-60 cursor-not-allowed"
+      } ${
+        isMounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2"
       }`}
+      style={{
+        transitionProperty: "opacity, transform, border-color, background-color, box-shadow",
+        transitionDelay: `${index * 35}ms`,
+      }}
     >
       <div>
         <div className="flex items-center justify-between">
           <div
-            className={`flex h-10 w-10 items-center justify-center rounded-xl text-base font-black ${
+            className={`flex h-10 w-10 items-center justify-center rounded-xl text-base font-black transition-transform duration-200 group-hover:scale-105 ${
               isUnlocked
                 ? "bg-primary/15 text-primary"
                 : "bg-white/10 text-white/40"
@@ -44,7 +60,7 @@ export default function LevelCard({ level, mode, progress }: LevelCardProps) {
           {isUnlocked ? (
             <ChevronRight
               size={18}
-              className="text-white/25 transition-transform group-hover:translate-x-1"
+              className="text-white/25 transition-transform group-hover:translate-x-1 group-hover:text-white/60"
             />
           ) : (
             <Lock size={18} className="text-white/40" />

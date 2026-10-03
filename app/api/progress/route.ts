@@ -1,9 +1,9 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
+import { getGameDefinition } from "@/data/gameCatalog";
 import {
   calculateGameProgress,
-  COLOUR_QUEST_LEVELS,
   isLevelUnlocked,
   normalizeGameSlug,
   normalizeStars,
@@ -22,20 +22,28 @@ export async function GET(request: Request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const game = normalizeGameSlug(searchParams.get("game") || "color-quest");
+    const rawGame = searchParams.get("game") || "color-quest";
+    const gameDef = getGameDefinition(rawGame);
+    const game = normalizeGameSlug(rawGame);
 
+    const levels = gameDef?.levels ?? [];
+    const totalLevels = levels.length;
     const dbMap: Record<number, LevelProgress> = {};
 
     try {
       const db = await getDatabase();
       const collection = db.collection("user_level_progress");
+      
+      // Ensure compound index for fast structured queries
+      await collection.createIndex({ userId: 1, game: 1, level: 1 }, { unique: true }).catch(() => {});
+
       const records = await collection
         .find({ userId: user.id, game })
         .toArray();
 
       for (const rec of records) {
         const lvl = Number(rec.level);
-        if (lvl >= 1 && lvl <= COLOUR_QUEST_LEVELS.length) {
+        if (lvl >= 1 && lvl <= totalLevels) {
           dbMap[lvl] = {
             level: lvl,
             bestScore: typeof rec.bestScore === "number" ? rec.bestScore : 0,
@@ -52,10 +60,10 @@ export async function GET(request: Request) {
 
     // Authoritative unlock computation
     const levelsMap: Record<number, LevelProgress> = {};
-    for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+    for (const lvlMeta of levels) {
       const lvl = lvlMeta.id;
       const existing = dbMap[lvl];
-      const unlocked = isLevelUnlocked(lvl, dbMap);
+      const unlocked = isLevelUnlocked(lvl, dbMap, totalLevels);
 
       levelsMap[lvl] = {
         level: lvl,
@@ -67,7 +75,7 @@ export async function GET(request: Request) {
       };
     }
 
-    const progressInfo = calculateGameProgress(levelsMap);
+    const progressInfo = calculateGameProgress(levelsMap, totalLevels);
 
     return NextResponse.json({
       success: true,

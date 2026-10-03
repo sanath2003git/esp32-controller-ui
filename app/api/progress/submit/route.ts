@@ -1,10 +1,10 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { getDatabase } from "@/lib/mongodb";
+import { getGameDefinition } from "@/data/gameCatalog";
 import {
   calculateGameProgress,
   calculateStars,
-  COLOUR_QUEST_LEVELS,
   isLevelUnlocked,
   mergeBestScore,
   mergeBestStars,
@@ -26,14 +26,18 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const rawGame = body.game;
+    const gameDef = getGameDefinition(rawGame);
     const game = normalizeGameSlug(rawGame);
     const { level, score, stars } = body;
 
+    const levels = gameDef?.levels ?? [];
+    const totalLevels = levels.length;
+
     if (
-      game !== "color-quest" ||
+      !gameDef ||
       typeof level !== "number" ||
       level < 1 ||
-      level > COLOUR_QUEST_LEVELS.length ||
+      level > totalLevels ||
       typeof score !== "number" ||
       !Number.isFinite(score) ||
       score < 0 ||
@@ -48,6 +52,9 @@ export async function POST(request: Request) {
 
     const db = await getDatabase();
     const collection = db.collection("user_level_progress");
+
+    // Ensure compound index for fast structured queries
+    await collection.createIndex({ userId: 1, game: 1, level: 1 }, { unique: true }).catch(() => {});
 
     // Fetch existing levels to check if target level is unlocked
     const existingRecords = await collection
@@ -66,7 +73,7 @@ export async function POST(request: Request) {
       };
     }
 
-    if (!isLevelUnlocked(level, existingMap)) {
+    if (!isLevelUnlocked(level, existingMap, totalLevels)) {
       return NextResponse.json(
         { success: false, error: "Level is currently locked" },
         { status: 403 }
@@ -113,10 +120,10 @@ export async function POST(request: Request) {
     }
 
     const levelsMap: Record<number, LevelProgress> = {};
-    for (const lvlMeta of COLOUR_QUEST_LEVELS) {
+    for (const lvlMeta of levels) {
       const lvl = lvlMeta.id;
       const existing = updatedDbMap[lvl];
-      const unlocked = isLevelUnlocked(lvl, updatedDbMap);
+      const unlocked = isLevelUnlocked(lvl, updatedDbMap, totalLevels);
 
       levelsMap[lvl] = {
         level: lvl,
@@ -128,7 +135,7 @@ export async function POST(request: Request) {
       };
     }
 
-    const progressInfo = calculateGameProgress(levelsMap);
+    const progressInfo = calculateGameProgress(levelsMap, totalLevels);
 
     return NextResponse.json({
       success: true,

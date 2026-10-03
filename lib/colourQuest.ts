@@ -48,10 +48,11 @@ export function calculateStars(score: number): 0 | 1 | 2 | 3 {
  */
 export function isLevelUnlocked(
   levelId: number,
-  progressMap: Record<number, { stars: number }>
+  progressMap: Record<number, { stars: number }>,
+  maxLevels?: number
 ): boolean {
   if (levelId === 1) return true;
-  if (levelId < 1 || levelId > COLOUR_QUEST_LEVELS.length) return false;
+  if (levelId < 1 || (maxLevels !== undefined && levelId > maxLevels)) return false;
   const previousLevelProgress = progressMap[levelId - 1];
   return Boolean(previousLevelProgress && previousLevelProgress.stars >= 3);
 }
@@ -80,25 +81,26 @@ export function mergeBestStars(
 }
 
 /**
- * Computes game completion progress across all 6 levels.
+ * Computes game completion progress across all levels of a game.
  */
 export function calculateGameProgress(
-  progressMap: Record<number, { stars: number }>
+  progressMap: Record<number, { stars: number }>,
+  totalLevels = COLOUR_QUEST_LEVELS.length
 ): { completedLevels: number; totalLevels: number; progressPercentage: number } {
-  const totalLevels = COLOUR_QUEST_LEVELS.length;
+  const count = totalLevels > 0 ? totalLevels : 1;
   let completedLevels = 0;
 
-  for (let i = 1; i <= totalLevels; i++) {
+  for (let i = 1; i <= count; i++) {
     if (progressMap[i] && progressMap[i].stars > 0) {
       completedLevels++;
     }
   }
 
-  const progressPercentage = Math.round((completedLevels / totalLevels) * 100);
+  const progressPercentage = Math.round((completedLevels / count) * 100);
 
   return {
     completedLevels,
-    totalLevels,
+    totalLevels: count,
     progressPercentage,
   };
 }
